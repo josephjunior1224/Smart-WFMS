@@ -1,0 +1,791 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>WFMS – Workforce Management System</title>
+
+  <!-- PWA Manifest & Icons -->
+  <link rel="manifest" href="manifest.json" />
+  <link rel="apple-touch-icon" href="icons/apple-touch-icon.png" />
+  <meta name="msapplication-TileColor" content="#0f172a" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <meta name="theme-color" content="#0f172a" />
+
+  <!-- Custom CSS (load this first) -->
+  <link rel="stylesheet" href="style.css" />
+
+  <!-- Resource Loader - This will handle all CDN resources -->
+  <script>
+    // CDN Fallback System - MySQL Backend (Firebase disabled)
+    
+    const resources = {
+        styles: [
+            {
+                primary: 'https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css',
+                fallbacks: [
+                    'https://stackpath.bootstrapcdn.com/bootstrap/5.3.2/css/bootstrap.min.css',
+                    'https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.2/css/bootstrap.min.css'
+                ]
+            },
+            {
+                primary: 'https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css',
+                fallbacks: [
+                    'https://stackpath.bootstrapcdn.com/bootstrap-icons/1.11.3/font/bootstrap-icons.css',
+                    'https://cdnjs.cloudflare.com/ajax/libs/bootstrap-icons/1.11.3/font/bootstrap-icons.css'
+                ]
+            }
+        ],
+        scripts: [
+            {
+                primary: 'https://cdn.socket.io/4.5.4/socket.io.min.js',
+                fallbacks: [
+                    'https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.5.4/socket.io.min.js',
+                    'https://unpkg.com/socket.io-client@4.5.4/dist/socket.io.min.js'
+                ],
+                check: 'io'
+            },
+            {
+                primary: 'https://unpkg.com/html5-qrcode@2.3.7/minified/html5-qrcode.min.js',
+                fallbacks: [
+                    'https://cdn.jsdelivr.net/npm/html5-qrcode@2.3.7/minified/html5-qrcode.min.js',
+                    'https://cdnjs.cloudflare.com/ajax/libs/html5-qrcode/2.3.7/html5-qrcode.min.js',
+                    'https://cors-anywhere.herokuapp.com/https://unpkg.com/html5-qrcode@2.3.7/minified/html5-qrcode.min.js'
+                ],
+                check: 'Html5Qrcode'
+            },
+            {
+                primary: 'https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js',
+                fallbacks: [
+                    'https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js',
+                    'https://unpkg.com/jspdf@2.5.1/dist/jspdf.umd.min.js'
+                ],
+                check: 'jspdf'
+            },
+            {
+                primary: 'https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js',
+                fallbacks: [
+                    'https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js',
+                    'https://unpkg.com/chart.js@4.4.1/dist/chart.umd.min.js'
+                ],
+                check: 'Chart'
+            }
+            // REMOVED FIREBASE SCRIPTS - We're using MySQL
+        ]
+    };
+
+    // Loader functions (keep these as they are)
+    async function loadResource(resource) {
+        if (resource.type === 'style') {
+            return loadStyle(resource);
+        } else {
+            return loadScript(resource);
+        }
+    }
+
+    function loadStyle(resource) {
+        return new Promise((resolve, reject) => {
+            // Check if already loaded
+            const existing = Array.from(document.querySelectorAll('link')).find(
+                link => link.href === resource.primary
+            );
+            if (existing) {
+                console.log(`✅ Already loaded: ${resource.primary}`);
+                resolve();
+                return;
+            }
+
+            const link = document.createElement('link');
+            link.rel = 'stylesheet';
+            link.href = resource.primary;
+            
+            link.onload = () => {
+                console.log(`✅ Loaded: ${resource.primary}`);
+                resolve();
+            };
+            
+            link.onerror = () => {
+                console.warn(`⚠️ Failed: ${resource.primary}, trying fallbacks...`);
+                tryFallbacks(resource, 0, 'style', resolve, reject);
+            };
+            
+            document.head.appendChild(link);
+        });
+    }
+
+    function loadScript(resource) {
+        return new Promise((resolve, reject) => {
+            // Check if already loaded
+            if (resource.check && window[resource.check]) {
+                console.log(`✅ Already loaded: ${resource.primary}`);
+                resolve();
+                return;
+            }
+
+            const script = document.createElement('script');
+            script.src = resource.primary;
+            
+            script.onload = () => {
+                // Verify the script actually loaded
+                if (resource.check && window[resource.check]) {
+                    console.log(`✅ Loaded: ${resource.primary}`);
+                    resolve();
+                } else {
+                    setTimeout(() => {
+                        if (resource.check && window[resource.check]) {
+                            console.log(`✅ Loaded: ${resource.primary}`);
+                            resolve();
+                        } else {
+                            console.warn(`⚠️ Script loaded but ${resource.check} not found, trying fallbacks...`);
+                            tryFallbacks(resource, 0, 'script', resolve, reject);
+                        }
+                    }, 100);
+                }
+            };
+            
+            script.onerror = () => {
+                console.warn(`⚠️ Failed: ${resource.primary}, trying fallbacks...`);
+                tryFallbacks(resource, 0, 'script', resolve, reject);
+            };
+            
+            document.head.appendChild(script);
+        });
+    }
+
+    function tryFallbacks(resource, index, type, resolve, reject) {
+        if (index >= resource.fallbacks.length) {
+            console.error(`❌ All fallbacks failed for ${resource.primary}`);
+            // Don't reject - continue with what we have
+            resolve();
+            return;
+        }
+
+        const url = resource.fallbacks[index];
+        
+        if (type === 'style') {
+            const link = document.createElement('link');
+            link.rel = 'stylesheet';
+            link.href = url;
+            
+            link.onload = () => {
+                console.log(`✅ Loaded fallback: ${url}`);
+                resolve();
+            };
+            
+            link.onerror = () => {
+                console.warn(`⚠️ Fallback failed: ${url}`);
+                tryFallbacks(resource, index + 1, type, resolve, reject);
+            };
+            
+            document.head.appendChild(link);
+        } else {
+            const script = document.createElement('script');
+            script.src = url;
+            
+            script.onload = () => {
+                if (resource.check && window[resource.check]) {
+                    console.log(`✅ Loaded fallback: ${url}`);
+                    resolve();
+                } else {
+                    setTimeout(() => {
+                        if (resource.check && window[resource.check]) {
+                            console.log(`✅ Loaded fallback: ${url}`);
+                            resolve();
+                        } else {
+                            tryFallbacks(resource, index + 1, type, resolve, reject);
+                        }
+                    }, 100);
+                }
+            };
+            
+            script.onerror = () => {
+                console.warn(`⚠️ Fallback failed: ${url}`);
+                tryFallbacks(resource, index + 1, type, resolve, reject);
+            };
+            
+            document.head.appendChild(script);
+        }
+    }
+
+    // Load all resources
+    async function loadAllResources() {
+        try {
+            // Load styles first
+            for (const resource of resources.styles) {
+                await loadResource({...resource, type: 'style'});
+            }
+            
+            // Then load scripts
+            for (const resource of resources.scripts) {
+                await loadResource({...resource, type: 'script'});
+            }
+            
+            console.log('✅ All resources loaded successfully');
+            
+            // Dispatch event when everything is ready
+            window.dispatchEvent(new Event('resourcesLoaded'));
+            
+        } catch (error) {
+            console.error('❌ Failed to load some resources:', error);
+            // Still dispatch event so app tries to continue
+            window.dispatchEvent(new Event('resourcesLoaded'));
+        }
+    }
+
+    // Start loading after DOM is ready
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', loadAllResources);
+    } else {
+        loadAllResources();
+    }
+  </script>
+  <!-- REMOVED EXTRA </script> TAG -->
+</head>
+<body>
+  <!-- ===== THEME TOGGLE ===== -->
+  <div class="theme-toggle" onclick="toggleTheme()">
+    <svg id="themeSvg" class="theme-icon" viewBox="0 0 24 24" fill="currentColor">
+      <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z" />
+    </svg>
+    <span id="themeText">Dark</span>
+  </div>
+
+  <!-- ===== AUTH OVERLAY ===== -->
+  <div id="auth-overlay">
+    <div id="auth-box">
+      <!-- LOGIN FORM -->
+      <div id="login-container" class="auth-container form-animate">
+        <div class="auth-header header-animate">
+          <svg class="auth-logo logo-animate" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
+            <circle cx="12" cy="7" r="4" />
+          </svg>
+          <h2 class="text-center">Sign In</h2>
+        </div>
+
+        <div class="form-group form-group-animate" style="animation-delay: 0.1s">
+          <label class="form-label label-animate">Email</label>
+          <input type="email" id="username" class="form-control input-animate" placeholder="Enter your email" autocomplete="email" />
+        </div>
+
+        <div class="form-group form-group-animate" style="animation-delay: 0.15s">
+          <label class="form-label label-animate">Password</label>
+          <input type="password" id="password" class="form-control input-animate" placeholder="Enter your password" autocomplete="current-password" />
+        </div>
+
+        <button class="btn btn-primary w-100 btn-lg btn-animate" style="animation-delay: 0.25s" onclick="login()">
+          <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4" />
+            <polyline points="10 17 15 12 10 7" />
+            <line x1="15" y1="12" x2="3" y2="12" />
+          </svg>
+          Sign In
+        </button>
+
+        <div style="position: relative; margin: 1.5rem 0; animation-delay: 0.27s" class="form-animate">
+          <div style="display: flex; align-items: center; gap: 0.75rem;">
+            <hr style="flex: 1; border: none; border-top: 1px solid var(--text-secondary);" />
+            <span style="color: var(--text-secondary); font-size: 0.875rem;">Or continue with</span>
+            <hr style="flex: 1; border: none; border-top: 1px solid var(--text-secondary);" />
+          </div>
+        </div>
+
+        <button type="button" class="btn btn-outline-secondary w-100 btn-animate" style="animation-delay: 0.28s" onclick="loginWithGoogle()">
+          <svg class="btn-icon" viewBox="0 0 24 24" fill="currentColor">
+            <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
+            <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
+            <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/>
+            <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/>
+          </svg>
+          Sign in with Google
+        </button>
+
+        <div class="button-group-inline" style="animation-delay: 0.3s">
+          <button class="btn btn-outline-secondary w-100 btn-animate" onclick="startScan()">
+            <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M3 7V5a2 2 0 0 1 2-2h2M17 3h2a2 2 0 0 1 2 2v2M21 17v2a2 2 0 0 1-2 2h-2M7 21H5a2 2 0 0 1-2-2v-2M7 7h10v10H7z" />
+            </svg>
+            Scan QR Code
+          </button>
+        </div>
+
+        <p class="auth-link text-center link-animate" style="animation-delay: 0.4s" onclick="showRegister()">
+          Don't have an account? <span class="link-text">Create one</span>
+        </p>
+      </div>
+
+      <!-- REGISTER FORM -->
+      <div id="register-container" class="auth-container hidden form-animate">
+        <div class="auth-header header-animate">
+          <svg class="auth-logo logo-animate" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
+            <circle cx="10.5" cy="7" r="3.5" />
+            <path d="M22 16v-5h-3v-2a1 1 0 0 0-1-1h-1v2h2v5h3" />
+          </svg>
+          <h2 class="text-center">Create Account</h2>
+        </div>
+
+        <div class="form-group form-group-animate" style="animation-delay: 0.1s">
+          <label class="form-label label-animate">Full Name</label>
+          <input type="text" id="regUsername" class="form-control input-animate" placeholder="Enter your full name" autocomplete="name" />
+        </div>
+
+        <div class="form-group form-group-animate" style="animation-delay: 0.15s">
+          <label class="form-label label-animate">Email</label>
+          <input type="email" id="regEmail" class="form-control input-animate" placeholder="Enter your email" autocomplete="email" />
+        </div>
+
+        <div class="form-group form-group-animate" style="animation-delay: 0.2s">
+          <label class="form-label label-animate">Password</label>
+          <div class="input-group">
+            <input type="password" id="regPassword" class="form-control input-animate" placeholder="Enter a strong password (min 6 chars)" autocomplete="new-password" />
+            <button id="regPasswordToggle" class="btn btn-outline-secondary" type="button" aria-label="Show password" title="Show password" onclick="toggleRegPassword()">
+              <i id="regPasswordIcon" class="bi bi-eye"></i>
+            </button>
+          </div>
+        </div>
+
+        <div class="form-group form-group-animate" style="animation-delay: 0.25s">
+          <label for="regRole" class="form-label label-animate">Role</label>
+          <select id="regRole" class="form-control input-animate">
+            <option value="employee">Employee</option>
+            <option value="admin">Admin</option>
+          </select>
+        </div>
+
+        <button class="btn btn-success w-100 btn-lg btn-animate" style="animation-delay: 0.3s" onclick="register()">
+          <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <polyline points="20 6 9 17 4 12" />
+          </svg>
+          Create Account
+        </button>
+
+        <div id="generatedQr" class="qr-generated-container"></div>
+
+        <p class="auth-link text-center link-animate" style="animation-delay: 0.4s" onclick="backToLogin()">
+          Already have an account? <span class="link-text">Sign in</span>
+        </p>
+      </div>
+    </div>
+  </div>
+
+  <!-- QR SCANNER MODAL -->
+  <div id="qrScannerContainer" class="hidden qr-scanner-overlay">
+    <div class="qr-scanner-box">
+      <div class="qr-scanner-header">
+        <h5>Scan QR Code</h5>
+        <button class="btn-close" aria-label="Close" onclick="stopScan()"></button>
+      </div>
+      <div id="qr-reader"></div>
+    </div>
+  </div>
+
+  <!-- ===== DASHBOARD ===== -->
+  <div id="dashboard" class="hidden dashboard-wrapper">
+    <div class="container-xl">
+      <!-- DASHBOARD HEADER -->
+      <div class="dashboard-header">
+        <div class="header-left">
+          <svg class="header-logo" viewBox="0 0 24 24" fill="currentColor">
+            <path d="M18 9h-1.26a8 8 0 1 0-16 0h-1.26a2 2 0 0 0-2 2v7a2 2 0 0 0 2 2h18a2 2 0 0 0 2-2v-7a2 2 0 0 0-2-2zm-7 2h2v2h-2v-2z" />
+          </svg>
+          <div>
+            <h4 id="welcome" class="m-0">Welcome</h4>
+            <p class="text-muted small mb-0">Workforce Management System</p>
+          </div>
+        </div>
+        <div class="header-right">
+          <button id="notifBtn" class="btn-icon-circle" title="Notifications" onclick="document.getElementById('notificationsPanel').classList.toggle('hidden')">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" />
+              <path d="M13.73 21a2 2 0 0 1-3.46 0" />
+            </svg>
+            <span id="notifBadge" class="notif-badge hidden">0</span>
+          </button>
+          <button class="btn btn-outline-danger btn-sm" onclick="logout()">
+            <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
+              <polyline points="16 17 21 12 16 7" />
+              <line x1="21" y1="12" x2="9" y2="12" />
+            </svg>
+            Logout
+          </button>
+        </div>
+      </div>
+
+      <!-- STATS SECTION -->
+      <div class="stats-grid mb-5">
+        <div class="stat-card">
+          <div class="stat-icon employees">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
+              <circle cx="9" cy="7" r="4" />
+              <path d="M23 21v-2a4 4 0 0 0-3-3.87" />
+              <path d="M16 3.13a4 4 0 0 1 0 7.75" />
+            </svg>
+          </div>
+          <div class="stat-content">
+            <h6 class="stat-label">Employees</h6>
+            <p class="stat-value" id="totalEmployees">0</p>
+          </div>
+        </div>
+
+        <div class="stat-card">
+          <div class="stat-icon tasks">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <polyline points="8 6 21 6 21 20 3 20 3 6 10 6" />
+              <polyline points="12 3 12 6" />
+              <line x1="4" y1="9" x2="20" y2="9" />
+              <rect x="7" y="11" width="2" height="2" />
+              <rect x="13" y="11" width="2" height="2" />
+            </svg>
+          </div>
+          <div class="stat-content">
+            <h6 class="stat-label">Active Tasks</h6>
+            <p class="stat-value" id="totalTasks">0</p>
+          </div>
+        </div>
+
+        <div class="stat-card">
+          <div class="stat-icon logs">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+              <polyline points="14 2 14 8 20 8" />
+              <line x1="12" y1="11" x2="12" y2="17" />
+              <line x1="9" y1="14" x2="15" y2="14" />
+            </svg>
+          </div>
+          <div class="stat-content">
+            <h6 class="stat-label">System Logs</h6>
+            <p class="stat-value" id="totalLogs">0</p>
+          </div>
+        </div>
+      </div>
+
+      <!-- ATTENDANCE SECTION -->
+      <div class="card section">
+        <div class="card-header-custom">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <circle cx="12" cy="12" r="1" />
+            <path d="M12 1v6m0 6v6M4.22 4.22l4.24 4.24m5.08 5.08l4.24 4.24M1 12h6m6 0h6M4.22 19.78l4.24-4.24m5.08-5.08l4.24-4.24" />
+          </svg>
+          <h5 class="mb-0">Attendance</h5>
+        </div>
+        <div class="attendance-buttons">
+          <button class="btn btn-success btn-lg" onclick="clockIn()">
+            <svg viewBox="0 0 24 24" fill="currentColor">
+              <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.42 0-8-3.58-8-8s3.58-8 8-8 8 3.58 8 8-3.58 8-8 8zm-5-9h10v2H7z" />
+            </svg>
+            Clock In
+          </button>
+          <button class="btn btn-warning btn-lg" onclick="breakStart()">
+            <svg viewBox="0 0 24 24" fill="currentColor">
+              <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.42 0-8-3.58-8-8s3.58-8 8-8 8 3.58 8 8-3.58 8-8 8zm3.5-9c.83 0 1.5-.67 1.5-1.5S16.33 8 15.5 8 14 8.67 14 9.5s.67 1.5 1.5 1.5zm-7 0c.83 0 1.5-.67 1.5-1.5S9.33 8 8.5 8 7 8.67 7 9.5 7.67 11 8.5 11z" />
+            </svg>
+            Break Start
+          </button>
+          <button class="btn btn-info btn-lg" onclick="breakEnd()">
+            <svg viewBox="0 0 24 24" fill="currentColor">
+              <path d="M11 17h2v-6h-2v6zm1-15C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8zm0-14c-3.31 0-6 2.69-6 6s2.69 6 6 6 6-2.69 6-6-2.69-6-6-6z" />
+            </svg>
+            Break End
+          </button>
+          <button class="btn btn-danger btn-lg" onclick="clockOut()">
+            <svg viewBox="0 0 24 24" fill="currentColor">
+              <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z" />
+            </svg>
+            Clock Out
+          </button>
+        </div>
+      </div>
+
+      <!-- TASKS SECTION -->
+      <div class="card section">
+        <div class="card-header-custom">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <polyline points="8 6 21 6 21 20 3 20 3 6 10 6" />
+            <polyline points="12 3 12 6" />
+          </svg>
+          <h5 class="mb-0">Tasks</h5>
+        </div>
+        <div id="taskList" class="task-list"></div>
+      </div>
+
+      <!-- ADMIN PANEL -->
+      <div id="admin-panel" class="hidden">
+        <!-- Create Task -->
+        <div class="card section">
+          <div class="card-header-custom">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <polyline points="12 5 12 19" />
+              <polyline points="5 12 19 12" />
+            </svg>
+            <h5 class="mb-0">Create Task</h5>
+          </div>
+
+          <div class="form-group">
+            <label class="form-label">Task Title</label>
+            <input type="text" id="taskTitle" class="form-control" placeholder="Enter task title" />
+          </div>
+
+          <div class="form-group">
+            <label class="form-label">Description</label>
+            <textarea id="taskDesc" class="form-control" placeholder="Task description" rows="3"></textarea>
+          </div>
+
+          <div class="form-group">
+            <label for="taskAssign" class="form-label">Assign To</label>
+            <select id="taskAssign" class="form-control"></select>
+          </div>
+
+          <button class="btn btn-primary w-100" onclick="addTask()">
+            <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <polyline points="12 5 12 19" />
+              <polyline points="5 12 19 12" />
+            </svg>
+            Add Task
+          </button>
+        </div>
+
+        <!-- Team Members Management -->
+        <div class="card section">
+          <div class="card-header-custom">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
+              <circle cx="9" cy="7" r="4" />
+              <path d="M23 21v-2a4 4 0 0 0-3-3.87" />
+              <path d="M16 3.13a4 4 0 0 1 0 7.75" />
+            </svg>
+            <h5 class="mb-0">Team Members</h5>
+          </div>
+          <div id="employeeList" class="employee-grid"></div>
+        </div>
+
+        <!-- Performance Chart -->
+        <div class="card section">
+          <div class="card-header-custom">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <polyline points="23 6 13.5 15.5 8.5 10.5 1 17" />
+              <polyline points="17 6 23 6 23 12" />
+            </svg>
+            <h5 class="mb-0">Performance Overview</h5>
+          </div>
+          <canvas id="performanceChart" class="admin-chart" style="max-height: 400px;"></canvas>
+        </div>
+
+        <!-- Download Report -->
+        <button class="btn btn-outline-primary btn-lg w-100 mt-4" onclick="downloadReport()">
+          <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+            <polyline points="14 2 14 8 20 8" />
+            <path d="M12 17v-6" />
+            <path d="M9 14h6" />
+          </svg>
+          Download Report (PDF)
+        </button>
+      </div>
+
+      <!-- WORKER PANEL -->
+      <div id="worker-panel" class="hidden">
+        <!-- My Tasks -->
+        <div class="card section">
+          <div class="card-header-custom">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <polyline points="9 11 12 14 22 4" />
+              <path d="M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0z" />
+            </svg>
+            <h5 class="mb-0">My Assigned Tasks</h5>
+          </div>
+          <div id="myTaskList" class="task-list"></div>
+          <p class="text-muted text-center mt-3" id="noTasksMsg" style="display: none">No tasks assigned yet</p>
+        </div>
+
+        <!-- My Performance -->
+        <div class="card section">
+          <div class="card-header-custom">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <circle cx="12" cy="12" r="10" />
+              <polyline points="12 6 12 12 16 14" />
+            </svg>
+            <h5 class="mb-0">My Performance</h5>
+          </div>
+          <div class="worker-stats">
+            <div class="worker-stat-box">
+              <div class="stat-label">Tasks Completed</div>
+              <div class="stat-number" id="workerCompletedTasks">0</div>
+            </div>
+            <div class="worker-stat-box">
+              <div class="stat-label">Tasks Pending</div>
+              <div class="stat-number" id="workerPendingTasks">0</div>
+            </div>
+            <div class="worker-stat-box">
+              <div class="stat-label">Attendance Rate</div>
+              <div class="stat-number" id="workerAttendanceRate">-</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- My Attendance -->
+        <div class="card section">
+          <div class="card-header-custom">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <rect x="3" y="4" width="18" height="18" rx="2" />
+              <polyline points="16 2 16 6 8 6 8 2" />
+              <line x1="3" y1="10" x2="21" y2="10" />
+              <path d="M9 16h.01" />
+              <path d="M15 16h.01" />
+            </svg>
+            <h5 class="mb-0">My Attendance (This Month)</h5>
+          </div>
+          <div id="myAttendance" class="attendance-summary"></div>
+        </div>
+
+        <!-- My Time Logs -->
+        <div class="card section">
+          <div class="card-header-custom">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <circle cx="12" cy="12" r="10" />
+              <polyline points="12 6 12 12 16 14" />
+            </svg>
+            <h5 class="mb-0">My Time Logs (Recent)</h5>
+          </div>
+          <div id="myTimeLogs" class="time-log-list"></div>
+        </div>
+      </div>
+
+      <!-- LOGS SECTION -->
+      <div class="card section">
+        <div class="card-header-custom">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+            <polyline points="14 2 14 8 20 8" />
+            <line x1="12" y1="11" x2="12" y2="17" />
+            <line x1="9" y1="14" x2="15" y2="14" />
+          </svg>
+          <h5 class="mb-0">System Logs</h5>
+        </div>
+        <div id="log" class="log-box"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- NOTIFICATIONS PANEL -->
+  <div id="notificationsPanel" class="notifications-panel hidden" aria-live="polite"></div>
+
+  <!-- ===== SCRIPTS ===== -->
+  <!-- Main app.js - loaded after resources -->
+  <script src="app.js"></script>
+  
+  <!-- Service Worker Registration -->
+  <script>
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', () => {
+        navigator.serviceWorker.register('/sw.js')
+          .then(registration => {
+            console.log('✅ ServiceWorker registered successfully:', registration.scope);
+            
+            // Clean old caches after registration
+            setTimeout(() => {
+              if (registration.active) {
+                registration.active.postMessage('clean-caches');
+              }
+            }, 5000);
+          })
+          .catch(error => {
+            console.error('❌ ServiceWorker registration failed:', error);
+          });
+      });
+    }
+
+    // Monitor online/offline status
+    window.addEventListener('online', () => {
+      console.log('📶 Application is online');
+      document.body.classList.remove('offline-mode');
+    });
+
+    window.addEventListener('offline', () => {
+      console.log('📴 Application is offline');
+      document.body.classList.add('offline-mode');
+    });
+
+    // Check initial status
+    if (!navigator.onLine) {
+      document.body.classList.add('offline-mode');
+    }
+  </script>
+
+  <!-- Offline banner -->
+  <div class="offline-banner">
+    📴 You are offline - Some features may be unavailable
+  </div>
+    <!-- ===== SCRIPTS ===== -->
+  <!-- Main app.js - loaded after resources -->
+  <script src="app.js"></script>
+  
+  <!-- Service Worker Registration -->
+  <script>
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', () => {
+        navigator.serviceWorker.register('/sw.js')
+          .then(registration => {
+            console.log('✅ ServiceWorker registered successfully:', registration.scope);
+            
+            // Clean old caches after registration
+            setTimeout(() => {
+              if (registration.active) {
+                registration.active.postMessage('clean-caches');
+              }
+            }, 5000);
+          })
+          .catch(error => {
+            console.error('❌ ServiceWorker registration failed:', error);
+          });
+      });
+    }
+
+    // Monitor online/offline status
+    window.addEventListener('online', () => {
+      console.log('📶 Application is online');
+      document.body.classList.remove('offline-mode');
+    });
+
+    window.addEventListener('offline', () => {
+      console.log('📴 Application is offline');
+      document.body.classList.add('offline-mode');
+    });
+
+    // Check initial status
+    if (!navigator.onLine) {
+      document.body.classList.add('offline-mode');
+    }
+  </script>
+
+  <!-- ===== EMERGENCY FUNCTION DEFINITIONS ===== -->
+  <script>
+    // Emergency function definitions - these will ALWAYS be available
+    console.log('🆘 Loading emergency functions...');
+    
+    window.downloadReport = function() {
+      console.log('📊 downloadReport called from emergency script');
+      alert('Report function is working! The full PDF generation will be added soon.');
+      
+      // We'll add the full implementation later
+      const user = JSON.parse(localStorage.getItem('wfms_current_user') || 'null');
+      if (!user || user.role !== 'admin') {
+        alert('❌ Only admins can download reports');
+        return;
+      }
+      
+      // Simple confirmation
+      console.log('Report download initiated by:', user.name);
+    };
+    
+    console.log('✅ Emergency functions loaded. downloadReport defined:', typeof window.downloadReport !== 'undefined');
+  </script>
+
+  <!-- Offline banner -->
+  <div class="offline-banner">
+    📴 You are offline - Some features may be unavailable
+  </div>
+</body>
+</html>

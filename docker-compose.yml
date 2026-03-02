@@ -1,0 +1,33 @@
+services:
+  db:
+    image: mysql:8.0
+    restart: always
+    environment:
+      MYSQL_ROOT_PASSWORD: rootpass
+      MYSQL_DATABASE: wfms
+      MYSQL_USER: wfmsuser
+      MYSQL_PASSWORD: wfms_pass
+    volumes:
+      - db_data:/var/lib/mysql
+    ports:
+      - "3306:3306"
+
+  app:
+    build: .
+    depends_on:
+      - db
+    environment:
+      DB_HOST: db
+      DB_USER: wfmsuser
+      DB_PASS: wfms_pass
+      DB_NAME: wfms
+      SEED_ADMIN_EMAIL: admin@wfms.local
+      SEED_ADMIN_PASS: admin
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./:/usr/src/app
+    command: npm start
+
+volumes:
+  db_data:

@@ -1,0 +1,32 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>QR Login System</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+
+  <div class="container">
+    <h2>QR Code Generator & Login</h2>
+
+    <div class="form-container">
+      <h3>Enter Worker Info</h3>
+      <input id="name" type="text" placeholder="Worker Name" />
+      <input id="id" type="text" placeholder="Worker ID" />
+      <button id="generateBtn">Generate QR Code</button>
+    </div>
+
+    <div class="qr-container">
+      <div id="qrcode"></div>
+      <button id="scanBtn">Scan QR Code</button>
+    </div>
+
+    <div id="result"></div>
+  </div>
+
+  <script src="qrcode.min.js"></script>
+  <script src="script.js"></script>
+</body>
+</html>

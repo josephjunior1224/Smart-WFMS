@@ -1,0 +1,214 @@
+<!-- WFMS Color Palette & Styling Reference -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>WFMS Design System</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto; background: #0f172a; color: #e2e8f0; padding: 40px; }
+    h1 { margin: 40px 0 20px; font-size: 32px; }
+    h2 { margin: 30px 0 15px; font-size: 24px; border-bottom: 2px solid #2563eb; padding-bottom: 10px; }
+    .color-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 20px; margin: 20px 0; }
+    .color-box { padding: 20px; border-radius: 12px; text-align: center; color: white; font-weight: 600; }
+    .color-box.light { color: #0f172a; }
+    .primary { background: #2563eb; }
+    .primary-dark { background: #1e40af; }
+    .secondary { background: #64748b; }
+    .success { background: #10b981; }
+    .warning { background: #f59e0b; }
+    .danger { background: #ef4444; }
+    .info { background: #0ea5e9; }
+    .bg-dark { background: #0f172a; border: 1px solid #334155; }
+    .bg-dark-secondary { background: #1e293b; border: 1px solid #334155; }
+    .bg-light { background: #f8fafc; color: #0f172a; }
+    .button-demo { display: flex; gap: 10px; margin: 20px 0; flex-wrap: wrap; }
+    button { padding: 10px 20px; border: none; border-radius: 8px; font-weight: 600; cursor: pointer; transition: all 0.3s; }
+    .btn-primary { background: #2563eb; color: white; }
+    .btn-primary:hover { background: #1e40af; transform: translateY(-2px); }
+    .btn-success { background: #10b981; color: white; }
+    .btn-success:hover { background: #059669; transform: translateY(-2px); }
+    .btn-warning { background: #f59e0b; color: white; }
+    .btn-warning:hover { background: #d97706; transform: translateY(-2px); }
+    .btn-danger { background: #ef4444; color: white; }
+    .btn-danger:hover { background: #dc2626; transform: translateY(-2px); }
+    .btn-info { background: #0ea5e9; color: white; }
+    .btn-info:hover { background: #0284c7; transform: translateY(-2px); }
+    .card { background: #1e293b; border: 1px solid #334155; padding: 20px; border-radius: 12px; margin: 20px 0; }
+    .form-group { margin: 15px 0; }
+    .form-label { display: block; margin-bottom: 8px; font-weight: 600; color: #e2e8f0; text-transform: uppercase; font-size: 12px; }
+    input, select { width: 100%; padding: 12px 16px; border: 1px solid #334155; border-radius: 8px; background: #0f172a; color: #e2e8f0; }
+    input:focus { outline: none; border-color: #2563eb; box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1); }
+    .stat-example { display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 20px; margin: 20px 0; }
+    .stat-card { background: #1e293b; border: 1px solid #334155; padding: 20px; border-radius: 12px; display: flex; align-items: center; gap: 20px; }
+    .stat-icon { width: 60px; height: 60px; border-radius: 12px; display: flex; align-items: center; justify-content: center; font-size: 32px; }
+    .icon-employees { background: rgba(59, 130, 246, 0.1); color: #3b82f6; }
+    .icon-tasks { background: rgba(16, 185, 129, 0.1); color: #10b981; }
+    .icon-logs { background: rgba(245, 158, 11, 0.1); color: #f59e0b; }
+    .stat-content h6 { font-size: 11px; font-weight: 600; text-transform: uppercase; color: #94a3b8; margin-bottom: 8px; }
+    .stat-value { font-size: 28px; font-weight: 700; }
+  </style>
+</head>
+<body>
+
+<h1>🎨 WFMS Design System</h1>
+<p style="color: #94a3b8; margin-bottom: 40px;">Professional Workforce Management System - Visual Reference</p>
+
+<h2>Color Palette</h2>
+<div class="color-grid">
+  <div class="color-box primary">#2563eb<br>Primary Blue</div>
+  <div class="color-box primary-dark">#1e40af<br>Primary Dark</div>
+  <div class="color-box success">#10b981<br>Success Green</div>
+  <div class="color-box warning">#f59e0b<br>Warning Amber</div>
+  <div class="color-box danger">#ef4444<br>Danger Red</div>
+  <div class="color-box info">#0ea5e9<br>Info Cyan</div>
+</div>
+
+<h2>Background & Text Colors</h2>
+<div class="color-grid">
+  <div class="color-box bg-dark">#0f172a<br>Dark Background</div>
+  <div class="color-box bg-dark-secondary">#1e293b<br>Dark Secondary</div>
+  <div class="color-box bg-light light">#f8fafc<br>Light Background</div>
+  <div class="color-box" style="background: #e2e8f0; color: #0f172a;">#e2e8f0<br>Light Text</div>
+</div>
+
+<h2>Button Components</h2>
+<div class="button-demo">
+  <button class="btn-primary">Primary Action</button>
+  <button class="btn-success">Success</button>
+  <button class="btn-warning">Warning</button>
+  <button class="btn-danger">Danger</button>
+  <button class="btn-info">Info</button>
+</div>
+
+<h2>Form Elements</h2>
+<div class="card">
+  <div class="form-group">
+    <label class="form-label">Username</label>
+    <input type="text" placeholder="Enter your username">
+  </div>
+  <div class="form-group">
+    <label class="form-label">Password</label>
+    <input type="password" placeholder="Enter your password">
+  </div>
+  <div class="form-group">
+    <label class="form-label">Role</label>
+    <select>
+      <option>Select Role</option>
+      <option>Admin</option>
+      <option>Employee</option>
+    </select>
+  </div>
+  <button class="btn-primary" style="width: 100%; margin-top: 20px;">Sign In</button>
+</div>
+
+<h2>Stat Cards (Dashboard)</h2>
+<div class="stat-example">
+  <div class="stat-card">
+    <div class="stat-icon icon-employees">👥</div>
+    <div class="stat-content">
+      <h6>Total Employees</h6>
+      <p class="stat-value">24</p>
+    </div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-icon icon-tasks">✓</div>
+    <div class="stat-content">
+      <h6>Active Tasks</h6>
+      <p class="stat-value">12</p>
+    </div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-icon icon-logs">📋</div>
+    <div class="stat-content">
+      <h6>Time Logs</h6>
+      <p class="stat-value">156</p>
+    </div>
+  </div>
+</div>
+
+<h2>CSS Variables Reference</h2>
+<div class="card">
+  <pre style="color: #94a3b8; font-size: 12px; overflow: auto;">
+--primary: #2563eb
+--primary-dark: #1e40af
+--secondary: #64748b
+--success: #10b981
+--warning: #f59e0b
+--danger: #ef4444
+--info: #0ea5e9
+
+--bg-dark: #0f172a
+--bg-dark-secondary: #1e293b
+--bg-light: #f8fafc
+--bg-light-secondary: #f1f5f9
+
+--card-dark: #1e293b
+--card-light: #ffffff
+
+--text-dark: #e2e8f0
+--text-dark-muted: #94a3b8
+--text-light: #0f172a
+--text-light-muted: #64748b
+
+--border-dark: #334155
+--border-light: #e2e8f0
+
+--radius: 12px
+--shadow: 0 4px 6px rgba(0, 0, 0, 0.1)
+--shadow-lg: 0 20px 25px rgba(0, 0, 0, 0.15)
+  </pre>
+</div>
+
+<h2>Typography</h2>
+<div class="card">
+  <h3 style="margin: 20px 0 10px;">Font Family</h3>
+  <p style="color: #94a3b8;">-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif</p>
+  
+  <h3 style="margin: 20px 0 10px;">Text Sizes</h3>
+  <p style="font-size: 32px; margin: 10px 0;">32px - Page Heading (H1)</p>
+  <p style="font-size: 24px; margin: 10px 0;">24px - Section Heading (H2)</p>
+  <p style="font-size: 18px; margin: 10px 0;">18px - Card Heading (H5)</p>
+  <p style="font-size: 14px; margin: 10px 0;">14px - Body Text (default)</p>
+  <p style="font-size: 12px; color: #94a3b8; margin: 10px 0;">12px - Small / Label Text</p>
+</div>
+
+<h2>Responsive Breakpoints</h2>
+<div class="card">
+  <p><strong>Mobile First Approach</strong></p>
+  <p>• Mobile: Default (< 640px)</p>
+  <p>• Tablet: 640px - 768px</p>
+  <p>• Desktop: 768px - 1024px</p>
+  <p>• Large Desktop: > 1400px (max-width: container-xl)</p>
+</div>
+
+<h2>Animation & Transitions</h2>
+<div class="card">
+  <p><strong>Slide Up Animation:</strong> 350ms cubic-bezier(.2,.9,.2,1)</p>
+  <p><strong>Fade In Animation:</strong> 300ms ease</p>
+  <p><strong>All Transitions:</strong> 0.3s ease by default</p>
+  <p><strong>Hover Effects:</strong> translateY(-2px) with shadow enhancement</p>
+</div>
+
+<h2>Component Classes</h2>
+<div class="card">
+  <p><strong>Buttons:</strong> .btn, .btn-primary, .btn-success, .btn-warning, .btn-danger, .btn-info, .btn-outline-*, .btn-lg</p>
+  <p><strong>Cards:</strong> .card, .stat-card, .task-item, .employee-card</p>
+  <p><strong>Forms:</strong> .form-group, .form-label, .form-control</p>
+  <p><strong>Layout:</strong> .container-xl, .stats-grid, .attendance-buttons, .employee-grid, .task-list</p>
+  <p><strong>Headers:</strong> .dashboard-header, .card-header-custom, .auth-header</p>
+  <p><strong>Utilities:</strong> .hidden, .text-center, .text-muted, .m-0, .mb-*, .mt-*, .w-100, .small</p>
+</div>
+
+<h2>SVG Icons Used</h2>
+<div class="card">
+  <p>✅ 50+ SVG icons embedded directly in HTML (zero external dependencies)</p>
+  <p>✅ Dynamic icon sizing with CSS custom properties</p>
+  <p>✅ Color inheritance from text color (SVG fill="currentColor")</p>
+  <p>✅ Responsive: Icons scale with viewport</p>
+  <p>✅ Theme-aware: Icons inherit theme colors automatically</p>
+</div>
+
+</body>
+</html>

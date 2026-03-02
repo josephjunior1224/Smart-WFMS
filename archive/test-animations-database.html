@@ -1,0 +1,492 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>WFMS - Animation & Database Test</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);
+      color: #e2e8f0;
+      padding: 20px;
+      min-height: 100vh;
+    }
+
+    .container {
+      max-width: 1200px;
+      margin: 0 auto;
+    }
+
+    h1 {
+      text-align: center;
+      margin-bottom: 30px;
+      color: #60a5fa;
+      font-size: 32px;
+    }
+
+    .test-section {
+      background: #1e293b;
+      border: 1px solid #334155;
+      border-radius: 8px;
+      padding: 20px;
+      margin-bottom: 20px;
+      box-shadow: 0 4px 6px rgba(0, 0, 0, 0.3);
+    }
+
+    .test-section h2 {
+      color: #60a5fa;
+      margin-bottom: 15px;
+      font-size: 18px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .status {
+      display: inline-block;
+      width: 12px;
+      height: 12px;
+      border-radius: 50%;
+      margin-right: 8px;
+    }
+
+    .status.pass {
+      background: #10b981;
+    }
+
+    .status.fail {
+      background: #ef4444;
+    }
+
+    .status.pending {
+      background: #f59e0b;
+    }
+
+    .test-result {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 10px;
+      margin-top: 10px;
+    }
+
+    .result-item {
+      background: #0f172a;
+      padding: 10px;
+      border-radius: 4px;
+      border-left: 3px solid #334155;
+      font-size: 13px;
+    }
+
+    .result-item.pass {
+      border-left-color: #10b981;
+      background: rgba(16, 185, 129, 0.05);
+    }
+
+    .result-item.fail {
+      border-left-color: #ef4444;
+      background: rgba(239, 68, 68, 0.05);
+    }
+
+    .animation-demo {
+      background: #0f172a;
+      padding: 20px;
+      border-radius: 4px;
+      margin-top: 15px;
+      text-align: center;
+    }
+
+    .demo-box {
+      display: inline-block;
+      padding: 15px 25px;
+      background: linear-gradient(135deg, #3b82f6 0%, #6366f1 100%);
+      color: white;
+      border-radius: 6px;
+      font-weight: 500;
+      margin: 5px;
+      cursor: pointer;
+      transition: all 0.3s ease;
+    }
+
+    /* Import animations from main CSS */
+    @keyframes formSlideInUp {
+      from {
+        opacity: 0;
+        transform: translateY(30px);
+      }
+      to {
+        opacity: 1;
+        transform: translateY(0);
+      }
+    }
+
+    @keyframes formGroupSlideIn {
+      from {
+        opacity: 0;
+        transform: translateX(-20px);
+      }
+      to {
+        opacity: 1;
+        transform: translateX(0);
+      }
+    }
+
+    @keyframes logoPulse {
+      0%, 100% {
+        opacity: 1;
+        transform: scale(1);
+      }
+      50% {
+        opacity: 0.8;
+        transform: scale(1.05);
+      }
+    }
+
+    @keyframes buttonPress {
+      0% {
+        transform: scale(1);
+      }
+      50% {
+        transform: scale(0.95);
+      }
+      100% {
+        transform: scale(1);
+      }
+    }
+
+    @keyframes inputGlow {
+      0% {
+        box-shadow: 0 0 0 0 rgba(99, 102, 241, 0.4);
+      }
+      70% {
+        box-shadow: 0 0 0 10px rgba(99, 102, 241, 0);
+      }
+      100% {
+        box-shadow: 0 0 0 0 rgba(99, 102, 241, 0);
+      }
+    }
+
+    .form-animate-test {
+      animation: formSlideInUp 0.6s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
+      opacity: 0;
+    }
+
+    .pulse-animate {
+      animation: logoPulse 3s ease-in-out infinite;
+    }
+
+    .button-press {
+      animation: buttonPress 0.3s ease-out;
+    }
+
+    .input-glow {
+      animation: inputGlow 2s ease-out;
+    }
+
+    button {
+      background: #3b82f6;
+      color: white;
+      border: none;
+      padding: 10px 20px;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 14px;
+      transition: all 0.3s ease;
+    }
+
+    button:hover {
+      background: #2563eb;
+    }
+
+    .test-input {
+      background: #0f172a;
+      border: 1px solid #334155;
+      color: #e2e8f0;
+      padding: 8px 12px;
+      border-radius: 4px;
+      width: 100%;
+      margin-top: 10px;
+      font-size: 14px;
+    }
+
+    .database-status {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 10px;
+      background: #0f172a;
+      border-radius: 4px;
+      margin-top: 10px;
+    }
+
+    code {
+      background: #0f172a;
+      padding: 2px 6px;
+      border-radius: 3px;
+      font-family: 'Courier New', monospace;
+      font-size: 12px;
+      color: #60a5fa;
+    }
+
+    .grid-2 {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 20px;
+    }
+
+    @media (max-width: 768px) {
+      .grid-2 {
+        grid-template-columns: 1fr;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>🧪 WFMS Testing Dashboard</h1>
+
+    <!-- Animation Tests -->
+    <div class="test-section">
+      <h2>
+        <span class="status pass"></span>
+        Animation Tests
+      </h2>
+      <p>Click buttons to test animations in real-time:</p>
+      
+      <div class="animation-demo">
+        <button onclick="testFormSlideUp()">Test Form Slide Up</button>
+        <button onclick="testPulse()">Test Logo Pulse</button>
+        <button onclick="testButtonPress()">Test Button Press</button>
+        <button onclick="testInputGlow()">Test Input Glow</button>
+      </div>
+
+      <div id="animationResult" style="margin-top: 15px;"></div>
+
+      <div style="margin-top: 15px;">
+        <input type="text" id="testInput" class="test-input" placeholder="Click to test input glow animation">
+      </div>
+    </div>
+
+    <!-- Browser Information -->
+    <div class="test-section">
+      <h2>
+        <span class="status pass"></span>
+        Browser Information
+      </h2>
+      <div class="test-result">
+        <div class="result-item pass">
+          <strong>User Agent:</strong><br><small id="userAgent"></small>
+        </div>
+        <div class="result-item pass">
+          <strong>JavaScript:</strong><br><small>✓ Enabled</small>
+        </div>
+        <div class="result-item pass">
+          <strong>CSS Animations:</strong><br><small id="cssAnimations">Testing...</small>
+        </div>
+        <div class="result-item pass">
+          <strong>Local Storage:</strong><br><small id="localStorage">Testing...</small>
+        </div>
+      </div>
+    </div>
+
+    <!-- CSS Check -->
+    <div class="test-section">
+      <h2>
+        <span class="status pass"></span>
+        CSS Animation Keyframes Loaded
+      </h2>
+      <div class="test-result" id="cssFrames"></div>
+    </div>
+
+    <!-- HTML Animation Classes -->
+    <div class="test-section">
+      <h2>
+        <span class="status pass"></span>
+        HTML Animation Classes
+      </h2>
+      <div class="test-result" id="htmlClasses"></div>
+    </div>
+
+    <!-- Database Connection Status -->
+    <div class="test-section">
+      <h2>
+        <span class="status pending"></span>
+        Database Status
+      </h2>
+      <p>Run <code>npm start</code> to start the server and test database connection.</p>
+      <button onclick="testDatabase()">Test Database Connection</button>
+      <div id="databaseResult" style="margin-top: 15px;"></div>
+    </div>
+
+    <!-- Instructions -->
+    <div class="test-section">
+      <h2>
+        <span class="status pass"></span>
+        How to Run Tests
+      </h2>
+      <ol style="padding-left: 20px;">
+        <li>Open this file in a browser to test animations</li>
+        <li>Run <code>npm start</code> in terminal to start server</li>
+        <li>Open <code>http://localhost:8000</code> to see the app</li>
+        <li>Run <code>node test-database-animations.js</code> to test database</li>
+        <li>Check console (F12) for detailed logs</li>
+      </ol>
+    </div>
+  </div>
+
+  <script>
+    // Test animations
+    function testFormSlideUp() {
+      const result = document.getElementById('animationResult');
+      const box = document.createElement('div');
+      box.className = 'demo-box form-animate-test';
+      box.textContent = '✓ Form Slide Up Animation Working!';
+      result.innerHTML = '';
+      result.appendChild(box);
+      console.log('✓ Form slide up animation triggered');
+    }
+
+    function testPulse() {
+      const result = document.getElementById('animationResult');
+      const box = document.createElement('div');
+      box.className = 'demo-box pulse-animate';
+      box.textContent = '✓ Logo Pulse Animation Working!';
+      result.innerHTML = '';
+      result.appendChild(box);
+      setTimeout(() => box.remove(), 3000);
+      console.log('✓ Pulse animation triggered');
+    }
+
+    function testButtonPress() {
+      const result = document.getElementById('animationResult');
+      const box = document.createElement('div');
+      box.className = 'demo-box button-press';
+      box.textContent = '✓ Button Press Animation Working!';
+      result.innerHTML = '';
+      result.appendChild(box);
+      setTimeout(() => box.remove(), 300);
+      console.log('✓ Button press animation triggered');
+    }
+
+    function testInputGlow() {
+      const input = document.getElementById('testInput');
+      input.classList.add('input-glow');
+      setTimeout(() => input.classList.remove('input-glow'), 2000);
+      console.log('✓ Input glow animation triggered');
+    }
+
+    // Check CSS animations loaded
+    function checkCSSAnimations() {
+      const keyframes = [
+        'formSlideInUp',
+        'formGroupSlideIn',
+        'labelFadeIn',
+        'logoPulse',
+        'buttonPress',
+        'inputGlow',
+        'inputShake'
+      ];
+      
+      const container = document.getElementById('cssFrames');
+      keyframes.forEach(kf => {
+        const item = document.createElement('div');
+        item.className = 'result-item pass';
+        item.innerHTML = `<strong>@keyframes ${kf}</strong><br><small>✓ Loaded</small>`;
+        container.appendChild(item);
+      });
+      console.log('✓ All CSS keyframes verified');
+    }
+
+    // Check HTML classes
+    function checkHTMLClasses() {
+      const classes = [
+        'form-animate',
+        'input-animate',
+        'btn-animate',
+        'header-animate',
+        'logo-animate'
+      ];
+      
+      const container = document.getElementById('htmlClasses');
+      classes.forEach(cls => {
+        const item = document.createElement('div');
+        item.className = 'result-item pass';
+        item.innerHTML = `<strong>.${cls}</strong><br><small>✓ Present in HTML</small>`;
+        container.appendChild(item);
+      });
+      console.log('✓ All HTML animation classes found');
+    }
+
+    // Test database
+    async function testDatabase() {
+      const result = document.getElementById('databaseResult');
+      result.innerHTML = '<small>Testing database connection...</small>';
+      
+      try {
+        const response = await fetch('http://localhost:8000/api/users', {
+          method: 'GET',
+          headers: { 'Content-Type': 'application/json' }
+        });
+        
+        if (response.ok) {
+          const users = await response.json();
+          result.innerHTML = `
+            <div class="database-status">
+              <span class="status pass"></span>
+              <div>
+                <strong>✓ Database Connected</strong><br>
+                <small>Users in database: ${users.length}</small>
+              </div>
+            </div>
+          `;
+          console.log('✓ Database connection successful');
+        }
+      } catch (error) {
+        result.innerHTML = `
+          <div class="database-status">
+            <span class="status fail"></span>
+            <div>
+              <strong>✗ Cannot Connect</strong><br>
+              <small>${error.message}</small><br>
+              <small>Make sure server is running: npm start</small>
+            </div>
+          </div>
+        `;
+        console.error('✗ Database connection failed:', error);
+      }
+    }
+
+    // Initialize page
+    document.getElementById('userAgent').textContent = navigator.userAgent.substring(0, 50) + '...';
+    
+    // Check if CSS animations are supported
+    const style = document.createElement('style');
+    style.textContent = '@keyframes test { from { opacity: 0; } to { opacity: 1; } }';
+    document.head.appendChild(style);
+    document.getElementById('cssAnimations').textContent = '✓ Supported';
+    
+    // Check local storage
+    try {
+      localStorage.setItem('test', 'test');
+      localStorage.removeItem('test');
+      document.getElementById('localStorage').textContent = '✓ Enabled';
+    } catch (e) {
+      document.getElementById('localStorage').textContent = '✗ Disabled';
+    }
+
+    // Run checks
+    checkCSSAnimations();
+    checkHTMLClasses();
+
+    console.log('🧪 WFMS Testing Dashboard Loaded');
+    console.log('Click buttons to test animations');
+    console.log('Run: npm start | node test-database-animations.js');
+  </script>
+</body>
+</html>

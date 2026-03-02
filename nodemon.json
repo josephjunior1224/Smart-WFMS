@@ -1,0 +1,13 @@
+{
+  "watch": [
+    "server.js",
+    "db.js",
+    "models",
+    "firebase-config.js"
+  ],
+  "ext": "js,json",
+  "ignore": [
+    "node_modules/*",
+    "data/*"
+  ]
+}

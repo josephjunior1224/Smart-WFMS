@@ -1,0 +1,1484 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>HERITAGE Workforce Management System</title>
+  <meta name="description" content="Enterprise workforce management solution" />
+  <meta name="theme-color" content="#0c1222" />
+  
+  <!-- Tailwind CSS -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  
+  <!-- React and ReactDOM -->
+  <script crossorigin src="https://unpkg.com/react@18.2.0/umd/react.development.js"></script>
+  <script crossorigin src="https://unpkg.com/react-dom@18.2.0/umd/react-dom.development.js"></script>
+  
+  <!-- Babel for JSX -->
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  
+  <!-- Chart.js for analytics -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+  
+  <!-- Font Awesome Icons -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+  
+  <!-- Google Fonts -->
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+  
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+    
+    body {
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      min-height: 100vh;
+      transition: background 0.3s ease;
+      margin: 0;
+      padding: 0;
+    }
+    
+    /* Dark mode styles - CORRECTED selector */
+    html.dark body {
+      background: linear-gradient(135deg, #1a1c2c 0%, #2d1b3a 100%);
+    }
+    
+    #root {
+      min-height: 100vh;
+      display: flex;
+      padding: 20px;
+    }
+    
+    /* Custom scrollbar */
+    ::-webkit-scrollbar {
+      width: 8px;
+      height: 8px;
+    }
+    
+    ::-webkit-scrollbar-track {
+      background: rgba(255, 255, 255, 0.1);
+    }
+    
+    ::-webkit-scrollbar-thumb {
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      border-radius: 4px;
+    }
+    
+    /* Loading animation */
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+    
+    .loading-spinner {
+      animation: spin 1s linear infinite;
+    }
+    
+    /* QR code pulse animation */
+    @keyframes pulse {
+      0%, 100% { transform: scale(1); }
+      50% { transform: scale(1.02); }
+    }
+    
+    .qr-pulse {
+      animation: pulse 2s ease-in-out infinite;
+    }
+    
+    /* Sidebar styles */
+    .sidebar {
+      width: 280px;
+      background: rgba(255, 255, 255, 0.95);
+      backdrop-filter: blur(10px);
+      border-radius: 20px;
+      padding: 25px;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      box-shadow: 0 20px 40px rgba(0,0,0,0.1);
+      height: calc(100vh - 40px);
+      position: sticky;
+      top: 20px;
+    }
+    
+    html.dark .sidebar {
+      background: rgba(30, 30, 40, 0.95);
+    }
+    
+    .sidebar-header {
+      text-align: center;
+      padding-bottom: 20px;
+      border-bottom: 2px solid rgba(102, 126, 234, 0.2);
+      margin-bottom: 10px;
+    }
+    
+    .sidebar-header .logo {
+      font-size: 24px;
+      font-weight: 800;
+      background: linear-gradient(135deg, #667eea, #764ba2);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      margin-bottom: 5px;
+    }
+    
+    .sidebar-header .sub-logo {
+      font-size: 12px;
+      color: #666;
+    }
+    
+    html.dark .sidebar-header .sub-logo {
+      color: #aaa;
+    }
+    
+    .nav-item {
+      display: flex;
+      align-items: center;
+      gap: 15px;
+      padding: 12px 15px;
+      border-radius: 12px;
+      cursor: pointer;
+      transition: all 0.3s;
+      color: #444;
+    }
+    
+    html.dark .nav-item {
+      color: #ddd;
+    }
+    
+    .nav-item i {
+      width: 24px;
+      font-size: 18px;
+      color: #667eea;
+    }
+    
+    .nav-item:hover {
+      background: linear-gradient(135deg, rgba(102, 126, 234, 0.1), rgba(118, 75, 162, 0.1));
+      transform: translateX(5px);
+    }
+    
+    .nav-item.active {
+      background: linear-gradient(135deg, #667eea, #764ba2);
+      color: white;
+    }
+    
+    .nav-item.active i {
+      color: white;
+    }
+    
+    .main-content {
+      flex: 1;
+      margin-left: 20px;
+      background: rgba(255, 255, 255, 0.95);
+      backdrop-filter: blur(10px);
+      border-radius: 20px;
+      padding: 30px;
+      overflow-y: auto;
+      height: calc(100vh - 40px);
+    }
+    
+    html.dark .main-content {
+      background: rgba(30, 30, 40, 0.95);
+    }
+    
+    .page {
+      display: none;
+      animation: fadeIn 0.3s ease;
+    }
+    
+    .page.active {
+      display: block;
+    }
+    
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(10px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+    
+    /* Card styles */
+    .card {
+      background: white;
+      border-radius: 15px;
+      padding: 20px;
+      box-shadow: 0 4px 6px rgba(0,0,0,0.05);
+      margin-bottom: 20px;
+    }
+    
+    html.dark .card {
+      background: rgba(40, 40, 50, 0.9);
+      color: #fff;
+    }
+    
+    .card-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 20px;
+      padding-bottom: 10px;
+      border-bottom: 2px solid #f0f0f0;
+    }
+    
+    html.dark .card-header {
+      border-bottom-color: #444;
+    }
+    
+    .card-header h3 {
+      font-size: 18px;
+      font-weight: 600;
+      color: #333;
+    }
+    
+    html.dark .card-header h3 {
+      color: #fff;
+    }
+    
+    /* Grid layouts */
+    .grid-2 { display: grid; grid-template-columns: repeat(2, 1fr); gap: 20px; }
+    .grid-3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px; }
+    .grid-4 { display: grid; grid-template-columns: repeat(4, 1fr); gap: 20px; }
+    
+    @media (max-width: 1200px) {
+      .grid-4 { grid-template-columns: repeat(2, 1fr); }
+    }
+    
+    @media (max-width: 768px) {
+      .grid-2, .grid-3, .grid-4 { grid-template-columns: 1fr; }
+    }
+    
+    /* Stat cards */
+    .stat-card {
+      background: linear-gradient(135deg, #667eea, #764ba2);
+      border-radius: 15px;
+      padding: 20px;
+      color: white;
+    }
+    
+    .stat-card .stat-icon {
+      font-size: 40px;
+      margin-bottom: 10px;
+    }
+    
+    .stat-card .stat-value {
+      font-size: 32px;
+      font-weight: 700;
+    }
+    
+    .stat-card .stat-label {
+      font-size: 14px;
+      opacity: 0.9;
+    }
+    
+    /* Tables */
+    .data-table {
+      width: 100%;
+      border-collapse: collapse;
+    }
+    
+    .data-table th {
+      text-align: left;
+      padding: 12px;
+      background: #f8f9fa;
+      color: #444;
+      font-weight: 600;
+      font-size: 13px;
+    }
+    
+    html.dark .data-table th {
+      background: #333;
+      color: #fff;
+    }
+    
+    .data-table td {
+      padding: 12px;
+      border-bottom: 1px solid #eee;
+    }
+    
+    html.dark .data-table td {
+      border-bottom-color: #444;
+      color: #ddd;
+    }
+    
+    .data-table tr:hover td {
+      background: #f5f5f5;
+    }
+    
+    html.dark .data-table tr:hover td {
+      background: #3a3a4a;
+    }
+    
+    .status-badge {
+      padding: 4px 8px;
+      border-radius: 20px;
+      font-size: 11px;
+      font-weight: 600;
+    }
+    
+    .status-active { background: #d4edda; color: #155724; }
+    .status-pending { background: #fff3cd; color: #856404; }
+    .status-inactive { background: #f8d7da; color: #721c24; }
+    
+    /* QR Modal */
+    .qr-modal {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: rgba(0,0,0,0.8);
+      display: none;
+      align-items: center;
+      justify-content: center;
+      z-index: 1000;
+    }
+    
+    .qr-modal.active {
+      display: flex;
+    }
+    
+    .qr-content {
+      background: white;
+      padding: 30px;
+      border-radius: 20px;
+      text-align: center;
+      max-width: 400px;
+      width: 90%;
+    }
+    
+    .qr-image {
+      width: 250px;
+      height: 250px;
+      margin: 20px auto;
+    }
+    
+    .qr-image img {
+      width: 100%;
+      height: 100%;
+      object-fit: contain;
+    }
+    
+    /* Buttons */
+    .btn {
+      padding: 10px 20px;
+      border: none;
+      border-radius: 8px;
+      font-weight: 500;
+      cursor: pointer;
+      transition: all 0.3s;
+    }
+    
+    .btn-primary {
+      background: linear-gradient(135deg, #667eea, #764ba2);
+      color: white;
+    }
+    
+    .btn-primary:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 5px 15px rgba(102, 126, 234, 0.4);
+    }
+    
+    .btn-outline {
+      background: transparent;
+      border: 2px solid #667eea;
+      color: #667eea;
+    }
+    
+    .btn-outline:hover {
+      background: #667eea;
+      color: white;
+    }
+    
+    /* Toggle switches */
+    .switch {
+      position: relative;
+      display: inline-block;
+      width: 60px;
+      height: 34px;
+    }
+    
+    .switch input {
+      opacity: 0;
+      width: 0;
+      height: 0;
+    }
+    
+    .slider {
+      position: absolute;
+      cursor: pointer;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background-color: #ccc;
+      transition: .4s;
+      border-radius: 34px;
+    }
+    
+    .slider:before {
+      position: absolute;
+      content: "";
+      height: 26px;
+      width: 26px;
+      left: 4px;
+      bottom: 4px;
+      background-color: white;
+      transition: .4s;
+      border-radius: 50%;
+    }
+    
+    input:checked + .slider {
+      background: linear-gradient(135deg, #667eea, #764ba2);
+    }
+    
+    input:checked + .slider:before {
+      transform: translateX(26px);
+    }
+    
+    /* Settings slider */
+    .settings-slider {
+      width: 100%;
+      margin: 10px 0;
+    }
+    
+    /* Social links */
+    .social-links {
+      display: flex;
+      gap: 15px;
+      justify-content: center;
+      margin: 20px 0;
+    }
+    
+    .social-link {
+      width: 45px;
+      height: 45px;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: white;
+      text-decoration: none;
+      transition: transform 0.3s;
+      font-size: 20px;
+    }
+    
+    .social-link:hover {
+      transform: translateY(-5px);
+    }
+    
+    .facebook { background: #1877f2; }
+    .whatsapp { background: #25D366; }
+    .github { background: #333; }
+    .linkedin { background: #0077b5; }
+  </style>
+</head>
+<body>
+  <div id="root"></div>
+
+  <script type="text/babel">
+    // Safely initialize framer-motion if available (optional)
+    const framerMotion = window.framerMotion || window["framer-motion"] || {};
+    const { motion, AnimatePresence } = framerMotion;
+
+    const { useState, useEffect, useRef } = React;
+
+    // Main App Component
+    const App = () => {
+      const [activePage, setActivePage] = useState('dashboard');
+      const [theme, setTheme] = useState(localStorage.getItem('theme') || 'light');
+      const [qrModalOpen, setQrModalOpen] = useState(false);
+      const [settings, setSettings] = useState({
+        darkMode: theme === 'dark',
+        notifications: true,
+        autoRefresh: true,
+        refreshInterval: 30,
+        language: 'en',
+        timezone: 'UTC+1',
+        dateFormat: 'MM/DD/YYYY',
+        twoFactorAuth: false,
+        sessionTimeout: 30,
+        maxLoginAttempts: 5
+      });
+
+      // Refs for charts
+      const deptChartRef = useRef(null);
+      const trendChartRef = useRef(null);
+      const deptStatsRef = useRef(null);
+      const empTypeRef = useRef(null);
+      const monthlyTrendRef = useRef(null);
+      const deptPerfRef = useRef(null);
+
+      // Apply theme to html element - CORRECTED
+      useEffect(() => {
+        if (theme === 'dark') {
+          document.documentElement.classList.add('dark');
+        } else {
+          document.documentElement.classList.remove('dark');
+        }
+        localStorage.setItem('theme', theme);
+      }, [theme]);
+
+      // Initialize charts - FIXED with proper Chart.js initialization
+      useEffect(() => {
+        // Small delay to ensure DOM is ready
+        setTimeout(() => {
+          // Department Chart
+          if (deptChartRef.current) {
+            new Chart(deptChartRef.current, {
+              type: 'doughnut',
+              data: {
+                labels: ['Operations', 'HR', 'Finance', 'IT', 'Peace Programs', 'Admin'],
+                datasets: [{
+                  data: [850, 420, 315, 290, 400, 572],
+                  backgroundColor: ['#667eea', '#26B99A', '#F39C12', '#E74C3C', '#9B59B6', '#3498DB']
+                }]
+              },
+              options: {
+                responsive: true,
+                maintainAspectRatio: false
+              }
+            });
+          }
+
+          // Attendance Trend Chart
+          if (trendChartRef.current) {
+            new Chart(trendChartRef.current, {
+              type: 'line',
+              data: {
+                labels: ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'],
+                datasets: [{
+                  label: 'Attendance Rate',
+                  data: [94, 92, 96, 95, 93, 78, 65],
+                  borderColor: '#667eea',
+                  backgroundColor: 'rgba(102, 126, 234, 0.1)',
+                  tension: 0.4,
+                  fill: true
+                }]
+              },
+              options: {
+                responsive: true,
+                maintainAspectRatio: false
+              }
+            });
+          }
+
+          // Department Stats Chart
+          if (deptStatsRef.current) {
+            new Chart(deptStatsRef.current, {
+              type: 'bar',
+              data: {
+                labels: ['Operations', 'HR', 'Finance', 'IT', 'Peace Programs'],
+                datasets: [{
+                  label: 'Employee Count',
+                  data: [850, 420, 315, 290, 400],
+                  backgroundColor: '#667eea'
+                }]
+              },
+              options: {
+                responsive: true,
+                maintainAspectRatio: false
+              }
+            });
+          }
+
+          // Employment Type Chart
+          if (empTypeRef.current) {
+            new Chart(empTypeRef.current, {
+              type: 'pie',
+              data: {
+                labels: ['Full-time', 'Part-time', 'Contract', 'Intern'],
+                datasets: [{
+                  data: [1850, 420, 315, 262],
+                  backgroundColor: ['#667eea', '#26B99A', '#F39C12', '#E74C3C']
+                }]
+              },
+              options: {
+                responsive: true,
+                maintainAspectRatio: false
+              }
+            });
+          }
+
+          // Monthly Trend Chart
+          if (monthlyTrendRef.current) {
+            new Chart(monthlyTrendRef.current, {
+              type: 'line',
+              data: {
+                labels: ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun'],
+                datasets: [{
+                  label: 'Attendance %',
+                  data: [92, 93, 94, 93, 95, 94],
+                  borderColor: '#26B99A',
+                  backgroundColor: 'rgba(38, 185, 154, 0.1)',
+                  tension: 0.4,
+                  fill: true
+                }]
+              },
+              options: {
+                responsive: true,
+                maintainAspectRatio: false
+              }
+            });
+          }
+
+          // Department Performance Chart
+          if (deptPerfRef.current) {
+            new Chart(deptPerfRef.current, {
+              type: 'radar',
+              data: {
+                labels: ['Operations', 'HR', 'Finance', 'IT', 'Peace Programs', 'Admin'],
+                datasets: [{
+                  label: 'Performance Score',
+                  data: [95, 92, 88, 96, 94, 90],
+                  backgroundColor: 'rgba(102, 126, 234, 0.2)',
+                  borderColor: '#667eea',
+                  pointBackgroundColor: '#667eea'
+                }]
+              },
+              options: {
+                responsive: true,
+                maintainAspectRatio: false
+              }
+            });
+          }
+        }, 100);
+      }, []);
+
+      const toggleTheme = () => {
+        setTheme(prev => prev === 'light' ? 'dark' : 'light');
+        setSettings(prev => ({ ...prev, darkMode: theme === 'light' }));
+      };
+
+      const updateSetting = (key, value) => {
+        setSettings(prev => ({ ...prev, [key]: value }));
+        // Apply settings automatically
+        if (key === 'darkMode') {
+          setTheme(value ? 'dark' : 'light');
+        }
+      };
+
+      const navItems = [
+        { id: 'dashboard', icon: 'fa-tachometer-alt', label: 'Dashboard' },
+        { id: 'workforce', icon: 'fa-users', label: 'Workforce Management' },
+        { id: 'attendance', icon: 'fa-qrcode', label: 'QR Attendance' },
+        { id: 'analytics', icon: 'fa-chart-line', label: 'Analytics & Reports' },
+        { id: 'payroll', icon: 'fa-money-bill-wave', label: 'Payroll Integration' },
+        { id: 'security', icon: 'fa-shield-alt', label: 'Security & Compliance' },
+        { id: 'heritage', icon: 'fa-university', label: 'HERITAGE & HEPIDS' },
+        { id: 'settings', icon: 'fa-cog', label: 'System Settings' }
+      ];
+
+      return (
+        <div className="flex w-full">
+          {/* Sidebar */}
+          <div className="sidebar">
+            <div className="sidebar-header">
+              <div className="logo">HERITAGE WMS</div>
+              <div className="sub-logo">Enterprise Workforce Solutions</div>
+            </div>
+            
+            {navItems.map(item => (
+              <div
+                key={item.id}
+                className={`nav-item ${activePage === item.id ? 'active' : ''}`}
+                onClick={() => setActivePage(item.id)}
+              >
+                <i className={`fas ${item.icon}`}></i>
+                <span>{item.label}</span>
+              </div>
+            ))}
+
+            <div className="nav-item" onClick={toggleTheme}>
+              <i className={`fas ${theme === 'light' ? 'fa-moon' : 'fa-sun'}`}></i>
+              <span>{theme === 'light' ? 'Dark Mode' : 'Light Mode'}</span>
+            </div>
+          </div>
+
+          {/* Main Content */}
+          <div className="main-content">
+            {/* Dashboard Page */}
+            <div className={`page ${activePage === 'dashboard' ? 'active' : ''}`}>
+              <h2 className="text-2xl font-bold mb-6 dark:text-white">Dashboard Overview</h2>
+              
+              <div className="grid-4">
+                <div className="stat-card">
+                  <div className="stat-icon"><i className="fas fa-users"></i></div>
+                  <div className="stat-value">2,847</div>
+                  <div className="stat-label">Total Workforce</div>
+                  <div className="text-sm mt-2">↑ 12% from last month</div>
+                </div>
+                <div className="stat-card" style={{background: 'linear-gradient(135deg, #26B99A, #1ABB9C)'}}>
+                  <div className="stat-icon"><i className="fas fa-check-circle"></i></div>
+                  <div className="stat-value">2,156</div>
+                  <div className="stat-label">Present Today</div>
+                  <div className="text-sm mt-2">92% attendance rate</div>
+                </div>
+                <div className="stat-card" style={{background: 'linear-gradient(135deg, #F39C12, #E67E22)'}}>
+                  <div className="stat-icon"><i className="fas fa-clock"></i></div>
+                  <div className="stat-value">7.8</div>
+                  <div className="stat-label">Avg. Work Hours</div>
+                  <div className="text-sm mt-2">↑ 0.3 hrs from avg</div>
+                </div>
+                <div className="stat-card" style={{background: 'linear-gradient(135deg, #E74C3C, #C0392B)'}}>
+                  <div className="stat-icon"><i className="fas fa-credit-card"></i></div>
+                  <div className="stat-value">$2.4M</div>
+                  <div className="stat-label">Payroll (MTD)</div>
+                  <div className="text-sm mt-2">Within budget</div>
+                </div>
+              </div>
+
+              <div className="grid-2 mt-6">
+                <div className="card">
+                  <div className="card-header">
+                    <h3>Department Distribution</h3>
+                  </div>
+                  <div style={{ height: '200px' }}>
+                    <canvas ref={deptChartRef} height="200"></canvas>
+                  </div>
+                </div>
+                <div className="card">
+                  <div className="card-header">
+                    <h3>Attendance Trends</h3>
+                  </div>
+                  <div style={{ height: '200px' }}>
+                    <canvas ref={trendChartRef} height="200"></canvas>
+                  </div>
+                </div>
+              </div>
+
+              <div className="card mt-6">
+                <div className="card-header">
+                  <h3>Recent Activity</h3>
+                  <button className="btn btn-primary" onClick={() => setQrModalOpen(true)}>
+                    <i className="fas fa-qrcode mr-2"></i>Generate QR
+                  </button>
+                </div>
+                <table className="data-table">
+                  <thead>
+                    <tr>
+                      <th>Employee</th>
+                      <th>Department</th>
+                      <th>Check-in</th>
+                      <th>Check-out</th>
+                      <th>Status</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr>
+                      <td>John Mbeki</td>
+                      <td>Operations</td>
+                      <td>08:15 AM</td>
+                      <td>--:-- --</td>
+                      <td><span className="status-badge status-active">Active</span></td>
+                    </tr>
+                    <tr>
+                      <td>Sarah Ndi</td>
+                      <td>HR</td>
+                      <td>08:30 AM</td>
+                      <td>--:-- --</td>
+                      <td><span className="status-badge status-active">Active</span></td>
+                    </tr>
+                    <tr>
+                      <td>Paul Biya Jr</td>
+                      <td>Finance</td>
+                      <td>09:00 AM</td>
+                      <td>--:-- --</td>
+                      <td><span className="status-badge status-pending">Late</span></td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            {/* Workforce Management Page */}
+            <div className={`page ${activePage === 'workforce' ? 'active' : ''}`}>
+              <h2 className="text-2xl font-bold mb-6 dark:text-white">Workforce Management</h2>
+              
+              <div className="card">
+                <div className="card-header">
+                  <h3>Employee Directory</h3>
+                  <div>
+                    <button className="btn btn-outline mr-2"><i className="fas fa-download mr-2"></i>Export</button>
+                    <button className="btn btn-primary"><i className="fas fa-plus mr-2"></i>Add Employee</button>
+                  </div>
+                </div>
+                <table className="data-table">
+                  <thead>
+                    <tr>
+                      <th>ID</th>
+                      <th>Name</th>
+                      <th>Department</th>
+                      <th>Position</th>
+                      <th>Join Date</th>
+                      <th>Status</th>
+                      <th>Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr>
+                      <td>WF-001</td>
+                      <td>John Mbeki</td>
+                      <td>Operations</td>
+                      <td>Manager</td>
+                      <td>2022-03-15</td>
+                      <td><span className="status-badge status-active">Active</span></td>
+                      <td><i className="fas fa-edit text-blue-500 cursor-pointer"></i></td>
+                    </tr>
+                    <tr>
+                      <td>WF-045</td>
+                      <td>Sarah Ndi</td>
+                      <td>HR</td>
+                      <td>Director</td>
+                      <td>2021-11-01</td>
+                      <td><span className="status-badge status-active">Active</span></td>
+                      <td><i className="fas fa-edit text-blue-500 cursor-pointer"></i></td>
+                    </tr>
+                    <tr>
+                      <td>WF-089</td>
+                      <td>Paul Biya Jr</td>
+                      <td>Finance</td>
+                      <td>Analyst</td>
+                      <td>2023-01-10</td>
+                      <td><span className="status-badge status-active">Active</span></td>
+                      <td><i className="fas fa-edit text-blue-500 cursor-pointer"></i></td>
+                    </tr>
+                    <tr>
+                      <td>WF-112</td>
+                      <td>Marie Claire</td>
+                      <td>Peace Studies</td>
+                      <td>Coordinator</td>
+                      <td>2023-06-20</td>
+                      <td><span className="status-badge status-active">Active</span></td>
+                      <td><i className="fas fa-edit text-blue-500 cursor-pointer"></i></td>
+                    </tr>
+                    <tr>
+                      <td>WF-156</td>
+                      <td>Jean Pierre</td>
+                      <td>IT</td>
+                      <td>Admin</td>
+                      <td>2022-09-05</td>
+                      <td><span className="status-badge status-active">Active</span></td>
+                      <td><i className="fas fa-edit text-blue-500 cursor-pointer"></i></td>
+                    </tr>
+                    <tr>
+                      <td>WF-203</td>
+                      <td>Alice Ngon</td>
+                      <td>Humanitarian</td>
+                      <td>Field Officer</td>
+                      <td>2024-01-15</td>
+                      <td><span className="status-badge status-pending">Probation</span></td>
+                      <td><i className="fas fa-edit text-blue-500 cursor-pointer"></i></td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+
+              <div className="grid-2 mt-6">
+                <div className="card">
+                  <div className="card-header">
+                    <h3>Department Overview</h3>
+                  </div>
+                  <div style={{ height: '200px' }}>
+                    <canvas ref={deptStatsRef} height="200"></canvas>
+                  </div>
+                </div>
+                <div className="card">
+                  <div className="card-header">
+                    <h3>Employment Type</h3>
+                  </div>
+                  <div style={{ height: '200px' }}>
+                    <canvas ref={empTypeRef} height="200"></canvas>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* QR Attendance Page - FIXED QR code URL with template literal */}
+            <div className={`page ${activePage === 'attendance' ? 'active' : ''}`}>
+              <h2 className="text-2xl font-bold mb-6 dark:text-white">QR Attendance System</h2>
+              
+              <div className="grid-2">
+                <div className="card">
+                  <div className="card-header">
+                    <h3>Generate Attendance QR</h3>
+                  </div>
+                  <div className="text-center p-6">
+                    <div className="qr-image mx-auto mb-4">
+                      <img 
+                        src={`https://api.qrserver.com/v1/create-qr-code/?size=250x250&data=HERITAGE-WMS-ATTENDANCE-${Date.now()}`} 
+                        alt="Attendance QR" 
+                      />
+                    </div>
+                    <p className="mb-4 dark:text-gray-300">Scan to mark attendance</p>
+                    <button className="btn btn-primary" onClick={() => setQrModalOpen(true)}>
+                      <i className="fas fa-sync-alt mr-2"></i>Generate New QR
+                    </button>
+                  </div>
+                </div>
+
+                <div className="card">
+                  <div className="card-header">
+                    <h3>Today's Attendance</h3>
+                  </div>
+                  <div className="space-y-4">
+                    <div className="flex justify-between items-center p-3 bg-gray-50 dark:bg-gray-700 rounded">
+                      <span>Present</span>
+                      <span className="font-bold text-green-600">2,156</span>
+                    </div>
+                    <div className="flex justify-between items-center p-3 bg-gray-50 dark:bg-gray-700 rounded">
+                      <span>Absent</span>
+                      <span className="font-bold text-red-600">234</span>
+                    </div>
+                    <div className="flex justify-between items-center p-3 bg-gray-50 dark:bg-gray-700 rounded">
+                      <span>Late</span>
+                      <span className="font-bold text-yellow-600">89</span>
+                    </div>
+                    <div className="flex justify-between items-center p-3 bg-gray-50 dark:bg-gray-700 rounded">
+                      <span>On Leave</span>
+                      <span className="font-bold text-blue-600">368</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div className="card mt-6">
+                <div className="card-header">
+                  <h3>Recent Scans</h3>
+                </div>
+                <table className="data-table">
+                  <thead>
+                    <tr>
+                      <th>Time</th>
+                      <th>Employee</th>
+                      <th>Department</th>
+                      <th>Type</th>
+                      <th>Status</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr>
+                      <td>08:15 AM</td>
+                      <td>John Mbeki</td>
+                      <td>Operations</td>
+                      <td>Check-in</td>
+                      <td><span className="status-badge status-active">On Time</span></td>
+                    </tr>
+                    <tr>
+                      <td>08:30 AM</td>
+                      <td>Sarah Ndi</td>
+                      <td>HR</td>
+                      <td>Check-in</td>
+                      <td><span className="status-badge status-active">On Time</span></td>
+                    </tr>
+                    <tr>
+                      <td>09:00 AM</td>
+                      <td>Paul Biya Jr</td>
+                      <td>Finance</td>
+                      <td>Check-in</td>
+                      <td><span className="status-badge status-pending">Late</span></td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            {/* Analytics & Reports Page */}
+            <div className={`page ${activePage === 'analytics' ? 'active' : ''}`}>
+              <h2 className="text-2xl font-bold mb-6 dark:text-white">Analytics & Reports</h2>
+              
+              <div className="grid-4">
+                <div className="card text-center">
+                  <div className="text-3xl font-bold text-blue-600">94%</div>
+                  <div className="text-sm text-gray-600 dark:text-gray-400">Attendance Rate</div>
+                </div>
+                <div className="card text-center">
+                  <div className="text-3xl font-bold text-green-600">7.8h</div>
+                  <div className="text-sm text-gray-600 dark:text-gray-400">Avg Work Hours</div>
+                </div>
+                <div className="card text-center">
+                  <div className="text-3xl font-bold text-purple-600">96%</div>
+                  <div className="text-sm text-gray-600 dark:text-gray-400">Productivity</div>
+                </div>
+                <div className="card text-center">
+                  <div className="text-3xl font-bold text-orange-600">12</div>
+                  <div className="text-sm text-gray-600 dark:text-gray-400">Departments</div>
+                </div>
+              </div>
+
+              <div className="grid-2 mt-6">
+                <div className="card">
+                  <div className="card-header">
+                    <h3>Monthly Attendance Trend</h3>
+                  </div>
+                  <div style={{ height: '200px' }}>
+                    <canvas ref={monthlyTrendRef} height="200"></canvas>
+                  </div>
+                </div>
+                <div className="card">
+                  <div className="card-header">
+                    <h3>Department Performance</h3>
+                  </div>
+                  <div style={{ height: '200px' }}>
+                    <canvas ref={deptPerfRef} height="200"></canvas>
+                  </div>
+                </div>
+              </div>
+
+              <div className="card mt-6">
+                <div className="card-header">
+                  <h3>Generate Reports</h3>
+                </div>
+                <div className="grid-3">
+                  <button className="btn btn-outline">
+                    <i className="fas fa-file-pdf mr-2"></i>Attendance Report
+                  </button>
+                  <button className="btn btn-outline">
+                    <i className="fas fa-file-excel mr-2"></i>Payroll Report
+                  </button>
+                  <button className="btn btn-outline">
+                    <i className="fas fa-file-csv mr-2"></i>Performance Report
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            {/* Payroll Integration Page */}
+            <div className={`page ${activePage === 'payroll' ? 'active' : ''}`}>
+              <h2 className="text-2xl font-bold mb-6 dark:text-white">Payroll Integration</h2>
+              
+              <div className="grid-4">
+                <div className="card text-center">
+                  <div className="text-3xl font-bold text-green-600">$2.4M</div>
+                  <div className="text-sm text-gray-600 dark:text-gray-400">Monthly Payroll</div>
+                </div>
+                <div className="card text-center">
+                  <div className="text-3xl font-bold text-blue-600">2,847</div>
+                  <div className="text-sm text-gray-600 dark:text-gray-400">Active Employees</div>
+                </div>
+                <div className="card text-center">
+                  <div className="text-3xl font-bold text-purple-600">$843</div>
+                  <div className="text-sm text-gray-600 dark:text-gray-400">Average Salary</div>
+                </div>
+                <div className="card text-center">
+                  <div className="text-3xl font-bold text-orange-600">15</div>
+                  <div className="text-sm text-gray-600 dark:text-gray-400">Days Until Payday</div>
+                </div>
+              </div>
+
+              <div className="card mt-6">
+                <div className="card-header">
+                  <h3>Recent Payroll Runs</h3>
+                </div>
+                <table className="data-table">
+                  <thead>
+                    <tr>
+                      <th>Period</th>
+                      <th>Amount</th>
+                      <th>Employees</th>
+                      <th>Status</th>
+                      <th>Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr>
+                      <td>March 2026</td>
+                      <td>$2,400,000</td>
+                      <td>2,847</td>
+                      <td><span className="status-badge status-active">Completed</span></td>
+                      <td><i className="fas fa-download text-blue-500 cursor-pointer"></i></td>
+                    </tr>
+                    <tr>
+                      <td>February 2026</td>
+                      <td>$2,350,000</td>
+                      <td>2,812</td>
+                      <td><span className="status-badge status-active">Completed</span></td>
+                      <td><i className="fas fa-download text-blue-500 cursor-pointer"></i></td>
+                    </tr>
+                    <tr>
+                      <td>January 2026</td>
+                      <td>$2,380,000</td>
+                      <td>2,825</td>
+                      <td><span className="status-badge status-active">Completed</span></td>
+                      <td><i className="fas fa-download text-blue-500 cursor-pointer"></i></td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            {/* Security & Compliance Page */}
+            <div className={`page ${activePage === 'security' ? 'active' : ''}`}>
+              <h2 className="text-2xl font-bold mb-6 dark:text-white">Security & Compliance</h2>
+              
+              <div className="grid-2">
+                <div className="card">
+                  <div className="card-header">
+                    <h3>Security Overview</h3>
+                  </div>
+                  <div className="space-y-4">
+                    <div className="flex justify-between items-center">
+                      <span>Two-Factor Authentication</span>
+                      <span className="status-badge status-active">Enabled</span>
+                    </div>
+                    <div className="flex justify-between items-center">
+                      <span>Last Security Audit</span>
+                      <span>March 15, 2026</span>
+                    </div>
+                    <div className="flex justify-between items-center">
+                      <span>Active Sessions</span>
+                      <span>1,245</span>
+                    </div>
+                    <div className="flex justify-between items-center">
+                      <span>Failed Login Attempts (24h)</span>
+                      <span>23</span>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="card">
+                  <div className="card-header">
+                    <h3>Compliance Status</h3>
+                  </div>
+                  <div className="space-y-4">
+                    <div className="flex justify-between items-center">
+                      <span>GDPR Compliance</span>
+                      <span className="status-badge status-active">Compliant</span>
+                    </div>
+                    <div className="flex justify-between items-center">
+                      <span>ISO 27001</span>
+                      <span className="status-badge status-active">Certified</span>
+                    </div>
+                    <div className="flex justify-between items-center">
+                      <span>SOC 2 Type II</span>
+                      <span className="status-badge status-active">Compliant</span>
+                    </div>
+                    <div className="flex justify-between items-center">
+                      <span>HIPAA</span>
+                      <span className="status-badge status-pending">In Progress</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div className="card mt-6">
+                <div className="card-header">
+                  <h3>Security Policies</h3>
+                </div>
+                <ul className="list-disc pl-6 space-y-2 dark:text-gray-300">
+                  <li>Password must be at least 12 characters with special characters</li>
+                  <li>Session timeout after 30 minutes of inactivity</li>
+                  <li>Two-factor authentication required for admin access</li>
+                  <li>Biometric verification for payroll approval</li>
+                  <li>Automatic logout on suspicious activity</li>
+                </ul>
+              </div>
+            </div>
+
+            {/* HERITAGE & HEPIDS Page */}
+            <div className={`page ${activePage === 'heritage' ? 'active' : ''}`}>
+              <h2 className="text-2xl font-bold mb-6 dark:text-white">HERITAGE LTD & HEPIDS</h2>
+              
+              <div className="grid-2">
+                <div className="card">
+                  <div className="card-header">
+                    <h3>HERITAGE LTD</h3>
+                  </div>
+                  <div className="text-center p-4">
+                    <i className="fas fa-building text-6xl text-blue-500 mb-4"></i>
+                    <p className="mb-4 dark:text-gray-300">
+                      Professional organization for the leverage of peace studies and humanitarian action, 
+                      and the improvement of peace in Africa through technology.
+                    </p>
+                    <p className="text-sm text-gray-600 dark:text-gray-400">
+                      Founded: 2010 | Headquarters: Yaoundé, Cameroon
+                    </p>
+                  </div>
+                </div>
+
+                <div className="card">
+                  <div className="card-header">
+                    <h3>HEPIDS Institute</h3>
+                  </div>
+                  <div className="text-center p-4">
+                    <i className="fas fa-university text-6xl text-purple-500 mb-4"></i>
+                    <p className="mb-4 dark:text-gray-300">
+                      Heritage Institute for Peace & Development Studies - Higher education institute 
+                      dedicated to peace studies, conflict resolution, and humanitarian leadership.
+                    </p>
+                    <a href="https://heipeds.com" target="_blank" rel="noopener noreferrer" className="btn btn-primary">
+                      Visit Official Website
+                    </a>
+                  </div>
+                </div>
+              </div>
+
+              <div className="card mt-6">
+                <div className="card-header">
+                  <h3>Our Impact in Africa</h3>
+                </div>
+                <div className="grid-4">
+                  <div className="text-center">
+                    <div className="text-3xl font-bold text-blue-600">15+</div>
+                    <div className="text-sm text-gray-600">African Countries</div>
+                  </div>
+                  <div className="text-center">
+                    <div className="text-3xl font-bold text-green-600">200+</div>
+                    <div className="text-sm text-gray-600">Partner Organizations</div>
+                  </div>
+                  <div className="text-center">
+                    <div className="text-3xl font-bold text-purple-600">50K+</div>
+                    <div className="text-sm text-gray-600">Workforce Trained</div>
+                  </div>
+                  <div className="text-center">
+                    <div className="text-3xl font-bold text-orange-600">98%</div>
+                    <div className="text-sm text-gray-600">Success Rate</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* System Settings Page */}
+            <div className={`page ${activePage === 'settings' ? 'active' : ''}`}>
+              <h2 className="text-2xl font-bold mb-6 dark:text-white">System Settings</h2>
+              
+              <div className="grid-2">
+                <div className="card">
+                  <div className="card-header">
+                    <h3>General Settings</h3>
+                  </div>
+                  <div className="space-y-4">
+                    <div className="flex justify-between items-center">
+                      <span>Dark Mode</span>
+                      <label className="switch">
+                        <input 
+                          type="checkbox" 
+                          checked={settings.darkMode}
+                          onChange={(e) => updateSetting('darkMode', e.target.checked)}
+                        />
+                        <span className="slider"></span>
+                      </label>
+                    </div>
+                    
+                    <div className="flex justify-between items-center">
+                      <span>Notifications</span>
+                      <label className="switch">
+                        <input 
+                          type="checkbox" 
+                          checked={settings.notifications}
+                          onChange={(e) => updateSetting('notifications', e.target.checked)}
+                        />
+                        <span className="slider"></span>
+                      </label>
+                    </div>
+                    
+                    <div className="flex justify-between items-center">
+                      <span>Auto-refresh Data</span>
+                      <label className="switch">
+                        <input 
+                          type="checkbox" 
+                          checked={settings.autoRefresh}
+                          onChange={(e) => updateSetting('autoRefresh', e.target.checked)}
+                        />
+                        <span className="slider"></span>
+                      </label>
+                    </div>
+                    
+                    <div>
+                      <label className="block mb-2">Refresh Interval (seconds)</label>
+                      <input 
+                        type="range" 
+                        min="10" 
+                        max="300" 
+                        value={settings.refreshInterval}
+                        onChange={(e) => updateSetting('refreshInterval', parseInt(e.target.value))}
+                        className="settings-slider w-full"
+                      />
+                      <div className="text-right text-sm">{settings.refreshInterval} seconds</div>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="card">
+                  <div className="card-header">
+                    <h3>Language & Region</h3>
+                  </div>
+                  <div className="space-y-4">
+                    <div>
+                      <label className="block mb-2">Language</label>
+                      <select 
+                        className="w-full p-2 border rounded dark:bg-gray-700 dark:border-gray-600"
+                        value={settings.language}
+                        onChange={(e) => updateSetting('language', e.target.value)}
+                      >
+                        <option value="en">English</option>
+                        <option value="fr">French</option>
+                        <option value="es">Spanish</option>
+                        <option value="ar">Arabic</option>
+                      </select>
+                    </div>
+                    
+                    <div>
+                      <label className="block mb-2">Timezone</label>
+                      <select 
+                        className="w-full p-2 border rounded dark:bg-gray-700 dark:border-gray-600"
+                        value={settings.timezone}
+                        onChange={(e) => updateSetting('timezone', e.target.value)}
+                      >
+                        <option value="UTC+1">UTC+1 (West Africa)</option>
+                        <option value="UTC+0">UTC+0 (GMT)</option>
+                        <option value="UTC+2">UTC+2 (Central Africa)</option>
+                        <option value="UTC+3">UTC+3 (East Africa)</option>
+                      </select>
+                    </div>
+                    
+                    <div>
+                      <label className="block mb-2">Date Format</label>
+                      <select 
+                        className="w-full p-2 border rounded dark:bg-gray-700 dark:border-gray-600"
+                        value={settings.dateFormat}
+                        onChange={(e) => updateSetting('dateFormat', e.target.value)}
+                      >
+                        <option value="MM/DD/YYYY">MM/DD/YYYY</option>
+                        <option value="DD/MM/YYYY">DD/MM/YYYY</option>
+                        <option value="YYYY-MM-DD">YYYY-MM-DD</option>
+                      </select>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="card">
+                  <div className="card-header">
+                    <h3>Security Settings</h3>
+                  </div>
+                  <div className="space-y-4">
+                    <div className="flex justify-between items-center">
+                      <span>Two-Factor Authentication</span>
+                      <label className="switch">
+                        <input 
+                          type="checkbox" 
+                          checked={settings.twoFactorAuth}
+                          onChange={(e) => updateSetting('twoFactorAuth', e.target.checked)}
+                        />
+                        <span className="slider"></span>
+                      </label>
+                    </div>
+                    
+                    <div>
+                      <label className="block mb-2">Session Timeout (minutes)</label>
+                      <input 
+                        type="number" 
+                        min="5" 
+                        max="120" 
+                        value={settings.sessionTimeout}
+                        onChange={(e) => updateSetting('sessionTimeout', parseInt(e.target.value))}
+                        className="w-full p-2 border rounded dark:bg-gray-700 dark:border-gray-600"
+                      />
+                    </div>
+                    
+                    <div>
+                      <label className="block mb-2">Max Login Attempts</label>
+                      <input 
+                        type="number" 
+                        min="3" 
+                        max="10" 
+                        value={settings.maxLoginAttempts}
+                        onChange={(e) => updateSetting('maxLoginAttempts', parseInt(e.target.value))}
+                        className="w-full p-2 border rounded dark:bg-gray-700 dark:border-gray-600"
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                <div className="card">
+                  <div className="card-header">
+                    <h3>System Information</h3>
+                  </div>
+                  <div className="space-y-4">
+                    <div className="flex justify-between">
+                      <span>Version</span>
+                      <span className="font-bold">2.4.1</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span>Last Update</span>
+                      <span>March 20, 2026</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span>Database</span>
+                      <span>PostgreSQL 15</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span>API Status</span>
+                      <span className="status-badge status-active">Operational</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div className="card mt-6">
+                <div className="card-header">
+                  <h3>System Actions</h3>
+                </div>
+                <div className="flex gap-4 flex-wrap">
+                  <button className="btn btn-primary">
+                    <i className="fas fa-save mr-2"></i>Save All Settings
+                  </button>
+                  <button className="btn btn-outline">
+                    <i className="fas fa-redo mr-2"></i>Reset to Default
+                  </button>
+                  <button className="btn btn-outline">
+                    <i className="fas fa-download mr-2"></i>Export Settings
+                  </button>
+                </div>
+              </div>
+              
+              {/* Footer with Social Links */}
+              <div className="card mt-6">
+                <div className="card-header">
+                  <h3>Connect With Us</h3>
+                </div>
+                <div className="social-links">
+                  <a href="https://facebook.com/wilsonjuniorblackstar" target="_blank" rel="noopener noreferrer" className="social-link facebook" title="Facebook">
+                    <i className="fab fa-facebook-f"></i>
+                  </a>
+                  <a href="https://wa.me/237687352072" target="_blank" rel="noopener noreferrer" className="social-link whatsapp" title="WhatsApp">
+                    <i className="fab fa-whatsapp"></i>
+                  </a>
+                  <a href="https://github.com/blackstar" target="_blank" rel="noopener noreferrer" className="social-link github" title="GitHub">
+                    <i className="fab fa-github"></i>
+                  </a>
+                  <a href="https://linkedin.com/in/wilsonjunior" target="_blank" rel="noopener noreferrer" className="social-link linkedin" title="LinkedIn">
+                    <i className="fab fa-linkedin-in"></i>
+                  </a>
+                </div>
+                <div className="text-center text-sm text-gray-500 dark:text-gray-400 mt-4">
+                  © {new Date().getFullYear()} HERITAGE Workforce Management System — All Rights Reserved
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* QR Modal */}
+          <div className={`qr-modal ${qrModalOpen ? 'active' : ''}`} onClick={() => setQrModalOpen(false)}>
+            <div className="qr-content" onClick={e => e.stopPropagation()}>
+              <h3 className="text-xl font-bold mb-4">Attendance QR Code</h3>
+              <div className="qr-image">
+                <img 
+                  src={`WFMS-1024.jpeg`} 
+                  alt="QR Code" 
+                />
+              </div>
+              <p className="mb-4 text-gray-600">Scan with HERITAGE WMS Mobile App</p>
+              <button className="btn btn-primary" onClick={() => setQrModalOpen(false)}>
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      );
+    };
+
+    // CRITICAL FIX: Actually render the app to the DOM
+    const root = ReactDOM.createRoot(document.getElementById('root'));
+    root.render(<App />);
+  </script>
+</body>
+</html>

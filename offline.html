@@ -1,0 +1,175 @@
+<!-- offline.html -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Offline - WFMS</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            background: #0f172a;
+            color: white;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            margin: 0;
+            text-align: center;
+            padding: 20px;
+        }
+        
+        .offline-container {
+            max-width: 400px;
+            padding: 30px;
+            background: #1e293b;
+            border-radius: 16px;
+            box-shadow: 0 10px 25px rgba(0,0,0,0.5);
+        }
+        
+        .offline-icon {
+            font-size: 64px;
+            margin-bottom: 20px;
+            animation: pulse 2s infinite;
+        }
+        
+        @keyframes pulse {
+            0% { opacity: 1; }
+            50% { opacity: 0.7; }
+            100% { opacity: 1; }
+        }
+        
+        h1 {
+            color: #3b82f6;
+            margin-bottom: 15px;
+            font-size: 28px;
+        }
+        
+        p {
+            color: #cbd5e1;
+            margin-bottom: 25px;
+            line-height: 1.6;
+        }
+        
+        button {
+            background: #3b82f6;
+            color: white;
+            border: none;
+            padding: 12px 30px;
+            border-radius: 8px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: background 0.3s;
+            margin-bottom: 15px;
+        }
+        
+        button:hover {
+            background: #2563eb;
+        }
+        
+        .retry-message {
+            color: #94a3b8;
+            font-size: 14px;
+        }
+        
+        #countdown {
+            font-weight: bold;
+            color: #3b82f6;
+        }
+        
+        .offline-actions {
+            display: flex;
+            gap: 10px;
+            justify-content: center;
+        }
+        
+        .secondary-btn {
+            background: transparent;
+            color: #94a3b8;
+            border: 1px solid #334155;
+        }
+        
+        .secondary-btn:hover {
+            background: #1e293b;
+            color: white;
+        }
+    </style>
+</head>
+<body>
+    <div class="offline-container">
+        <div class="offline-icon">📡</div>
+        <h1>You're Offline</h1>
+        <p>Connection lost. Don't worry, you can still access cached content or try reconnecting.</p>
+        
+        <div class="offline-actions">
+            <button onclick="window.location.reload()">Try Again</button>
+            <button class="secondary-btn" onclick="goHome()">Go Home</button>
+        </div>
+        
+        <div class="retry-message">
+            Auto-retry in <span id="countdown">30</span> seconds
+        </div>
+    </div>
+    
+    <script>
+        // Auto-retry countdown
+        let seconds = 30;
+        const countdownEl = document.getElementById('countdown');
+        
+        const interval = setInterval(() => {
+            seconds--;
+            countdownEl.textContent = seconds;
+            
+            if (seconds <= 0) {
+                clearInterval(interval);
+                window.location.reload();
+            }
+        }, 1000);
+        
+        // Check if online status changes
+        window.addEventListener('online', () => {
+            window.location.reload();
+        });
+        
+        // Function to go to home page
+        function goHome() {
+            window.location.href = '/';
+        }
+        
+        // Try to load cached version
+        if ('caches' in window) {
+            caches.match(window.location.href).then(response => {
+                if (response) {
+                    // We have a cached version, offer to load it
+                    const cachedMsg = document.createElement('div');
+                    cachedMsg.style.marginTop = '20px';
+                    cachedMsg.style.padding = '10px';
+                    cachedMsg.style.background = '#2d3748';
+                    cachedMsg.style.borderRadius = '5px';
+                    cachedMsg.innerHTML = '📦 Cached version available. <button onclick="loadCached()" style="background:#4a5568; padding:5px 10px; font-size:12px;">Load Cached</button>';
+                    document.querySelector('.offline-container').appendChild(cachedMsg);
+                }
+            });
+        }
+        
+        window.loadCached = function() {
+            caches.match(window.location.href).then(response => {
+                if (response) {
+                    response.text().then(html => {
+                        document.open();
+                        document.write(html);
+                        document.close();
+                    });
+                }
+            });
+        };
+    </script>
+</body>
+</html>
