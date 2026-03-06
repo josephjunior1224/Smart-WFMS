@@ -3,14 +3,6 @@
  * Backend: Node.js + Express + MySQL
  *************************************************/
 
-// ========= IMMEDIATE FUNCTION DEFINITIONS =========
-// Define functions at the very top before anything else
-window.downloadReport = function() {
-  console.log('📊 downloadReport called');
-  alert('Report function is working!');
-  // We'll add the full implementation after confirming it works
-};
-
 /* ========= HELPERS ========= */
 const qs = (id) => document.getElementById(id);
 const save = (k, v) => localStorage.setItem(k, JSON.stringify(v));
@@ -248,11 +240,14 @@ function startNotificationPolling() {
     
     try {
       // Poll for new notifications
-      const tasks = await api('/api/tasks');
-      if (tasks && tasks.length > 0) {
-        tasks.forEach(task => {
+      const pendingTasks = await api('/api/tasks?filter=pending');
+      const notifications = [];
+      
+      // Check for new tasks assigned to user
+      if (pendingTasks && pendingTasks.length > 0) {
+        pendingTasks.forEach(task => {
           if (task.assigned_to === user.id && task.status === 'pending') {
-            showNotification({
+            notifications.push({
               type: 'task_assigned',
               message: `New task assigned: ${task.title}`,
               taskId: task.id
@@ -260,6 +255,10 @@ function startNotificationPolling() {
           }
         });
       }
+      
+      // Show notifications
+      notifications.forEach(notif => showNotification(notif));
+      
     } catch (error) {
       console.error('Error polling notifications:', error);
     }
@@ -343,7 +342,8 @@ function requestNotificationPermission() {
 // View task from notification
 window.viewTask = function(taskId) {
   console.log('Viewing task:', taskId);
-  alert(`Viewing task ${taskId} - Check your task list for details`);
+  // You can implement task viewing logic here
+  alert(`Viewing task ${taskId} - Implement task details view`);
 };
 
 // Stop notification polling on logout
@@ -429,6 +429,8 @@ window.login = async function () {
 };
 
 /* ========= GOOGLE LOGIN ========= */
+// Note: Google login requires Firebase, which you're not using.
+// Either implement Google OAuth with your backend or remove this.
 window.loginWithGoogle = async function () {
   alert('Google login is not configured. Please use email/password login or contact your administrator.');
 };
@@ -444,6 +446,7 @@ async function checkEmailExists(email) {
   }
 }
 
+// Validate email format
 function isValidEmail(email) {
   const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
   return emailRegex.test(email);
@@ -490,6 +493,7 @@ window.register = async function () {
   try {
     console.log('👤 Checking if email exists:', email);
     
+    // Check if email already exists
     const emailExists = await checkEmailExists(email);
     if (emailExists) {
       showFormError(emailInput, 'Email already registered. Please login or use a different email.');
@@ -512,6 +516,7 @@ window.register = async function () {
 
     if (!data.ok) {
       console.error('❌ Registration failed:', data.error);
+      // Handle different error types
       if (data.error.includes('already registered') || data.error.includes('Email already')) {
         showFormError(emailInput, data.error);
       } else if (data.error.includes('Invalid email')) {
@@ -525,12 +530,15 @@ window.register = async function () {
     console.log('✓ Account created successfully');
     showFormSuccess(nameInput);
     
+    // Clear form
     nameInput.value = '';
     emailInput.value = '';
     passwordInput.value = '';
     roleSelect.value = 'employee';
     
+    // Show success message and generate QR for user
     setTimeout(() => {
+      // Generate and display QR code for new user
       showQrAfterSignup({
         userId: data.userId,
         name: name,
@@ -572,6 +580,7 @@ window.showQrAfterSignup = async function(userData) {
   try {
     console.log('📱 Generating QR code for user:', userId);
     
+    // Call new QR generation endpoint
     const qrResponse = await api('/api/generate-user-qr', 'POST', {
       userId: userId,
       email: email,
@@ -585,6 +594,7 @@ window.showQrAfterSignup = async function(userData) {
       return;
     }
 
+    // Display professional QR modal
     showQrModal({
       qrData: qrResponse.qrData,
       qrToken: qrResponse.qrToken,
@@ -606,14 +616,19 @@ window.showQrAfterSignup = async function(userData) {
 window.showQrModal = function(qrInfo) {
   const { qrData, qrToken, userId, userName, userEmail, userRole } = qrInfo;
   
+  // Create modal HTML
   const modalHTML = `
     <div class="qr-modal-overlay" id="qrModal" onclick="closeQrModal()">
       <div class="qr-modal-container" onclick="event.stopPropagation()">
+        <!-- Header -->
         <div class="qr-modal-header">
           <h2>🔐 Your Unique QR Code</h2>
           <button class="btn-close" onclick="closeQrModal()" aria-label="Close"></button>
         </div>
+        
+        <!-- Content -->
         <div class="qr-modal-body">
+          <!-- User Info -->
           <div class="qr-user-info">
             <div class="user-detail">
               <span class="detail-label">Name:</span>
@@ -628,10 +643,14 @@ window.showQrModal = function(qrInfo) {
               <span class="detail-value badge badge-${userRole === 'admin' ? 'danger' : 'primary'}">${userRole.toUpperCase()}</span>
             </div>
           </div>
+          
+          <!-- QR Code -->
           <div class="qr-code-container">
             <img src="${qrData}" alt="User QR Code" class="qr-code-image" />
             <p class="qr-hint">Scan this code with your device to access your dashboard</p>
           </div>
+          
+          <!-- Instructions -->
           <div class="qr-instructions">
             <h4>📋 How to use your QR Code:</h4>
             <ol>
@@ -641,6 +660,8 @@ window.showQrModal = function(qrInfo) {
               <li>Keep this code safe as a second authentication factor</li>
             </ol>
           </div>
+          
+          <!-- Security Info -->
           <div class="qr-security-notice">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path>
@@ -651,6 +672,8 @@ window.showQrModal = function(qrInfo) {
             </div>
           </div>
         </div>
+        
+        <!-- Footer -->
         <div class="qr-modal-footer">
           <button class="btn btn-secondary" onclick="closeQrModal()">
             <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -678,6 +701,7 @@ window.showQrModal = function(qrInfo) {
     </div>
   `;
   
+  // Add modal styles if not already present
   if (!document.querySelector('#qrModalStyles')) {
     const style = document.createElement('style');
     style.id = 'qrModalStyles';
@@ -695,10 +719,12 @@ window.showQrModal = function(qrInfo) {
         z-index: 9999;
         animation: fadeIn 0.3s ease-out;
       }
+      
       @keyframes fadeIn {
         from { opacity: 0; }
         to { opacity: 1; }
       }
+      
       .qr-modal-container {
         background: white;
         border-radius: 12px;
@@ -709,10 +735,12 @@ window.showQrModal = function(qrInfo) {
         overflow-y: auto;
         animation: slideUp 0.3s ease-out;
       }
+      
       @keyframes slideUp {
         from { transform: translateY(30px); opacity: 0; }
         to { transform: translateY(0); opacity: 1; }
       }
+      
       .qr-modal-header {
         padding: 24px;
         border-bottom: 1px solid #e5e7eb;
@@ -720,38 +748,46 @@ window.showQrModal = function(qrInfo) {
         justify-content: space-between;
         align-items: center;
       }
+      
       .qr-modal-header h2 {
         margin: 0;
         font-size: 20px;
         font-weight: 600;
         color: #1f2937;
       }
+      
       .qr-modal-body {
         padding: 24px;
       }
+      
       .qr-user-info {
         background: #f3f4f6;
         border-radius: 8px;
         padding: 16px;
         margin-bottom: 20px;
       }
+      
       .user-detail {
         display: flex;
         justify-content: space-between;
         padding: 8px 0;
         border-bottom: 1px solid #e5e7eb;
       }
+      
       .user-detail:last-child {
         border-bottom: none;
       }
+      
       .detail-label {
         font-weight: 600;
         color: #6b7280;
       }
+      
       .detail-value {
         color: #1f2937;
         font-weight: 500;
       }
+      
       .qr-code-container {
         text-align: center;
         padding: 20px;
@@ -759,6 +795,7 @@ window.showQrModal = function(qrInfo) {
         border-radius: 8px;
         margin-bottom: 20px;
       }
+      
       .qr-code-image {
         max-width: 250px;
         border: 3px solid #0d6efd;
@@ -767,11 +804,13 @@ window.showQrModal = function(qrInfo) {
         background: white;
         margin-bottom: 12px;
       }
+      
       .qr-hint {
         font-size: 14px;
         color: #6b7280;
         margin: 0;
       }
+      
       .qr-instructions {
         background: #eff6ff;
         border-left: 4px solid #0d6efd;
@@ -779,12 +818,14 @@ window.showQrModal = function(qrInfo) {
         border-radius: 6px;
         margin-bottom: 16px;
       }
+      
       .qr-instructions h4 {
         margin: 0 0 10px 0;
         font-size: 14px;
         font-weight: 600;
         color: #1f2937;
       }
+      
       .qr-instructions ol {
         margin: 0;
         padding-left: 20px;
@@ -792,6 +833,7 @@ window.showQrModal = function(qrInfo) {
         color: #4b5563;
         line-height: 1.6;
       }
+      
       .qr-security-notice {
         background: #fef3c7;
         border: 1px solid #fcd34d;
@@ -801,22 +843,26 @@ window.showQrModal = function(qrInfo) {
         gap: 12px;
         margin-bottom: 16px;
       }
+      
       .qr-security-notice svg {
         width: 24px;
         height: 24px;
         color: #d97706;
         flex-shrink: 0;
       }
+      
       .qr-security-notice strong {
         color: #92400e;
         font-size: 14px;
       }
+      
       .qr-security-notice p {
         margin: 4px 0 0 0;
         font-size: 13px;
         color: #78350f;
         line-height: 1.5;
       }
+      
       .qr-modal-footer {
         padding: 16px 24px;
         border-top: 1px solid #e5e7eb;
@@ -824,11 +870,13 @@ window.showQrModal = function(qrInfo) {
         gap: 12px;
         justify-content: flex-end;
       }
+      
       .qr-modal-footer .btn {
         padding: 8px 16px;
         font-size: 14px;
         border-radius: 6px;
       }
+      
       .btn-close {
         background: none;
         border: none;
@@ -842,6 +890,7 @@ window.showQrModal = function(qrInfo) {
         align-items: center;
         justify-content: center;
       }
+      
       .btn-close:hover {
         color: #1f2937;
       }
@@ -849,6 +898,7 @@ window.showQrModal = function(qrInfo) {
     document.head.appendChild(style);
   }
   
+  // Add modal to page
   let modalContainer = qs('qrModal');
   if (modalContainer) {
     modalContainer.remove();
@@ -859,6 +909,7 @@ window.showQrModal = function(qrInfo) {
   document.body.appendChild(modal.firstElementChild);
 };
 
+// Close QR modal
 window.closeQrModal = function() {
   const modal = qs('qrModal');
   if (modal) {
@@ -867,6 +918,7 @@ window.closeQrModal = function() {
   }
 };
 
+// Download QR code as image
 window.downloadQrCode = function(qrDataUrl, userName) {
   const link = document.createElement('a');
   link.href = qrDataUrl;
@@ -877,6 +929,7 @@ window.downloadQrCode = function(qrDataUrl, userName) {
   console.log('✓ QR code downloaded');
 };
 
+// After user confirms they saved QR code, go to login
 window.goToLoginAfterQr = function() {
   closeQrModal();
   backToLogin();
@@ -887,6 +940,7 @@ window.handleQrScan = async function(qrData) {
   try {
     console.log('📱 Processing QR scan...');
     
+    // Parse QR data
     let qrInfo;
     if (typeof qrData === 'string') {
       try {
@@ -909,6 +963,7 @@ window.handleQrScan = async function(qrData) {
     
     console.log('🔄 Recording QR scan with date/time...');
     
+    // Record the scan on backend (this records date, time, and IP)
     const scanResponse = await api('/api/scan-qr', 'POST', {
       userId: userId,
       qrToken: qrToken
@@ -922,15 +977,20 @@ window.handleQrScan = async function(qrData) {
     console.log('✓ QR scan recorded:', scanResponse.scanTime);
     console.log('✓ Scan count:', scanResponse.scanCount);
     
+    // Get user info and log them in
     const userResponse = await api('/api/users?id=' + userId);
     if (userResponse && userResponse.length > 0) {
       const user = userResponse[0];
       
+      // Save user session
       save(CURRENT_KEY, user);
       
+      // Generate a temporary token for QR scan based login
+      // Note: This should be handled by your backend
       console.log('✓ User authenticated via QR scan:', user.name);
       alert(`✓ Check-in successful!\nTime: ${new Date(scanResponse.scanTime).toLocaleString()}`);
       
+      // Enter dashboard
       setTimeout(() => enterDashboard(user), 500);
       return;
     }
@@ -959,6 +1019,7 @@ window.viewQrScanRecords = async function() {
       return;
     }
     
+    // Display records in a modal
     showQrScanRecordsModal(records.records);
   } catch (err) {
     console.error('Error viewing scan records:', err);
@@ -966,7 +1027,9 @@ window.viewQrScanRecords = async function() {
   }
 };
 
+// Show professional modal with QR scan records
 window.showQrScanRecordsModal = function(records) {
+  // Add styles if not already present
   if (!document.querySelector('#qrRecordsModalStyles')) {
     const style = document.createElement('style');
     style.id = 'qrRecordsModalStyles';
@@ -983,6 +1046,7 @@ window.showQrScanRecordsModal = function(records) {
         justify-content: center;
         z-index: 9999;
       }
+      
       .qr-records-modal-container {
         background: white;
         border-radius: 12px;
@@ -992,56 +1056,67 @@ window.showQrScanRecordsModal = function(records) {
         max-height: 85vh;
         overflow-y: auto;
       }
+      
       .scan-records-summary {
         display: grid;
         grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
         gap: 12px;
         margin-bottom: 20px;
       }
+      
       .summary-card {
         background: #f3f4f6;
         padding: 16px;
         border-radius: 8px;
         text-align: center;
       }
+      
       .summary-label {
         display: block;
         font-size: 12px;
         color: #6b7280;
         margin-bottom: 8px;
       }
+      
       .summary-value {
         display: block;
         font-size: 24px;
         font-weight: 700;
         color: #0d6efd;
       }
+      
       .scan-records-table {
         overflow-x: auto;
       }
+      
       .scan-records-table table {
         width: 100%;
         border-collapse: collapse;
         font-size: 13px;
       }
+      
       .scan-records-table thead {
         background: #f3f4f6;
         border-bottom: 2px solid #e5e7eb;
       }
+      
       .scan-records-table th {
         padding: 12px;
         text-align: left;
         font-weight: 600;
         color: #374151;
       }
+      
       .scan-records-table td {
         padding: 12px;
         border-bottom: 1px solid #e5e7eb;
         color: #1f2937;
       }
+      
       .scan-records-table tbody tr:hover {
         background: #f9fafb;
       }
+      
       .qr-modal-footer {
         padding: 16px 24px;
         border-top: 1px solid #e5e7eb;
@@ -1056,10 +1131,13 @@ window.showQrScanRecordsModal = function(records) {
   const modalHTML = `
     <div class="qr-records-modal-overlay" id="qrRecordsModal" onclick="closeQrScanRecordsModal()">
       <div class="qr-records-modal-container" onclick="event.stopPropagation()">
+        <!-- Header -->
         <div class="qr-modal-header">
           <h2>🔐 QR Code Scan Records</h2>
           <button class="btn-close" onclick="closeQrScanRecordsModal()" aria-label="Close"></button>
         </div>
+        
+        <!-- Content -->
         <div class="qr-records-modal-body">
           <div class="scan-records-summary">
             <div class="summary-card">
@@ -1071,6 +1149,7 @@ window.showQrScanRecordsModal = function(records) {
               <span class="summary-value">${new Set(records.map(r => r.userId)).size}</span>
             </div>
           </div>
+          
           <div class="scan-records-table">
             <table>
               <thead>
@@ -1102,6 +1181,8 @@ window.showQrScanRecordsModal = function(records) {
             </table>
           </div>
         </div>
+        
+        <!-- Footer -->
         <div class="qr-modal-footer">
           <button class="btn btn-secondary" onclick="closeQrScanRecordsModal()">
             <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -1121,6 +1202,7 @@ window.showQrScanRecordsModal = function(records) {
     </div>
   `;
   
+  // Add modal to page
   let modalContainer = qs('qrRecordsModal');
   if (modalContainer) {
     modalContainer.remove();
@@ -1131,6 +1213,7 @@ window.showQrScanRecordsModal = function(records) {
   document.body.appendChild(modal.firstElementChild);
 };
 
+// Close QR records modal
 window.closeQrScanRecordsModal = function() {
   const modal = qs('qrRecordsModal');
   if (modal) {
@@ -1138,6 +1221,7 @@ window.closeQrScanRecordsModal = function() {
   }
 };
 
+// Export QR scan records as CSV
 window.exportQrScanRecords = async function() {
   try {
     const records = await api('/api/admin/qr-scan-records');
@@ -1172,7 +1256,7 @@ function logout() {
       socket.disconnect();
       socket = null;
     }
-    clearSession();
+    clearSession(); // This clears user, tokens, and expiration
     console.log('✓ User logged out and session cleared');
     showHome();
   } catch (err) {
@@ -1191,6 +1275,7 @@ function enterDashboard(user) {
   qs('dashboard').classList.remove('hidden');
   qs('welcome').innerText = `Welcome, ${user.name}`;
 
+  // Initialize real-time notifications
   initializeSocket();
   registerUserForNotifications(user.id);
   requestNotificationPermission();
@@ -1241,6 +1326,7 @@ async function renderTasks() {
   qs('totalTasks').innerText = tasks.length;
 }
 
+// ✅ BACKEND TASK CREATION
 window.addTask = async function () {
   const title = qs('taskTitle').value.trim();
   const description = qs('taskDesc').value.trim();
@@ -1256,6 +1342,7 @@ window.addTask = async function () {
 
   if (!data.ok) return alert(data.error);
 
+  // Clear form
   qs('taskTitle').value = '';
   qs('taskDesc').value = '';
   qs('taskAssign').value = '';
@@ -1263,6 +1350,182 @@ window.addTask = async function () {
   renderTasks();
   alert('✓ Task assigned successfully!');
 };
+
+/* ========= REPORT GENERATION ========= */
+window.downloadReport = async function() {
+  try {
+    const user = load(CURRENT_KEY);
+    if (!user || user.role !== 'admin') {
+      alert('❌ Only admins can download reports');
+      return;
+    }
+
+    // Show loading state
+    const reportBtn = document.querySelector('button[onclick="downloadReport()"]');
+    if (!reportBtn) {
+      console.error('Report button not found');
+      return;
+    }
+    
+    const originalText = reportBtn.innerHTML;
+    reportBtn.classList.add('loading');
+    reportBtn.innerHTML = '<svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>Generating PDF...';
+
+    console.log('📊 Generating performance report...');
+
+    // Check if jspdf is loaded
+    if (typeof window.jspdf === 'undefined' && typeof jspdf === 'undefined') {
+      console.error('jsPDF not loaded');
+      alert('PDF library not loaded. Please refresh the page.');
+      
+      // Reset button
+      reportBtn.classList.remove('loading');
+      reportBtn.innerHTML = originalText;
+      return;
+    }
+
+    // Get jsPDF instance (handles both global and window.jspdf)
+    const { jsPDF } = window.jspdf || jspdf;
+    
+    // Fetch data for the report
+    const [tasks, users, performance] = await Promise.all([
+      api('/api/tasks'),
+      api('/api/users'),
+      api('/api/admin/performance-metrics')
+    ]);
+
+    // Create new PDF document
+    const doc = new jsPDF({
+      orientation: 'portrait',
+      unit: 'mm',
+      format: 'a4'
+    });
+
+    // Set document properties
+    doc.setProperties({
+      title: 'WFMS Performance Report',
+      subject: 'Employee Performance Metrics',
+      author: 'WFMS System',
+      creator: 'WFMS'
+    });
+
+    // Add header
+    doc.setFillColor(15, 23, 42); // #0f172a
+    doc.rect(0, 0, 210, 30, 'F');
+    
+    doc.setTextColor(255, 255, 255);
+    doc.setFontSize(20);
+    doc.setFont('helvetica', 'bold');
+    doc.text('WFMS Performance Report', 105, 20, { align: 'center' });
+
+    // Add report metadata
+    doc.setTextColor(0, 0, 0);
+    doc.setFontSize(10);
+    doc.setFont('helvetica', 'normal');
+    doc.text(`Generated: ${new Date().toLocaleString()}`, 20, 40);
+    doc.text(`Generated by: ${user.name} (Admin)`, 20, 45);
+
+    // Summary statistics
+    const totalEmployees = users?.length || 0;
+    const totalTasks = tasks?.length || 0;
+    const completedTasks = tasks?.filter(t => t.status === 'completed').length || 0;
+    const pendingTasks = tasks?.filter(t => t.status === 'pending').length || 0;
+    const inProgressTasks = tasks?.filter(t => t.status === 'in-progress').length || 0;
+
+    doc.setFontSize(14);
+    doc.setFont('helvetica', 'bold');
+    doc.text('Summary Statistics', 20, 60);
+
+    doc.setFontSize(10);
+    doc.setFont('helvetica', 'normal');
+    doc.text(`Total Employees: ${totalEmployees}`, 30, 70);
+    doc.text(`Total Tasks: ${totalTasks}`, 30, 75);
+    doc.text(`Completed Tasks: ${completedTasks}`, 30, 80);
+    doc.text(`Pending Tasks: ${pendingTasks}`, 30, 85);
+    doc.text(`In Progress: ${inProgressTasks}`, 30, 90);
+
+    // Performance metrics table
+    let yPos = 105;
+    doc.setFontSize(14);
+    doc.setFont('helvetica', 'bold');
+    doc.text('Employee Performance Metrics', 20, yPos);
+    yPos += 10;
+
+    // Table headers
+    doc.setFillColor(37, 99, 235); // #2563eb
+    doc.rect(20, yPos, 170, 8, 'F');
+    doc.setTextColor(255, 255, 255);
+    doc.setFontSize(9);
+    doc.setFont('helvetica', 'bold');
+    doc.text('Employee', 22, yPos + 5);
+    doc.text('Tasks', 80, yPos + 5);
+    doc.text('Completed', 110, yPos + 5);
+    doc.text('Hours', 140, yPos + 5);
+    doc.text('Rate', 170, yPos + 5);
+    yPos += 8;
+
+    // Table rows
+    doc.setTextColor(0, 0, 0);
+    doc.setFont('helvetica', 'normal');
+    
+    if (performance && performance.length > 0) {
+      performance.forEach((emp, index) => {
+        // Alternate row colors
+        if (index % 2 === 0) {
+          doc.setFillColor(243, 244, 246); // #f3f4f6
+          doc.rect(20, yPos, 170, 7, 'F');
+        }
+
+        doc.text(emp.name?.substring(0, 15) || 'N/A', 22, yPos + 4);
+        doc.text((emp.tasks_assigned || '0').toString(), 82, yPos + 4);
+        doc.text((emp.tasks_completed || '0').toString(), 115, yPos + 4);
+        doc.text((emp.total_hours_worked || '0').toFixed(1), 142, yPos + 4);
+        doc.text((emp.completion_rate || '0') + '%', 172, yPos + 4);
+        yPos += 7;
+
+        // Check if we need a new page
+        if (yPos > 270) {
+          doc.addPage();
+          yPos = 20;
+        }
+      });
+    } else {
+      doc.text('No performance data available', 22, yPos + 4);
+    }
+
+    // Add footer with page numbers
+    const pageCount = doc.internal.getNumberOfPages();
+    for (let i = 1; i <= pageCount; i++) {
+      doc.setPage(i);
+      doc.setFontSize(8);
+      doc.setTextColor(128, 128, 128);
+      doc.text(`Page ${i} of ${pageCount}`, 180, 290, { align: 'center' });
+      doc.text('WFMS - Workforce Management System', 105, 285, { align: 'center' });
+    }
+
+    // Save the PDF
+    const fileName = `WFMS-Report-${new Date().toISOString().split('T')[0]}.pdf`;
+    doc.save(fileName);
+
+    console.log('✓ Report downloaded successfully:', fileName);
+    
+    // Log the action
+    logUI(`📊 Performance report downloaded by ${user.name}`);
+
+  } catch (err) {
+    console.error('❌ Error generating report:', err);
+    alert('Failed to generate report. Please try again.');
+  } finally {
+    // Reset button state
+    const reportBtn = document.querySelector('button[onclick="downloadReport()"]');
+    if (reportBtn) {
+      reportBtn.classList.remove('loading');
+      reportBtn.innerHTML = '<svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><path d="M12 17v-6"/><path d="M9 14h6"/></svg> Download Report (PDF)';
+    }
+  }
+};
+
+/* ========= ENHANCED TASK MANAGEMENT ========= */
 
 // Start working on a task
 window.startTask = async function (taskId) {
@@ -1278,10 +1541,13 @@ window.startTask = async function (taskId) {
   console.log('📝 Starting task:', task.title);
   alert(`✓ Started working on: ${task.title}\n\nYou can now submit a daily report when done.`);
   
+  // Show report modal
   openTaskReport(taskId, task.title);
 };
 
+// Open task report submission modal
 window.openTaskReport = function (taskId, taskTitle) {
+  // Create modal if it doesn't exist
   let modal = qs('taskReportModal');
   if (!modal) {
     modal = document.createElement('div');
@@ -1323,11 +1589,13 @@ window.openTaskReport = function (taskId, taskTitle) {
     document.body.appendChild(modal);
   }
 
+  // Set task title
   qs('reportTaskTitle').value = taskTitle;
   qs('reportContent').value = '';
   qs('reportStatus').value = 'in-progress';
   qs('reportHours').value = '';
   
+  // Show modal
   modal.style.display = 'block';
 };
 
@@ -1336,6 +1604,7 @@ window.closeTaskReport = function () {
   if (modal) modal.style.display = 'none';
 };
 
+// Submit task report to admin for approval
 window.submitTaskReport = async function (taskId) {
   const content = qs('reportContent').value.trim();
   const status = qs('reportStatus').value;
@@ -1401,11 +1670,13 @@ async function loadEmployees() {
 }
 
 async function loadAdminDashboard() {
+  // Load performance data if available
   const tasks = await api('/api/tasks');
   const completed = tasks.filter(t => t.status === 'completed').length;
   const pending = tasks.filter(t => t.status === 'pending').length;
   const inProgress = tasks.filter(t => t.status === 'in-progress').length;
   
+  // Update admin dashboard stats
   const adminStats = document.querySelector('.admin-stats');
   if (adminStats) {
     adminStats.innerHTML = `
@@ -1428,17 +1699,20 @@ async function loadAdminDashboard() {
     `;
   }
   
+  // Initialize performance chart
   await initializePerformanceChart();
   
   logUI(`✓ Admin Dashboard loaded: ${completed} completed, ${pending} pending, ${inProgress} in progress`);
 }
 
 async function loadWorkerDashboard(user) {
+  // Load worker's assigned tasks
   const tasks = await api('/api/tasks');
   const myTasks = tasks.filter(t => t.assigned_to === user.id);
   const completed = myTasks.filter(t => t.status === 'completed').length;
   const pending = myTasks.length - completed;
 
+  // Update worker stats
   const workerStats = document.querySelector('.worker-stats');
   if (workerStats) {
     workerStats.innerHTML = `
@@ -1461,6 +1735,7 @@ async function loadWorkerDashboard(user) {
     `;
   }
 
+  // Load worker's my tasks
   const myTaskList = qs('myTaskList');
   myTaskList.innerHTML = '';
 
@@ -1544,14 +1819,16 @@ function showRegister() {
   const registerContainer = qs('register-container');
   
   loginContainer.classList.add('hidden');
+  // Reset animation by removing and re-adding
   registerContainer.classList.remove('form-animate');
-  void registerContainer.offsetWidth;
+  void registerContainer.offsetWidth; // Trigger reflow
   registerContainer.classList.remove('hidden');
   registerContainer.classList.add('form-animate');
   
+  // Re-animate form elements with stagger
   document.querySelectorAll('#register-container .form-group-animate, #register-container .btn-animate, #register-container .link-animate').forEach(el => {
     el.style.animation = 'none';
-    void el.offsetWidth;
+    void el.offsetWidth; // Trigger reflow
     el.style.animation = '';
   });
 }
@@ -1561,20 +1838,23 @@ function backToLogin() {
   const registerContainer = qs('register-container');
   
   registerContainer.classList.add('hidden');
+  // Reset animation by removing and re-adding
   loginContainer.classList.remove('form-animate');
-  void loginContainer.offsetWidth;
+  void loginContainer.offsetWidth; // Trigger reflow
   loginContainer.classList.remove('hidden');
   loginContainer.classList.add('form-animate');
   
+  // Re-animate form elements with stagger
   document.querySelectorAll('#login-container .form-group-animate, #login-container .btn-animate, #login-container .link-animate').forEach(el => {
     el.style.animation = 'none';
-    void el.offsetWidth;
+    void el.offsetWidth; // Trigger reflow
     el.style.animation = '';
   });
 }
 
 /* ========= FORM VALIDATION FEEDBACK ===== */
 function showFormError(inputElement, message) {
+  // Remove existing error messages
   const existingError = inputElement.parentElement.querySelector('.form-error');
   if (existingError) existingError.remove();
   
@@ -1593,6 +1873,7 @@ function showFormError(inputElement, message) {
 }
 
 function showFormSuccess(inputElement) {
+  // Remove existing success indicators
   const existingSuccess = inputElement.parentElement.querySelector('.form-success');
   if (existingSuccess) existingSuccess.remove();
   
@@ -1615,17 +1896,20 @@ let performanceChart = null;
 
 async function initializePerformanceChart() {
   try {
+    // Check if Chart.js is loaded
     if (typeof Chart === 'undefined') {
       console.warn('Chart.js not loaded, performance chart disabled');
       return;
     }
 
+    // Fetch performance data from API
     const performanceData = await api('/api/admin/performance-metrics', 'GET');
     if (!Array.isArray(performanceData) || performanceData.length === 0) {
       console.log('⚠ No performance data available');
       return;
     }
 
+    // Get the canvas element
     const chartCanvas = qs('performanceChart');
     if (!chartCanvas) {
       console.log('⚠ Performance chart element not found');
@@ -1634,10 +1918,12 @@ async function initializePerformanceChart() {
 
     const ctx = chartCanvas.getContext('2d');
     
+    // Destroy previous chart if exists
     if (performanceChart) {
       performanceChart.destroy();
     }
 
+    // Sort data by completion rate descending
     const sortedData = [...performanceData].sort((a, b) => (b.completion_rate || 0) - (a.completion_rate || 0));
 
     performanceChart = new Chart(ctx, {
@@ -1842,7 +2128,7 @@ function createApprovalPanel() {
 
 window.approveTask = async function (taskId, taskTitle) {
   const feedback = prompt(`Approve task "${taskTitle}"? Add optional feedback:`);
-  if (feedback === null) return;
+  if (feedback === null) return; // User cancelled
 
   const data = await api(`/api/tasks/${taskId}/approve`, 'POST', { feedback: feedback || 'Approved' });
   
@@ -1860,7 +2146,7 @@ window.approveTask = async function (taskId, taskTitle) {
 
 window.rejectTask = async function (taskId, taskTitle) {
   const feedback = prompt(`Reject task "${taskTitle}"? Please provide feedback for revision:`);
-  if (feedback === null) return;
+  if (feedback === null) return; // User cancelled
   if (!feedback.trim()) {
     alert('Please provide feedback for rejection');
     return;
@@ -1889,6 +2175,3 @@ window.rejectTask = async function (taskId, taskTitle) {
 // ========= DEBUG END =========
 console.log('✅ app.js finished loading');
 console.log('- downloadReport defined?', typeof window.downloadReport !== 'undefined');
-if (typeof window.downloadReport === 'function') {
-  console.log('- downloadReport is available and ready');
-}

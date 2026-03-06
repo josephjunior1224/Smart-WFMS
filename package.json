@@ -3,25 +3,26 @@
   "version": "1.0.0",
   "private": true,
   "scripts": {
-    "start": "node server.js",         // Run backend only
-    "dev": "nodemon server.js",        // Backend with auto-reload
-    "frontend": "vite --config client/vite.config.js",   // Frontend dev server
-    "build": "vite build --config client/vite.config.js" // Build frontend
+    "start": "node server.js",
+    "dev": "nodemon server.js",
+    "frontend": "vite --config client/vite.config.js",
+    "build": "vite build --config client/vite.config.js"
   },
   "dependencies": {
-    "bcrypt": "^5.1.0",
+    "bcrypt": "^6.0.0",
+    "chart.js": "^3.9.1",
     "cors": "^2.8.5",
     "dotenv": "^16.0.3",
     "express": "^4.18.2",
-    "firebase": "^9.23.0",
-    "firebase-admin": "^11.11.0",
-    "jsonwebtoken": "^8.5.1",
-    "socket.io": "^4.5.4",
-    "chart.js": "^3.9.1",
-    "sqlite3": "^5.1.6",
+    "firebase": "^12.10.0",
+    "firebase-admin": "^13.7.0",
+    "jsonwebtoken": "^9.0.3",
+    "mongoose": "^9.2.4",
+    "nodemailer": "^8.0.1",
     "qrcode": "^1.5.3",
-    "uuid": "^9.0.0",
-    "nodemailer": "^6.9.7"
+    "socket.io": "^4.5.4",
+    "sqlite3": "^5.0.2",
+    "uuid": "^9.0.0"
   },
   "devDependencies": {
     "nodemon": "^3.0.1",

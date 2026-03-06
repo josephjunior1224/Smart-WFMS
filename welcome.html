@@ -904,8 +904,8 @@
                   <div className="text-center p-6">
                     <div className="qr-image mx-auto mb-4">
                       <img 
-                        src={`https://api.qrserver.com/v1/create-qr-code/?size=250x250&data=HERITAGE-WMS-ATTENDANCE-${Date.now()}`} 
-                        alt="Attendance QR" 
+                        src="WFMS-1024.jpeg"
+                        alt="Scan the QR code to Access the system" 
                       />
                     </div>
                     <p className="mb-4 dark:text-gray-300">Scan to mark attendance</p>
@@ -1459,12 +1459,10 @@
           {/* QR Modal */}
           <div className={`qr-modal ${qrModalOpen ? 'active' : ''}`} onClick={() => setQrModalOpen(false)}>
             <div className="qr-content" onClick={e => e.stopPropagation()}>
-              <h3 className="text-xl font-bold mb-4">Attendance QR Code</h3>
+              <h3 className="text-xl font-bold mb-4">Scan the QR Code to get into the system</h3>
               <div className="qr-image">
                 <img 
-                  src={`WFMS-1024.jpeg`} 
-                  alt="QR Code" 
-                />
+                  src="WFMS-1024.jpeg" alt="QR Code" />
               </div>
               <p className="mb-4 text-gray-600">Scan with HERITAGE WMS Mobile App</p>
               <button className="btn btn-primary" onClick={() => setQrModalOpen(false)}>
