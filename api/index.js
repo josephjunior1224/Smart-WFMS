@@ -6,7 +6,7 @@ const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
 const { v4: uuidv4 } = require('uuid');
 const QR = require('qrcode');
-const fs = require('fs'); // ADDED for legacy routes
+const fs = require('fs');
 
 // Import your database module (MongoDB version)
 const { 
@@ -27,11 +27,7 @@ const emailService = require('../models/emailService');
 
 const app = express();
 
-// ========== 1. STATIC FILES - MUST COME FIRST ==========
-// Serve frontend from public folder - THIS MUST BE BEFORE ANY ROUTES
-app.use(express.static(path.join(__dirname, '../public')));
-
-// ========== 2. MIDDLEWARE ==========
+// ========== 1. MIDDLEWARE ==========
 app.use(cors());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
@@ -49,6 +45,13 @@ const TOKENS_FILE = path.join(DATA_DIR, 'tokens.json');
 // Ensure data dir exists
 try { if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR); } catch(e){}
 try { if (!fs.existsSync(TOKENS_FILE)) fs.writeFileSync(TOKENS_FILE, JSON.stringify({}), 'utf8'); } catch(e){}
+
+// ========== 2. STATIC FILES - Serve from /static path ==========
+// This prevents conflicts with API routes
+app.use('/static', express.static(path.join(__dirname, '../public')));
+
+// Also serve root static files for backward compatibility
+app.use(express.static(path.join(__dirname, '../public')));
 
 // ========== 3. HEALTH CHECK ==========
 app.get('/api/health', (req, res) => {
@@ -965,12 +968,13 @@ app.post('/api/validate-token', (req, res) => {
 });
 
 // ========== 10. CATCH-ALL ROUTE FOR SPA ==========
-// This should be the LAST route
+// This must be the LAST route
 app.get('*', (req, res) => {
   // Don't serve index.html for API routes (return 404 instead)
   if (req.path.startsWith('/api/')) {
     return res.status(404).json({ error: 'API endpoint not found' });
   }
+  
   // For all other routes, serve the SPA
   res.sendFile(path.join(__dirname, '../public/index.html'));
 });
