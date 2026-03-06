@@ -1,4 +1,4 @@
-// api/index.js - Your Express app for Vercel (MongoDB Version)
+// api/index.js - Your Express app for Vercel (MongoDB Version) - COMPLETE FIXED VERSION
 const express = require('express');
 const path = require('path');
 const cors = require('cors');
@@ -6,6 +6,7 @@ const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
 const { v4: uuidv4 } = require('uuid');
 const QR = require('qrcode');
+const fs = require('fs'); // ADDED for legacy routes
 
 // Import your database module (MongoDB version)
 const { 
@@ -26,7 +27,11 @@ const emailService = require('../models/emailService');
 
 const app = express();
 
-// ========== MIDDLEWARE ==========
+// ========== 1. STATIC FILES - MUST COME FIRST ==========
+// Serve frontend from public folder - THIS MUST BE BEFORE ANY ROUTES
+app.use(express.static(path.join(__dirname, '../public')));
+
+// ========== 2. MIDDLEWARE ==========
 app.use(cors());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
@@ -37,7 +42,20 @@ emailService.initializeEmailService();
 // JWT Secret
 const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key-change-in-production';
 
-// ========== AUTH ROUTES ==========
+// Token file path for legacy routes
+const DATA_DIR = path.join(__dirname, '../data');
+const TOKENS_FILE = path.join(DATA_DIR, 'tokens.json');
+
+// Ensure data dir exists
+try { if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR); } catch(e){}
+try { if (!fs.existsSync(TOKENS_FILE)) fs.writeFileSync(TOKENS_FILE, JSON.stringify({}), 'utf8'); } catch(e){}
+
+// ========== 3. HEALTH CHECK ==========
+app.get('/api/health', (req, res) => {
+  res.json({ status: 'OK', message: 'WFMS API is running', timestamp: new Date().toISOString() });
+});
+
+// ========== 4. AUTH ROUTES ==========
 
 // Login
 app.post('/api/login', async (req, res) => {
@@ -220,6 +238,7 @@ app.post('/api/auth/google', async (req, res) => {
       name: user.name,
       email: user.email,
       role: user.role,
+      user: userObj,
       token,
       refreshToken,
       expiresIn: 604800
@@ -230,12 +249,12 @@ app.post('/api/auth/google', async (req, res) => {
   }
 });
 
-// ========== USER ROUTES ==========
+// ========== 5. USER ROUTES ==========
 
 // Get all users
 app.get('/api/users', async (req, res) => {
   try {
-    const users = await User.find({}, 'name role');
+    const users = await User.find({}, 'name role email');
     res.json(users);
   } catch (err) {
     console.error(err);
@@ -243,7 +262,21 @@ app.get('/api/users', async (req, res) => {
   }
 });
 
-// ========== TASK ROUTES ==========
+// Get user by ID
+app.get('/api/users/:id', async (req, res) => {
+  try {
+    const user = await User.findById(req.params.id, 'name role email');
+    if (!user) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+    res.json(user);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ========== 6. TASK ROUTES ==========
 
 // Get all tasks
 app.get('/api/tasks', async (req, res) => {
@@ -252,6 +285,22 @@ app.get('/api/tasks', async (req, res) => {
       .populate('assigned_to', 'name email')
       .populate('submitted_by', 'name email');
     res.json(tasks);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Get task by ID
+app.get('/api/tasks/:id', async (req, res) => {
+  try {
+    const task = await Task.findById(req.params.id)
+      .populate('assigned_to', 'name email')
+      .populate('submitted_by', 'name email');
+    if (!task) {
+      return res.status(404).json({ error: 'Task not found' });
+    }
+    res.json(task);
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: err.message });
@@ -558,7 +607,7 @@ app.get('/api/employee/performance/:userId', async (req, res) => {
   }
 });
 
-// ========== QR CODE ROUTES ==========
+// ========== 7. QR CODE ROUTES ==========
 
 // Generate QR code for user
 app.post('/api/generate-user-qr', async (req, res) => {
@@ -617,6 +666,32 @@ app.post('/api/generate-user-qr', async (req, res) => {
   } catch (err) {
     console.error('QR generation error:', err);
     res.status(500).json({ error: 'QR generation failed' });
+  }
+});
+
+// Get user QR code
+app.get('/api/user-qr/:userId', async (req, res) => {
+  try {
+    const { userId } = req.params;
+    
+    const qrCode = await QRCode.findOne({ user_id: userId });
+    
+    if (!qrCode) {
+      return res.status(404).json({ error: 'QR code not found' });
+    }
+
+    res.json({
+      ok: true,
+      qrToken: qrCode.qr_token,
+      qrData: qrCode.qr_data,
+      isActivated: qrCode.is_activated,
+      generatedAt: qrCode.generated_at,
+      firstScanAt: qrCode.first_scan_at,
+      scanCount: qrCode.scan_count
+    });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: err.message });
   }
 });
 
@@ -736,7 +811,7 @@ app.get('/api/admin/qr-scan-records', async (req, res) => {
   }
 });
 
-// ========== ATTENDANCE ROUTES ==========
+// ========== 8. ATTENDANCE ROUTES ==========
 
 // Record attendance
 app.post('/api/attendance', async (req, res) => {
@@ -748,7 +823,8 @@ app.post('/api/attendance', async (req, res) => {
     
     const attendance = new Attendance({
       user_id,
-      action
+      action,
+      timestamp: new Date()
     });
     
     await attendance.save();
@@ -810,14 +886,50 @@ app.get('/api/time/:user_id', async (req, res) => {
   }
 });
 
-// Legacy QR endpoints (for backward compatibility)
+// ========== 9. LEGACY QR ENDPOINTS ==========
+
+// Generate QR token (legacy)
+app.post('/api/generate-qr-token', async (req, res) => {
+  try {
+    const { userId, email, role } = req.body;
+    if (!userId) return res.status(400).json({ error: 'userId required' });
+    
+    const timestamp = new Date().toISOString();
+    const qrData = {
+      userId,
+      email,
+      role,
+      generatedAt: timestamp
+    };
+    
+    const qrString = JSON.stringify(qrData);
+    const qrImage = await QR.toDataURL(qrString, { errorCorrectionLevel: 'H' });
+    
+    res.json({ 
+      ok: true, 
+      qrCode: qrImage,
+      qrData
+    });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Generate QR (file-based legacy)
 app.post('/api/generate-qr', async (req, res) => {
   try {
     const { username, role } = req.body;
     if (!username) return res.status(400).json({ error: 'username required' });
     
     const token = uuidv4();
-    const tokens = JSON.parse(fs.readFileSync(TOKENS_FILE, 'utf8') || '{}');
+    let tokens = {};
+    try {
+      tokens = JSON.parse(fs.readFileSync(TOKENS_FILE, 'utf8') || '{}');
+    } catch (e) {
+      tokens = {};
+    }
+    
     tokens[token] = { username, role, createdAt: new Date().toISOString() };
     fs.writeFileSync(TOKENS_FILE, JSON.stringify(tokens, null, 2), 'utf8');
     
@@ -829,12 +941,19 @@ app.post('/api/generate-qr', async (req, res) => {
   }
 });
 
+// Validate token (legacy)
 app.post('/api/validate-token', (req, res) => {
   try {
     const { token } = req.body;
     if (!token) return res.status(400).json({ error: 'token required' });
     
-    const tokens = JSON.parse(fs.readFileSync(TOKENS_FILE, 'utf8') || '{}');
+    let tokens = {};
+    try {
+      tokens = JSON.parse(fs.readFileSync(TOKENS_FILE, 'utf8') || '{}');
+    } catch (e) {
+      tokens = {};
+    }
+    
     const info = tokens[token];
     if (!info) return res.status(404).json({ ok: false });
     
@@ -845,14 +964,16 @@ app.post('/api/validate-token', (req, res) => {
   }
 });
 
-// ========== SERVE STATIC FILES ==========
-// Serve frontend from public folder
-app.use(express.static(path.join(__dirname, '../public')));
-
-// Catch-all route to serve index.html for SPA
+// ========== 10. CATCH-ALL ROUTE FOR SPA ==========
+// This should be the LAST route
 app.get('*', (req, res) => {
+  // Don't serve index.html for API routes (return 404 instead)
+  if (req.path.startsWith('/api/')) {
+    return res.status(404).json({ error: 'API endpoint not found' });
+  }
+  // For all other routes, serve the SPA
   res.sendFile(path.join(__dirname, '../public/index.html'));
 });
 
-// ========== EXPORT FOR VERCEL (CRITICAL) ==========
+// ========== EXPORT FOR VERCEL ==========
 module.exports = app;
