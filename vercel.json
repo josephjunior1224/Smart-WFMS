@@ -1,4 +1,4 @@
-{
+echo '{
   "version": 2,
   "builds": [
     {
@@ -6,16 +6,14 @@
       "use": "@vercel/node"
     }
   ],
-  "env": {
-    "MONGODB_URI": "mongodb+srv://josephjuniorottowilson_db_user:Test123@cluster0.tvdktss.mongodb.net/wfms?retryWrites=true&w=majority",
-    "JWT_SECRET": "wfms-super-secret-key-2024",
-    "PORT": "8000",
-    "NODE_ENV": "production"
-  },
   "routes": [
     {
+      "src": "/api/(.*)",
+      "dest": "/server.js"
+    },
+    {
       "src": "/(.*)",
-      "dest": "server.js"
+      "dest": "/server.js"
     }
   ]
-}
+}' > vercel.json
