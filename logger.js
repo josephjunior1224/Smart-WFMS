@@ -1,27 +1,42 @@
-const winston = require('winston');
-const path = require('path');
+const winston = require("winston");
 
+// Check if we are on Vercel (serverless environment)
+const isVercel = process.env.VERCEL === "1" || process.env.NODE_ENV === "production";
+
+// Create a simple console-only logger for Vercel
 const logger = winston.createLogger({
-  level: process.env.LOG_LEVEL || 'info',
+  level: "info",
   format: winston.format.combine(
     winston.format.timestamp(),
-    winston.format.errors({ stack: true }),
-    winston.format.splat(),
-    winston.format.json()
+    winston.format.colorize(),
+    winston.format.printf(({ timestamp, level, message }) => {
+      return `${timestamp} [${level}]: ${message}`;
+    })
   ),
   transports: [
-    new winston.transports.File({ filename: path.join('logs', 'error.log'), level: 'error' }),
-    new winston.transports.File({ filename: path.join('logs', 'combined.log') })
+    new winston.transports.Console()
   ]
 });
 
-if (process.env.NODE_ENV !== 'production') {
-  logger.add(new winston.transports.Console({
-    format: winston.format.combine(
-      winston.format.colorize(),
-      winston.format.simple()
-    )
-  }));
+// Only add file transport if NOT on Vercel
+if (!isVercel) {
+  try {
+    const fs = require("fs");
+    const path = require("path");
+    const logDir = path.join(process.cwd(), "logs");
+    
+    if (!fs.existsSync(logDir)) {
+      fs.mkdirSync(logDir, { recursive: true });
+    }
+    
+    logger.add(new winston.transports.File({
+      filename: path.join(logDir, "combined.log"),
+      maxsize: 5242880, // 5MB
+      maxFiles: 5
+    }));
+  } catch (err) {
+    console.warn("Could not create file transport:", err.message);
+  }
 }
 
 module.exports = logger;
