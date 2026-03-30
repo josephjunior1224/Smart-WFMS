@@ -379,7 +379,10 @@ try {
 } catch (err) {
   logger.warn('⚠️ Email service initialization failed:', err.message);
 }
-
+// Serve index.html for the root route
+app.get('/', (req, res) => {
+  res.sendFile(path.join(__dirname, 'index.html'));
+});
 // ===============================================
 // Socket.IO Real-Time Communications (ENHANCED)
 // ===============================================
@@ -4184,7 +4187,13 @@ app.use((err, req, res, next) => {
 // ===============================================
 // Static Files & Fallback SPA Route
 // ===============================================
+// Root route - serve index.html
+app.get('/', (req, res) => {
+  res.sendFile(path.join(__dirname, 'index.html'));
+});
 
+// Then static files
+app.use(express.static(root));
 // Serve static files
 app.use(express.static(root));
 
@@ -4986,3 +4995,5 @@ async function startServer() {
 }
 
 startServer();module.exports = app;
+// For Vercel serverless deployment
+module.exports = app;
