@@ -4192,8 +4192,7 @@ app.get('/', (req, res) => {
   res.sendFile(path.join(__dirname, 'index.html'));
 });
 
-// Then static files
-app.use(express.static(root));
+
 // Serve static files
 app.use(express.static(root));
 
