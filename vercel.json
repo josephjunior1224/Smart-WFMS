@@ -2,19 +2,20 @@
   "version": 2,
   "builds": [
     {
-      "src": "api/index.js",
+      "src": "server.js",
       "use": "@vercel/node"
     }
   ],
+  "env": {
+    "MONGODB_URI": "mongodb+srv://josephjuniorottowilson_db_user:Test123@cluster0.tvdktss.mongodb.net/wfms?retryWrites=true&w=majority",
+    "JWT_SECRET": "wfms-super-secret-key-2024",
+    "PORT": "8000",
+    "NODE_ENV": "production"
+  },
   "routes": [
     {
       "src": "/(.*)",
-      "dest": "api/index.js"
+      "dest": "server.js"
     }
-  ],
-  "env": {
-    "MONGODB_URI": "@mongodb_uri",
-    "JWT_SECRET": "@jwt_secret",
-    "NODE_ENV": "production"
-  }
+  ]
 }
