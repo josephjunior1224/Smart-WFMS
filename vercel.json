@@ -1,4 +1,4 @@
-echo '{
+{
   "version": 2,
   "builds": [
     {
@@ -16,4 +16,4 @@ echo '{
       "dest": "/server.js"
     }
   ]
-}' > vercel.json
+}
