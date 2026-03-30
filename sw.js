@@ -1,4 +1,5 @@
-// sw.js - Enhanced Service Worker with CDN fallback support (MySQL Version)
+// sw.js - Enhanced Service Worker with API bypass
+
 const CACHE_NAME = 'wfms-cache-v1';
 const DYNAMIC_CACHE = 'wfms-dynamic-v1';
 const FALLBACK_CACHE = 'wfms-fallback-v1';
@@ -14,12 +15,25 @@ const CORE_FILES = [
   '/offline.html'
 ];
 
-// CDN URLs to cache dynamically - REMOVED gstatic.com (Firebase)
+// CDN URLs to cache dynamically
 const CDN_PATTERNS = [
   'cdn.jsdelivr.net',
   'unpkg.com',
   'cdnjs.cloudflare.com',
   'stackpath.bootstrapcdn.com'
+];
+
+// API routes to NEVER cache
+const API_PATTERNS = [
+  '/api/',
+  '/api/login',
+  '/api/signup',
+  '/api/check-email',
+  '/api/tasks',
+  '/api/users',
+  '/api/time',
+  '/api/attendance',
+  '/api/qr'
 ];
 
 // Cache version for cleanup
@@ -34,7 +48,6 @@ self.addEventListener('install', (e) => {
         console.log('Service Worker: Caching core files');
         return cache.addAll(CORE_FILES).catch(err => {
           console.error('Failed to cache some core files:', err);
-          // Continue even if some files fail
           return Promise.resolve();
         });
       })
@@ -65,22 +78,10 @@ self.addEventListener('activate', (e) => {
   );
 });
 
-// Fetch event: intelligent caching with fallbacks
-self.addEventListener('fetch', (e) => {
-  const url = new URL(e.request.url);
-  
-  // Skip chrome-extension requests
-  if (url.protocol === 'chrome-extension:') return;
-  
-  // Handle different types of requests
-  if (isCDNRequest(url)) {
-    e.respondWith(handleCDNRequest(e.request));
-  } else if (isPageNavigation(e.request)) {
-    e.respondWith(handleNavigationRequest(e.request));
-  } else {
-    e.respondWith(handleGeneralRequest(e.request));
-  }
-});
+// Check if request is to an API endpoint
+function isApiRequest(url) {
+  return API_PATTERNS.some(pattern => url.pathname.includes(pattern));
+}
 
 // Check if request is to a CDN
 function isCDNRequest(url) {
@@ -93,7 +94,31 @@ function isPageNavigation(request) {
          (request.method === 'GET' && request.headers.get('accept')?.includes('text/html'));
 }
 
-// Update the handleCDNRequest function in sw.js
+// Fetch event: bypass API routes, handle others
+self.addEventListener('fetch', (e) => {
+  const url = new URL(e.request.url);
+  
+  // Skip chrome-extension requests
+  if (url.protocol === 'chrome-extension:') return;
+  
+  // CRITICAL: Bypass all API requests - let them go to network directly
+  if (isApiRequest(url)) {
+    console.log('📡 Bypassing Service Worker for API:', url.pathname);
+    e.respondWith(fetch(e.request));
+    return;
+  }
+  
+  // Handle different types of requests
+  if (isCDNRequest(url)) {
+    e.respondWith(handleCDNRequest(e.request));
+  } else if (isPageNavigation(e.request)) {
+    e.respondWith(handleNavigationRequest(e.request));
+  } else {
+    e.respondWith(handleGeneralRequest(e.request));
+  }
+});
+
+// Update the handleCDNRequest function
 async function handleCDNRequest(request) {
   const url = request.url;
   
@@ -207,7 +232,7 @@ async function handleUnpkgRequest(request) {
   return getEmptyResponseForRequest(request, url);
 }
 
-// Update getAlternativeCDNUrl function - REMOVED FIREBASE
+// Get alternative CDN URL
 function getAlternativeCDNUrl(originalUrl) {
   // HTML5-QRCode specific handling
   if (originalUrl.includes('unpkg.com/html5-qrcode')) {
@@ -253,12 +278,6 @@ function getAlternativeCDNUrl(originalUrl) {
     if (version) {
       return `https://cdnjs.cloudflare.com/ajax/libs/socket.io/${version}/socket.io.min.js`;
     }
-  }
-  
-  // Generic fallback for jsDelivr -> Cloudflare
-  if (originalUrl.includes('cdn.jsdelivr.net')) {
-    return originalUrl.replace('cdn.jsdelivr.net', 'cdnjs.cloudflare.com/ajax/libs')
-                     .replace('/npm/', '/');
   }
   
   return null;
@@ -370,7 +389,7 @@ async function updateCacheInBackground(request) {
   }
 }
 
-// Get empty response based on request type - REMOVED firebase placeholder
+// Get empty response based on request type
 function getEmptyResponseForRequest(request, url) {
   const fileName = url.split('/').pop() || '';
   
@@ -452,5 +471,4 @@ self.addEventListener('sync', (event) => {
   }
 });
 
-// Log service worker lifecycle
-console.log('Service Worker: Loaded and ready (MySQL version)');
+console.log('Service Worker: Loaded and ready (API bypass enabled)');

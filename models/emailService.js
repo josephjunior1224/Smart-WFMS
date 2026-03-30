@@ -1,233 +1,160 @@
+// models/emailService.js
 const nodemailer = require('nodemailer');
-require('dotenv').config();
 
-// Email Configuration (supports Gmail, Outlook, custom SMTP, or development mode)
 let transporter = null;
 
-function initializeEmailService() {
-  const emailProvider = process.env.EMAIL_PROVIDER || 'development';
-  
-  if (emailProvider === 'gmail') {
-    // Gmail configuration with App Password
+const initializeEmailService = async () => {
+  try {
+    const { EMAIL_USER, EMAIL_PASS } = process.env;
+    if (!EMAIL_USER || !EMAIL_PASS) {
+      console.warn('Warning: Email credentials not set. Email notifications disabled.');
+      return false;
+    }
+
     transporter = nodemailer.createTransport({
       service: 'gmail',
       auth: {
-        user: process.env.EMAIL_USER,
-        pass: process.env.EMAIL_PASS
-      }
+        user: EMAIL_USER,
+        pass: EMAIL_PASS,
+      },
     });
-    console.log('✓ Email service initialized: Gmail');
-  } else if (emailProvider === 'outlook') {
-    // Outlook/Office365 configuration
-    transporter = nodemailer.createTransport({
-      host: 'smtp-mail.outlook.com',
-      port: 587,
-      secure: false,
-      auth: {
-        user: process.env.EMAIL_USER,
-        pass: process.env.EMAIL_PASS
-      }
-    });
-    console.log('✓ Email service initialized: Outlook');
-  } else if (emailProvider === 'custom') {
-    // Custom SMTP server
-    transporter = nodemailer.createTransport({
-      host: process.env.SMTP_HOST,
-      port: parseInt(process.env.SMTP_PORT || '587'),
-      secure: process.env.SMTP_SECURE === 'true',
-      auth: {
-        user: process.env.EMAIL_USER,
-        pass: process.env.EMAIL_PASS
-      }
-    });
-    console.log('✓ Email service initialized: Custom SMTP');
-  } else {
-    // Development mode - log emails to console
-    console.log('⚠ Email service in DEVELOPMENT mode (emails logged to console only)');
-  }
-}
 
-/**
- * Send email notification
- * @param {string} to - Recipient email address
- * @param {string} subject - Email subject
- * @param {string} htmlContent - HTML email content
- * @returns {Promise<boolean>}
- */
-async function sendEmail(to, subject, htmlContent) {
-  try {
-    // In development mode, just log the email
-    if (!transporter) {
-      console.log('\n📧 [DEV MODE] EMAIL NOTIFICATION');
-      console.log(`To: ${to}`);
-      console.log(`Subject: ${subject}`);
-      console.log(`Content:\n${htmlContent}\n`);
-      return true;
-    }
-
-    const mailOptions = {
-      from: process.env.EMAIL_FROM || process.env.EMAIL_USER,
-      to: to,
-      subject: subject,
-      html: htmlContent
-    };
-
-    const info = await transporter.sendMail(mailOptions);
-    console.log(`✓ Email sent to ${to}:`, info.response);
+    await transporter.verify();
+    console.log('Email service initialized');
     return true;
   } catch (err) {
-    console.error('❌ Email send error:', err.message);
+    console.error('Email service initialization failed:', err);
+    transporter = null;
     return false;
   }
-}
+};
 
-/**
- * Send task assigned notification
- */
-async function sendTaskAssignedEmail(employeeEmail, employeeName, taskTitle, taskId) {
+const sendEmail = async (to, subject, html) => {
+  if (!transporter) {
+    console.error('Email service is not initialized.');
+    return false;
+  }
+
+  try {
+    await transporter.sendMail({
+      from: process.env.EMAIL_USER,
+      to,
+      subject,
+      html,
+    });
+    return true;
+  } catch (err) {
+    console.error('Email sending failed:', err);
+    return false;
+  }
+};
+
+const sendTaskAssignedEmail = async (email, name, taskTitle, dueDate, notes) => {
   const subject = `New Task Assigned: ${taskTitle}`;
-  const htmlContent = `
-    <html>
-      <body style="font-family: Arial, sans-serif; color: #333;">
-        <div style="max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #ddd; border-radius: 8px;">
-          <h2 style="color: #0f172a;">📋 New Task Assigned</h2>
-          <p>Hello <strong>${employeeName}</strong>,</p>
-          <p>A new task has been assigned to you:</p>
-          <div style="background-color: #f0f4f8; padding: 15px; border-left: 4px solid #10b981; margin: 20px 0;">
-            <p><strong>Task:</strong> ${taskTitle}</p>
-            <p><strong>Task ID:</strong> ${taskId}</p>
-          </div>
-          <p>Please log in to the WFMS system to view details and start working on this task.</p>
-          <p style="color: #666; font-size: 12px; margin-top: 30px;">
-            This is an automated message from Workforce Management System. Please do not reply to this email.
-          </p>
-        </div>
-      </body>
-    </html>
+  const html = `
+    <div style="font-family: Arial, sans-serif; max-width: 600px;">
+      <h2>New Task Assigned</h2>
+      <p>Hello ${name},</p>
+      <p>A new task has been assigned to you: <strong>${taskTitle}</strong>.</p>
+      <p>Due date: <strong>${dueDate || 'Not specified'}</strong></p>
+      <p>Notes: ${notes || 'No additional notes.'}</p>
+      <p>Please login to complete the task in the Workforce Management System.</p>
+      <hr />
+      <p style="color: #666; font-size: 12px;">Workforce Management System</p>
+    </div>
   `;
-  return sendEmail(employeeEmail, subject, htmlContent);
-}
+  return sendEmail(email, subject, html);
+};
 
-/**
- * Send task submission notification to admin
- */
-async function sendTaskSubmissionEmail(adminEmail, adminName, employeeName, taskTitle, taskId, report) {
-  const subject = `Task Report Submitted: ${taskTitle}`;
-  const htmlContent = `
-    <html>
-      <body style="font-family: Arial, sans-serif; color: #333;">
-        <div style="max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #ddd; border-radius: 8px;">
-          <h2 style="color: #0f172a;">📝 Task Report Submitted for Review</h2>
-          <p>Hello <strong>${adminName}</strong>,</p>
-          <p><strong>${employeeName}</strong> has submitted a report for task: <strong>${taskTitle}</strong></p>
-          <div style="background-color: #f0f4f8; padding: 15px; border-left: 4px solid #3b82f6; margin: 20px 0;">
-            <p><strong>Employee:</strong> ${employeeName}</p>
-            <p><strong>Task:</strong> ${taskTitle}</p>
-            <p><strong>Task ID:</strong> ${taskId}</p>
-            <p><strong>Report:</strong></p>
-            <div style="background-color: white; padding: 10px; border-radius: 4px; white-space: pre-wrap;">${report}</div>
-          </div>
-          <p>Please log in to the WFMS admin panel to review and approve/reject this report.</p>
-          <p style="color: #666; font-size: 12px; margin-top: 30px;">
-            This is an automated message from Workforce Management System. Please do not reply to this email.
-          </p>
-        </div>
-      </body>
-    </html>
-  `;
-  return sendEmail(adminEmail, subject, htmlContent);
-}
-
-/**
- * Send task approval notification to employee
- */
-async function sendTaskApprovalEmail(employeeEmail, employeeName, taskTitle, feedback) {
+const sendTaskApprovalEmail = async (email, name, taskTitle, feedback) => {
   const subject = `Task Approved: ${taskTitle}`;
-  const htmlContent = `
-    <html>
-      <body style="font-family: Arial, sans-serif; color: #333;">
-        <div style="max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #ddd; border-radius: 8px;">
-          <h2 style="color: #10b981;">✅ Task Approved</h2>
-          <p>Hello <strong>${employeeName}</strong>,</p>
-          <p>Your task report for <strong>${taskTitle}</strong> has been <strong style="color: #10b981;">APPROVED</strong>! 🎉</p>
-          <div style="background-color: #f0f4f8; padding: 15px; border-left: 4px solid #10b981; margin: 20px 0;">
-            <p><strong>Task:</strong> ${taskTitle}</p>
-            <p><strong>Admin Feedback:</strong></p>
-            <div style="background-color: white; padding: 10px; border-radius: 4px;">${feedback || 'Well done!'}</div>
-          </div>
-          <p>Keep up the great work!</p>
-          <p style="color: #666; font-size: 12px; margin-top: 30px;">
-            This is an automated message from Workforce Management System. Please do not reply to this email.
-          </p>
-        </div>
-      </body>
-    </html>
+  const html = `
+    <div style="font-family: Arial, sans-serif; max-width: 600px;">
+      <h2>Task Approved</h2>
+      <p>Hello ${name},</p>
+      <p>Your task <strong>"${taskTitle}"</strong> has been approved.</p>
+      <p>Feedback: ${feedback || 'Great work!'}</p>
+      <p>Please login to view details.</p>
+      <hr />
+      <p style="color: #666; font-size: 12px;">Workforce Management System</p>
+    </div>
   `;
-  return sendEmail(employeeEmail, subject, htmlContent);
-}
+  return sendEmail(email, subject, html);
+};
 
-/**
- * Send task rejection notification to employee
- */
-async function sendTaskRejectionEmail(employeeEmail, employeeName, taskTitle, feedback) {
-  const subject = `Task Needs Revision: ${taskTitle}`;
-  const htmlContent = `
-    <html>
-      <body style="font-family: Arial, sans-serif; color: #333;">
-        <div style="max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #ddd; border-radius: 8px;">
-          <h2 style="color: #ef4444;">⚠ Task Needs Revision</h2>
-          <p>Hello <strong>${employeeName}</strong>,</p>
-          <p>Your task report for <strong>${taskTitle}</strong> has been <strong style="color: #ef4444;">REJECTED</strong>. Please review the feedback and resubmit.</p>
-          <div style="background-color: #fef2f2; padding: 15px; border-left: 4px solid #ef4444; margin: 20px 0;">
-            <p><strong>Task:</strong> ${taskTitle}</p>
-            <p><strong>Admin Feedback:</strong></p>
-            <div style="background-color: white; padding: 10px; border-radius: 4px;">${feedback || 'Please see admin notes'}</div>
-          </div>
-          <p>Please address the issues mentioned above and resubmit your report.</p>
-          <p style="color: #666; font-size: 12px; margin-top: 30px;">
-            This is an automated message from Workforce Management System. Please do not reply to this email.
-          </p>
-        </div>
-      </body>
-    </html>
+const sendTaskRejectionEmail = async (email, name, taskTitle, feedback) => {
+  const subject = `Task Requires Revision: ${taskTitle}`;
+  const html = `
+    <div style="font-family: Arial, sans-serif; max-width: 600px;">
+      <h2>Task Needs Revision</h2>
+      <p>Hello ${name},</p>
+      <p>Your task <strong>"${taskTitle}"</strong> requires revisions.</p>
+      <p>Feedback: ${feedback || 'Please review and resubmit.'}</p>
+      <p>Please update and resubmit your report in the system.</p>
+      <hr />
+      <p style="color: #666; font-size: 12px;">Workforce Management System</p>
+    </div>
   `;
-  return sendEmail(employeeEmail, subject, htmlContent);
-}
+  return sendEmail(email, subject, html);
+};
 
-/**
- * Send admin notification about new user registration
- */
-async function sendAdminNewUserEmail(adminEmail, adminName, newUserName, newUserEmail, newUserRole) {
+const sendQRCodeEmail = async (email, name, qrData) => {
+  const subject = 'Your QR Details';
+  const html = `
+    <div style="font-family: Arial, sans-serif; max-width: 600px;">
+      <h2>QR Access Information</h2>
+      <p>Hello ${name},</p>
+      <p>Your QR data is ready. Please use it for check-ins and task scanning.</p>
+      <pre style="background: #f9f9f9; padding: 10px; border-radius: 4px;">${qrData}</pre>
+      <p style="color: #666; font-size: 12px;">Workforce Management System</p>
+    </div>
+  `;
+  return sendEmail(email, subject, html);
+};
+
+const sendPasswordResetEmail = async (email, resetUrl) => {
+  const subject = 'Password Reset Request';
+  const html = `
+    <div style="font-family: Arial, sans-serif; max-width: 600px;">
+      <h2>Password Reset</h2>
+      <p>We received a request to reset your password. If this was not you, please ignore this email.</p>
+      <p>Click below to reset your password:</p>
+      <p><a href="${resetUrl}" style="background-color: #007bff; color: white; padding: 10px 15px; text-decoration: none; border-radius: 4px;">Reset Password</a></p>
+      <p>This link expires in 1 hour.</p>
+      <hr />
+      <p style="color: #666; font-size: 12px;">Workforce Management System</p>
+    </div>
+  `;
+  return sendEmail(email, subject, html);
+};
+
+const sendAdminNewUserEmail = async (adminEmail, adminName, newUserName, newUserEmail, newUserRole) => {
   const subject = `New User Registered: ${newUserName}`;
-  const htmlContent = `
-    <html>
-      <body style="font-family: Arial, sans-serif; color: #333;">
-        <div style="max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #ddd; border-radius: 8px;">
-          <h2 style="color: #0f172a;">👤 New User Registration</h2>
-          <p>Hello <strong>${adminName}</strong>,</p>
-          <p>A new user has registered in the WFMS system:</p>
-          <div style="background-color: #f0f4f8; padding: 15px; border-left: 4px solid #10b981; margin: 20px 0;">
-            <p><strong>Name:</strong> ${newUserName}</p>
-            <p><strong>Email:</strong> ${newUserEmail}</p>
-            <p><strong>Role:</strong> ${newUserRole}</p>
-          </div>
-          <p>The user can now log in and access the system.</p>
-          <p style="color: #666; font-size: 12px; margin-top: 30px;">
-            This is an automated message from Workforce Management System. Please do not reply to this email.
-          </p>
-        </div>
-      </body>
-    </html>
+  const html = `
+    <div style="font-family: Arial, sans-serif; max-width: 600px;">
+      <h2>New User Registration</h2>
+      <p>Hello ${adminName},</p>
+      <p>A new user has joined the system:</p>
+      <ul>
+        <li><strong>Name:</strong> ${newUserName}</li>
+        <li><strong>Email:</strong> ${newUserEmail}</li>
+        <li><strong>Role:</strong> ${newUserRole}</li>
+      </ul>
+      <p>Please review and assign as needed.</p>
+      <hr />
+      <p style="color: #666; font-size: 12px;">Workforce Management System</p>
+    </div>
   `;
-  return sendEmail(adminEmail, subject, htmlContent);
-}
+  return sendEmail(adminEmail, subject, html);
+};
 
 module.exports = {
   initializeEmailService,
   sendEmail,
   sendTaskAssignedEmail,
-  sendTaskSubmissionEmail,
   sendTaskApprovalEmail,
   sendTaskRejectionEmail,
-  sendAdminNewUserEmail
+  sendQRCodeEmail,
+  sendPasswordResetEmail,
+  sendAdminNewUserEmail,
 };

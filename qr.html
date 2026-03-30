@@ -26,7 +26,53 @@
     <div id="result"></div>
   </div>
 
-  <script src="qrcode.min.js"></script>
-  <script src="script.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.1/build/qrcode.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/html5-qrcode/2.3.7/html5-qrcode.min.js" integrity="sha512-Lki2I4WGFzqMREM79Ntuh+mQqQMk3l0rQmtZ0Yx6VzLMIhL12tZoV8c8KecI8RTaAaOpI5G7kB7sQbAzbB1H7A==" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+  <script>
+    const qrcodeContainer = document.getElementById('qrcode');
+    const resultEl = document.getElementById('result');
+
+    document.getElementById('generateBtn').addEventListener('click', () => {
+      const name = document.getElementById('name').value.trim();
+      const id = document.getElementById('id').value.trim();
+      if (!name || !id) {
+        resultEl.textContent = 'Please enter name and user ID.';
+        return;
+      }
+      QRCode.toCanvas(qrcodeContainer, JSON.stringify({ userId: id, name }), { width: 250 }, (error) => {
+        if (error) return resultEl.textContent = 'Failed to generate QR';
+        resultEl.textContent = 'QR code created. Scan it to login.';
+      });
+    });
+
+    document.getElementById('scanBtn').addEventListener('click', () => {
+      const html5QrcodeScanner = new Html5Qrcode('qrcode');
+      html5QrcodeScanner.start({ facingMode: 'environment' }, {
+        fps: 10, qrbox: 250
+      }, (decodedText) => {
+        html5QrcodeScanner.stop().catch(() => {});
+        resultEl.textContent = 'Scanned: ' + decodedText;
+
+        fetch('/api/scan-qr', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ scanResult: decodedText })
+        }).then(r => r.json()).then(data => {
+          if (data.ok) {
+            resultEl.textContent = 'Scan recorded: ' + data.scanTime;
+          } else {
+            resultEl.textContent = 'Scan error: ' + (data.error || 'Invalid');
+          }
+        }).catch(err => {
+          console.error(err);
+          resultEl.textContent = 'Network error while scanning';
+        });
+      }, (errorMessage) => {
+        console.debug('QR scan error', errorMessage);
+      }).catch((err) => {
+        resultEl.textContent = 'Unable to start QR scanner: ' + err;
+      });
+    });
+  </script>
 </body>
 </html>

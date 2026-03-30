@@ -1,0 +1,559 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>BNS · Black Nova Shift · Logo Concepts</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            background: #0a0c12;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', sans-serif;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+            padding: 2rem;
+        }
+
+        .container {
+            max-width: 1200px;
+            width: 100%;
+        }
+
+        h1 {
+            text-align: center;
+            font-size: 3rem;
+            font-weight: 800;
+            letter-spacing: -0.02em;
+            background: linear-gradient(135deg, #ffffff 0%, #a0a0a0 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            margin-bottom: 0.5rem;
+        }
+
+        .subtitle {
+            text-align: center;
+            color: #6b7280;
+            font-size: 1.1rem;
+            margin-bottom: 3rem;
+            border-bottom: 1px solid #1f2937;
+            padding-bottom: 2rem;
+        }
+
+        .domain {
+            display: inline-block;
+            background: #1f2937;
+            color: #3b82f6;
+            padding: 0.2rem 1rem;
+            border-radius: 100px;
+            font-weight: 600;
+            font-size: 1.2rem;
+            margin-left: 0.5rem;
+        }
+
+        .grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(350px, 1fr));
+            gap: 2rem;
+            margin-top: 2rem;
+        }
+
+        .card {
+            background: #111827;
+            border-radius: 24px;
+            padding: 2rem;
+            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+            border: 1px solid #1f2937;
+            transition: transform 0.2s;
+        }
+
+        .card:hover {
+            transform: translateY(-5px);
+            border-color: #3b82f6;
+        }
+
+        .card h2 {
+            color: #e5e7eb;
+            font-size: 1.3rem;
+            font-weight: 600;
+            margin-bottom: 1.5rem;
+            letter-spacing: 0.5px;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .card h2 span {
+            background: #1f2937;
+            padding: 0.2rem 0.6rem;
+            border-radius: 20px;
+            font-size: 0.8rem;
+            color: #9ca3af;
+        }
+
+        .logo-preview {
+            background: #0a0c12;
+            border-radius: 20px;
+            padding: 2rem;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            min-height: 200px;
+            border: 1px solid #1f2937;
+            margin-bottom: 1.5rem;
+        }
+
+        .tagline {
+            color: #6b7280;
+            font-size: 0.9rem;
+            font-style: italic;
+            margin-top: 1rem;
+            text-align: center;
+            border-top: 1px solid #1f2937;
+            padding-top: 1rem;
+        }
+
+        /* ===== CONCEPT 1: THE DARK STAR ===== */
+        .dark-star {
+            position: relative;
+            width: 180px;
+            height: 180px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .dark-star::before {
+            content: '';
+            position: absolute;
+            width: 100%;
+            height: 100%;
+            background: radial-gradient(circle at 30% 30%, #00f0ff20, transparent 70%);
+            border-radius: 50%;
+        }
+
+        .dark-star .b {
+            font-size: 7rem;
+            font-weight: 900;
+            background: linear-gradient(135deg, #ffffff, #a0a0a0);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            transform: rotate(-5deg);
+            position: relative;
+            z-index: 2;
+            font-family: 'Montserrat', 'Arial Black', sans-serif;
+        }
+
+        .dark-star .nova-dot {
+            position: absolute;
+            top: 30%;
+            right: 25%;
+            width: 20px;
+            height: 20px;
+            background: #00f0ff;
+            border-radius: 50%;
+            box-shadow: 0 0 20px #00f0ff;
+            animation: pulse 2s infinite;
+        }
+
+        .dark-star .crescent {
+            position: absolute;
+            bottom: 25%;
+            left: 20%;
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            box-shadow: -10px 0 0 0 #ffffff20;
+        }
+
+        /* ===== CONCEPT 2: THE SHIFT ICON ===== */
+        .shift-icon {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 1rem;
+        }
+
+        .shift-lines {
+            display: flex;
+            gap: 12px;
+            transform: skewX(-10deg);
+        }
+
+        .shift-line {
+            width: 12px;
+            height: 70px;
+            background: linear-gradient(to bottom, #ffffff, #4b5563);
+            border-radius: 20px;
+            position: relative;
+        }
+
+        .shift-line:nth-child(2) {
+            background: linear-gradient(to bottom, #fbbf24, #b45309);
+            height: 90px;
+            margin-top: -10px;
+        }
+
+        .shift-line::after {
+            content: '';
+            position: absolute;
+            top: -10px;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 20px;
+            height: 20px;
+            background: inherit;
+            border-radius: 50%;
+            filter: blur(4px);
+        }
+
+        .shift-text {
+            font-size: 2.5rem;
+            font-weight: 800;
+            letter-spacing: 4px;
+            background: linear-gradient(135deg, #ffffff, #9ca3af);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        /* ===== CONCEPT 3: THE NOVA BURST ===== */
+        .nova-burst {
+            position: relative;
+            width: 200px;
+            height: 200px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .burst {
+            position: absolute;
+            width: 100%;
+            height: 100%;
+            background: radial-gradient(circle at center, #ff5e00 0%, transparent 70%);
+            border-radius: 50%;
+            animation: spin 10s linear infinite;
+        }
+
+        .burst::before,
+        .burst::after {
+            content: '';
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            width: 200%;
+            height: 200%;
+            background: conic-gradient(from 0deg, transparent 0deg 340deg, #ff5e0020 340deg 360deg);
+            transform: translate(-50%, -50%);
+            border-radius: 50%;
+        }
+
+        .burst-letters {
+            position: relative;
+            z-index: 2;
+            display: flex;
+            gap: 0.8rem;
+            font-size: 4rem;
+            font-weight: 900;
+            color: white;
+            text-shadow: 0 0 20px #ff5e00;
+            font-family: 'Oswald', 'Impact', sans-serif;
+        }
+
+        /* ===== CONCEPT 4: THE MINIMAL BADGE ===== */
+        .minimal-badge {
+            background: #1e1e1e;
+            padding: 1.5rem 2.5rem;
+            border-radius: 30px;
+            box-shadow: 0 10px 30px -10px #00000080, inset 0 1px 0 #ffffff20;
+            border: 1px solid #2d2d2d;
+        }
+
+        .badge-stack {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            line-height: 0.8;
+        }
+
+        .badge-stack span {
+            font-size: 5rem;
+            font-weight: 900;
+            background: linear-gradient(135deg, #e0e0e0, #909090);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            text-shadow: 0 2px 5px #00000050;
+            font-family: 'Times New Roman', serif;
+        }
+
+        .badge-stack span:nth-child(2) {
+            font-size: 4.5rem;
+            margin-left: 0.5rem;
+        }
+
+        .badge-stack span:nth-child(3) {
+            font-size: 4rem;
+            font-family: 'Arial Black', sans-serif;
+            background: linear-gradient(135deg, #3b82f6, #2563eb);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        /* ===== CONCEPT 5: THE CODE SHIFT ===== */
+        .code-shift {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            font-size: 4rem;
+            font-weight: 900;
+            font-family: 'Fira Code', 'Courier New', monospace;
+        }
+
+        .bracket {
+            color: #4ec9b0;
+            text-shadow: 0 0 10px #4ec9b070;
+        }
+
+        .code-b {
+            color: #569cd6;
+        }
+
+        .code-n {
+            color: #dcdcaa;
+        }
+
+        .code-s {
+            color: #4ec9b0;
+            transform: rotate(90deg);
+            display: inline-block;
+        }
+
+        .code-arrow {
+            font-size: 2rem;
+            color: #4ec9b0;
+            margin-left: 0.5rem;
+            opacity: 0.7;
+        }
+
+        /* ===== ANIMATIONS ===== */
+        @keyframes pulse {
+            0%, 100% { opacity: 1; transform: scale(1); }
+            50% { opacity: 0.5; transform: scale(1.2); }
+        }
+
+        @keyframes spin {
+            from { transform: rotate(0deg); }
+            to { transform: rotate(360deg); }
+        }
+
+        /* ===== CONCEPT 6: BONUS – BNS.COM LOGO ===== */
+        .bns-com {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .bns-letters {
+            display: flex;
+            gap: 0.2rem;
+            font-size: 5rem;
+            font-weight: 900;
+            line-height: 1;
+        }
+
+        .bns-letters span {
+            background: linear-gradient(135deg, #3b82f6, #00f0ff);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            text-shadow: 0 0 30px #3b82f6;
+        }
+
+        .dot-com {
+            font-size: 1.2rem;
+            color: #4b5563;
+            letter-spacing: 2px;
+        }
+
+        .dot-com .com {
+            color: #3b82f6;
+            font-weight: 600;
+        }
+
+        .star-row {
+            display: flex;
+            gap: 0.3rem;
+            margin-top: 0.5rem;
+        }
+
+        .star {
+            color: #fbbf24;
+            font-size: 1.5rem;
+            animation: pulse 2s infinite;
+            animation-delay: calc(var(--i) * 0.3s);
+        }
+
+        /* Responsive */
+        @media (max-width: 768px) {
+            .grid {
+                grid-template-columns: 1fr;
+            }
+            h1 { font-size: 2rem; }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>
+            BLACK NOVA SHIFT
+            <span class="domain">BNS.com</span>
+        </h1>
+        <div class="subtitle">
+            Six powerful logo concepts · ⭐ The future of workforce management
+        </div>
+
+        <div class="grid">
+            <!-- Concept 1: Dark Star -->
+            <div class="card">
+                <h2>⚡ 01. THE DARK STAR <span>cosmic</span></h2>
+                <div class="logo-preview">
+                    <div class="dark-star">
+                        <div class="b">B</div>
+                        <div class="nova-dot" style="--i:1"></div>
+                        <div class="crescent"></div>
+                    </div>
+                </div>
+                <div class="tagline">“Shift Into the Future”</div>
+            </div>
+
+            <!-- Concept 2: Shift Icon -->
+            <div class="card">
+                <h2>⏩ 02. THE SHIFT ICON <span>minimal</span></h2>
+                <div class="logo-preview">
+                    <div class="shift-icon">
+                        <div class="shift-lines">
+                            <div class="shift-line"></div>
+                            <div class="shift-line"></div>
+                            <div class="shift-line"></div>
+                        </div>
+                        <div class="shift-text">BNS</div>
+                    </div>
+                </div>
+                <div class="tagline">“Black Nova Shift”</div>
+            </div>
+
+            <!-- Concept 3: Nova Burst -->
+            <div class="card">
+                <h2>💥 03. THE NOVA BURST <span>dynamic</span></h2>
+                <div class="logo-preview">
+                    <div class="nova-burst">
+                        <div class="burst"></div>
+                        <div class="burst-letters">
+                            <span>B</span>
+                            <span>N</span>
+                            <span>S</span>
+                        </div>
+                    </div>
+                </div>
+                <div class="tagline">“Where Work Transforms”</div>
+            </div>
+
+            <!-- Concept 4: Minimal Badge -->
+            <div class="card">
+                <h2>🎴 04. THE MINIMAL BADGE <span>premium</span></h2>
+                <div class="logo-preview">
+                    <div class="minimal-badge">
+                        <div class="badge-stack">
+                            <span>B</span>
+                            <span>N</span>
+                            <span>S</span>
+                        </div>
+                    </div>
+                </div>
+                <div class="tagline">“BNS – Shift With Purpose”</div>
+            </div>
+
+            <!-- Concept 5: Code Shift -->
+            <div class="card">
+                <h2>{ } 05. THE CODE SHIFT <span>dev-mode</span></h2>
+                <div class="logo-preview">
+                    <div class="code-shift">
+                        <span class="bracket">{</span>
+                        <span class="code-b">B</span>
+                        <span class="code-n">N</span>
+                        <span class="code-s">S</span>
+                        <span class="bracket">}</span>
+                        <span class="code-arrow">⇧</span>
+                    </div>
+                </div>
+                <div class="tagline">“Code. Shift. Deploy.”</div>
+            </div>
+
+            <!-- Concept 6: BONUS – BNS.com signature -->
+            <div class="card" style="border-color: #3b82f6;">
+                <h2>🌟 06. BNS.COM SIGNATURE <span>the winner</span></h2>
+                <div class="logo-preview">
+                    <div class="bns-com">
+                        <div class="bns-letters">
+                            <span>B</span>
+                            <span>N</span>
+                            <span>S</span>
+                        </div>
+                        <div class="dot-com">
+                            <span class="com">.com</span>
+                        </div>
+                        <div class="star-row">
+                            <span class="star" style="--i:1">⭐</span>
+                            <span class="star" style="--i:2">⭐</span>
+                            <span class="star" style="--i:3">⭐</span>
+                            <span class="star" style="--i:4">⭐</span>
+                            <span class="star" style="--i:5">⭐</span>
+                        </div>
+                    </div>
+                </div>
+                <div class="tagline">“bns.com – Shift Your Workforce”</div>
+            </div>
+        </div>
+
+        <!-- Color palette section -->
+        <div style="margin-top: 4rem; padding: 2rem; background: #111827; border-radius: 24px; border: 1px solid #1f2937;">
+            <h3 style="color: white; margin-bottom: 1.5rem; font-size: 1.5rem;">🎨 Signature Color Palette</h3>
+            <div style="display: flex; gap: 2rem; flex-wrap: wrap; justify-content: center;">
+                <div style="text-align: center;">
+                    <div style="width: 80px; height: 80px; background: #0B0B0B; border-radius: 12px; border: 2px solid #3b82f6;"></div>
+                    <p style="color: #9ca3af; margin-top: 0.5rem;">Deep Space</p>
+                </div>
+                <div style="text-align: center;">
+                    <div style="width: 80px; height: 80px; background: #00F0FF; border-radius: 12px;"></div>
+                    <p style="color: #9ca3af; margin-top: 0.5rem;">Nova Blue</p>
+                </div>
+                <div style="text-align: center;">
+                    <div style="width: 80px; height: 80px; background: #FF5E00; border-radius: 12px;"></div>
+                    <p style="color: #9ca3af; margin-top: 0.5rem;">Burst Orange</p>
+                </div>
+                <div style="text-align: center;">
+                    <div style="width: 80px; height: 80px; background: #FBBF24; border-radius: 12px;"></div>
+                    <p style="color: #9ca3af; margin-top: 0.5rem;">Star Gold</p>
+                </div>
+                <div style="text-align: center;">
+                    <div style="width: 80px; height: 80px; background: #1E1E1E; border-radius: 12px; border: 1px solid #4EC9B0;"></div>
+                    <p style="color: #9ca3af; margin-top: 0.5rem;">Code Dark</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Footer -->
+        <div style="text-align: center; margin-top: 3rem; color: #4b5563;">
+            <p style="font-size: 1.2rem;">⚡ <strong style="color: #3b82f6;">BNS.com</strong> – Black Nova Shift ⚡</p>
+            <p style="margin-top: 0.5rem;">The future of workforce management, shifted into hyperdrive 🚀</p>
+        </div>
+    </div>
+</body>
+</html>

@@ -1,61 +1,21 @@
-// api/index.js - Your Express app for Vercel (MongoDB Version) - COMPLETE FIXED VERSION
-const express = require('express');
-const path = require('path');
-const cors = require('cors');
-const bcrypt = require('bcrypt');
-const jwt = require('jsonwebtoken');
-const { v4: uuidv4 } = require('uuid');
-const QR = require('qrcode');
-const fs = require('fs');
-
-// Import your database module (MongoDB version)
-const { 
-  User, 
-  Task, 
-  QRCode, 
-  QRScan, 
-  Performance, 
-  Attendance, 
-  TimeLog,
-  dbGet,
-  dbAll,
-  dbRun 
-} = require('../db');
-
-// Import email service
-const emailService = require('../models/emailService');
-
-const app = express();
-
-// ========== 1. MIDDLEWARE ==========
-app.use(cors());
-app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
-
-// Initialize email service
-emailService.initializeEmailService();
-
-// JWT Secret
-const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key-change-in-production';
-
-// Token file path for legacy routes
-const DATA_DIR = path.join(__dirname, '../data');
-const TOKENS_FILE = path.join(DATA_DIR, 'tokens.json');
-
-// Ensure data dir exists
-try { if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR); } catch(e){}
-try { if (!fs.existsSync(TOKENS_FILE)) fs.writeFileSync(TOKENS_FILE, JSON.stringify({}), 'utf8'); } catch(e){}
-
-// ========== 2. STATIC FILES - Serve from /static path ==========
-// This prevents conflicts with API routes
-app.use('/static', express.static(path.join(__dirname, '../public')));
+// api/index.js
+const app = require('../server');
+module.exports = app;
 
 // Also serve root static files for backward compatibility
 app.use(express.static(path.join(__dirname, '../public')));
 
 // ========== 3. HEALTH CHECK ==========
 app.get('/api/health', (req, res) => {
-  res.json({ status: 'OK', message: 'WFMS API is running', timestamp: new Date().toISOString() });
+  res.json({ 
+    status: 'OK', 
+    message: 'WFMS API is running', 
+    timestamp: new Date().toISOString(),
+    testCredentials: {
+      admin: { email: 'admin@wfms.com', password: 'admin123' },
+      worker: { email: 'john@wfms.com', password: 'worker123' }
+    }
+  });
 });
 
 // ========== 4. AUTH ROUTES ==========
@@ -258,10 +218,10 @@ app.post('/api/auth/google', async (req, res) => {
 app.get('/api/users', async (req, res) => {
   try {
     const users = await User.find({}, 'name role email');
-    res.json(users);
+    res.json({ ok: true, users });
   } catch (err) {
     console.error(err);
-    res.status(500).json({ error: err.message });
+    res.status(500).json({ ok: false, error: err.message });
   }
 });
 
@@ -701,16 +661,38 @@ app.get('/api/user-qr/:userId', async (req, res) => {
 // Scan QR code
 app.post('/api/scan-qr', async (req, res) => {
   try {
-    const { qrToken, userId } = req.body;
-    if (!qrToken || !userId) {
-      return res.status(400).json({ error: 'qrToken and userId required' });
+    let { qrToken, userId, scanResult } = req.body;
+
+    if (!qrToken && scanResult) {
+      if (typeof scanResult === 'string') {
+        try {
+          const payload = JSON.parse(scanResult);
+          qrToken = qrToken || payload.token || payload.qr_token;
+          userId = userId || payload.userId || payload.user_id || payload.id;
+        } catch (e) {
+          qrToken = qrToken || scanResult;
+        }
+      }
     }
 
-    // Verify QR token belongs to this user
-    const qrCode = await QRCode.findOne({ qr_token: qrToken, user_id: userId });
-    
+    if (!qrToken) {
+      return res.status(400).json({ error: 'qrToken required' });
+    }
+
+    let qrCode;
+    if (userId && mongoose.Types.ObjectId.isValid(userId)) {
+      qrCode = await QRCode.findOne({ qr_token: qrToken, user_id: userId });
+    } else {
+      qrCode = await QRCode.findOne({ qr_token: qrToken });
+      if (qrCode) userId = qrCode.user_id.toString();
+    }
+
     if (!qrCode) {
       return res.status(404).json({ error: 'Invalid QR code' });
+    }
+
+    if (userId && !mongoose.Types.ObjectId.isValid(userId)) {
+      return res.status(400).json({ error: 'Invalid userId format' });
     }
 
     const now = new Date();
@@ -847,10 +829,10 @@ app.get('/api/attendance/:user_id', async (req, res) => {
     const records = await Attendance.find({ user_id })
       .sort({ timestamp: -1 });
     
-    res.json(records);
+    res.json({ ok: true, records });
   } catch (err) {
     console.error(err);
-    res.status(500).json({ error: err.message });
+    res.status(500).json({ ok: false, error: err.message });
   }
 });
 
@@ -919,12 +901,35 @@ app.post('/api/generate-qr-token', async (req, res) => {
   }
 });
 
-// Generate QR (file-based legacy)
+// Generate QR (legacy and fallback to user QR generation)
 app.post('/api/generate-qr', async (req, res) => {
   try {
-    const { username, role } = req.body;
-    if (!username) return res.status(400).json({ error: 'username required' });
-    
+    const { userId, email, name, username, role } = req.body;
+
+    if (userId) {
+      if (!mongoose.Types.ObjectId.isValid(userId)) {
+        return res.status(400).json({ error: 'Invalid userId format' });
+      }
+
+      const existingQR = await QRCode.findOne({ user_id: userId });
+      if (existingQR) {
+        return res.json({ ok: true, qrToken: existingQR.qr_token, qrData: existingQR.qr_data, isActivated: existingQR.is_activated });
+      }
+
+      const qrToken = uuidv4();
+      const qrPayload = JSON.stringify({ userId, email, name, token: qrToken, timestamp: new Date().toISOString() });
+      const qrData = await QR.toDataURL(qrPayload, { errorCorrectionLevel: 'H', type: 'image/png', width: 300, margin: 2 });
+
+      const qrCode = new QRCode({ user_id: userId, qr_token: qrToken, qr_data: qrData });
+      await qrCode.save();
+
+      return res.json({ ok: true, qrToken, qrData, isActivated: false });
+    }
+
+    if (!username) {
+      return res.status(400).json({ error: 'username required' });
+    }
+
     const token = uuidv4();
     let tokens = {};
     try {
@@ -932,12 +937,12 @@ app.post('/api/generate-qr', async (req, res) => {
     } catch (e) {
       tokens = {};
     }
-    
+
     tokens[token] = { username, role, createdAt: new Date().toISOString() };
     fs.writeFileSync(TOKENS_FILE, JSON.stringify(tokens, null, 2), 'utf8');
-    
+
     const qrData = await QR.toDataURL(token);
-    res.json({ token, qrData });
+    res.json({ ok: true, token, qrData });
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'QR generation failed' });
@@ -967,12 +972,40 @@ app.post('/api/validate-token', (req, res) => {
   }
 });
 
-// ========== 10. CATCH-ALL ROUTE FOR SPA ==========
+// ========== 10. API 404 HANDLER ==========
+app.all('/api/*', (req, res) => {
+  res.status(404).json({ 
+    ok: false,
+    error: 'API endpoint not found',
+    method: req.method,
+    path: req.path
+  });
+});
+
+// ========== 11. ERROR HANDLER ==========
+app.use((err, req, res, next) => {
+  console.error('❌ Unhandled error:', err.message);
+  
+  if (res.headersSent) {
+    return next(err);
+  }
+  
+  if (req.path.startsWith('/api/')) {
+    return res.status(err.status || 500).json({
+      ok: false,
+      error: err.message || 'Internal server error'
+    });
+  }
+  
+  next(err);
+});
+
+// ========== 12. CATCH-ALL ROUTE FOR SPA ==========
 // This must be the LAST route
 app.get('*', (req, res) => {
   // Don't serve index.html for API routes (return 404 instead)
   if (req.path.startsWith('/api/')) {
-    return res.status(404).json({ error: 'API endpoint not found' });
+    return res.status(404).json({ ok: false, error: 'API endpoint not found' });
   }
   
   // For all other routes, serve the SPA

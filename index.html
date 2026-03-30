@@ -3,248 +3,903 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>WFMS – Workforce Management System</title>
+  <title>BNS · Black Nova Shift · Workforce Management System</title>
 
   <!-- PWA Manifest & Icons -->
   <link rel="manifest" href="manifest.json" />
-  <link rel="apple-touch-icon" href="icons/apple-touch-icon.png" />
-  <meta name="msapplication-TileColor" content="#0f172a" />
+  <meta name="theme-color" content="#0B0B0B" />
   <meta name="mobile-web-app-capable" content="yes" />
-  <meta name="theme-color" content="#0f172a" />
 
-  <!-- Custom CSS (load this first) -->
-  <link rel="stylesheet" href="style.css" />
+  <!-- Fonts -->
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=Fira+Code:wght@400;600&display=swap" rel="stylesheet" />
 
-  <!-- Resource Loader - This will handle all CDN resources -->
-  <script>
-    // CDN Fallback System - MySQL Backend (Firebase disabled)
-    
-    const resources = {
-        styles: [
-            {
-                primary: 'https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css',
-                fallbacks: [
-                    'https://stackpath.bootstrapcdn.com/bootstrap/5.3.2/css/bootstrap.min.css',
-                    'https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.2/css/bootstrap.min.css'
-                ]
-            },
-            {
-                primary: 'https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css',
-                fallbacks: [
-                    'https://stackpath.bootstrapcdn.com/bootstrap-icons/1.11.3/font/bootstrap-icons.css',
-                    'https://cdnjs.cloudflare.com/ajax/libs/bootstrap-icons/1.11.3/font/bootstrap-icons.css'
-                ]
-            }
-        ],
-        scripts: [
-            {
-                primary: 'https://cdn.socket.io/4.5.4/socket.io.min.js',
-                fallbacks: [
-                    'https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.5.4/socket.io.min.js',
-                    'https://unpkg.com/socket.io-client@4.5.4/dist/socket.io.min.js'
-                ],
-                check: 'io'
-            },
-            {
-                primary: 'https://unpkg.com/html5-qrcode@2.3.7/minified/html5-qrcode.min.js',
-                fallbacks: [
-                    'https://cdn.jsdelivr.net/npm/html5-qrcode@2.3.7/minified/html5-qrcode.min.js',
-                    'https://cdnjs.cloudflare.com/ajax/libs/html5-qrcode/2.3.7/html5-qrcode.min.js',
-                    'https://cors-anywhere.herokuapp.com/https://unpkg.com/html5-qrcode@2.3.7/minified/html5-qrcode.min.js'
-                ],
-                check: 'Html5Qrcode'
-            },
-            {
-                primary: 'https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js',
-                fallbacks: [
-                    'https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js',
-                    'https://unpkg.com/jspdf@2.5.1/dist/jspdf.umd.min.js'
-                ],
-                check: 'jspdf'
-            },
-            {
-                primary: 'https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js',
-                fallbacks: [
-                    'https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js',
-                    'https://unpkg.com/chart.js@4.4.1/dist/chart.umd.min.js'
-                ],
-                check: 'Chart'
-            }
-            // REMOVED FIREBASE SCRIPTS - We're using MySQL
-        ]
-    };
-
-    // Loader functions (keep these as they are)
-    async function loadResource(resource) {
-        if (resource.type === 'style') {
-            return loadStyle(resource);
-        } else {
-            return loadScript(resource);
-        }
+  <style>
+    /* ===== RESET & CUSTOM PROPERTIES ===== */
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
     }
 
-    function loadStyle(resource) {
-        return new Promise((resolve, reject) => {
-            // Check if already loaded
-            const existing = Array.from(document.querySelectorAll('link')).find(
-                link => link.href === resource.primary
-            );
-            if (existing) {
-                console.log(`✅ Already loaded: ${resource.primary}`);
-                resolve();
-                return;
-            }
-
-            const link = document.createElement('link');
-            link.rel = 'stylesheet';
-            link.href = resource.primary;
-            
-            link.onload = () => {
-                console.log(`✅ Loaded: ${resource.primary}`);
-                resolve();
-            };
-            
-            link.onerror = () => {
-                console.warn(`⚠️ Failed: ${resource.primary}, trying fallbacks...`);
-                tryFallbacks(resource, 0, 'style', resolve, reject);
-            };
-            
-            document.head.appendChild(link);
-        });
+    :root {
+      /* BNS.com Color Palette */
+      --deep-space: #0B0B0B;
+      --space-light: #1a1a1a;
+      --nova-blue: #00F0FF;
+      --nova-blue-dark: #00c0cc;
+      --burst-orange: #FF5E00;
+      --star-gold: #FBBF24;
+      --code-dark: #1E1E1E;
+      --code-green: #4EC9B0;
+      --code-blue: #569CD6;
+      --code-yellow: #DCDCAA;
+      
+      /* Neutrals */
+      --gray-50: #f9fafb;
+      --gray-100: #f3f4f6;
+      --gray-200: #e5e7eb;
+      --gray-300: #d1d5db;
+      --gray-400: #9ca3af;
+      --gray-500: #6b7280;
+      --gray-600: #4b5563;
+      --gray-700: #374151;
+      --gray-800: #1f2937;
+      --gray-900: #111827;
+      
+      /* Semantic */
+      --primary: var(--nova-blue);
+      --primary-dark: var(--nova-blue-dark);
+      --secondary: var(--burst-orange);
+      --success: #10b981;
+      --warning: var(--star-gold);
+      --danger: #ef4444;
+      --info: var(--code-blue);
+      
+      /* Dark theme (default) */
+      --bg-primary: var(--deep-space);
+      --bg-secondary: #111827;
+      --bg-card: #1a1a1a;
+      --text-primary: #ffffff;
+      --text-secondary: var(--gray-400);
+      --border-color: #2d2d2d;
+      --border-glow: rgba(0, 240, 255, 0.2);
+      
+      --radius: 16px;
+      --radius-sm: 8px;
+      --shadow: 0 4px 6px rgba(0, 0, 0, 0.3);
+      --shadow-lg: 0 20px 25px -5px rgba(0, 0, 0, 0.5), 0 10px 10px -5px rgba(0, 240, 255, 0.1);
+      --shadow-glow: 0 0 20px rgba(0, 240, 255, 0.3);
     }
 
-    function loadScript(resource) {
-        return new Promise((resolve, reject) => {
-            // Check if already loaded
-            if (resource.check && window[resource.check]) {
-                console.log(`✅ Already loaded: ${resource.primary}`);
-                resolve();
-                return;
-            }
-
-            const script = document.createElement('script');
-            script.src = resource.primary;
-            
-            script.onload = () => {
-                // Verify the script actually loaded
-                if (resource.check && window[resource.check]) {
-                    console.log(`✅ Loaded: ${resource.primary}`);
-                    resolve();
-                } else {
-                    setTimeout(() => {
-                        if (resource.check && window[resource.check]) {
-                            console.log(`✅ Loaded: ${resource.primary}`);
-                            resolve();
-                        } else {
-                            console.warn(`⚠️ Script loaded but ${resource.check} not found, trying fallbacks...`);
-                            tryFallbacks(resource, 0, 'script', resolve, reject);
-                        }
-                    }, 100);
-                }
-            };
-            
-            script.onerror = () => {
-                console.warn(`⚠️ Failed: ${resource.primary}, trying fallbacks...`);
-                tryFallbacks(resource, 0, 'script', resolve, reject);
-            };
-            
-            document.head.appendChild(script);
-        });
+    /* Light theme */
+    body.light-theme {
+      --bg-primary: #f0f5fa;
+      --bg-secondary: #ffffff;
+      --bg-card: #ffffff;
+      --text-primary: #0f172a;
+      --text-secondary: #4b5563;
+      --border-color: #e2e8f0;
+      --border-glow: rgba(0, 240, 255, 0.5);
     }
 
-    function tryFallbacks(resource, index, type, resolve, reject) {
-        if (index >= resource.fallbacks.length) {
-            console.error(`❌ All fallbacks failed for ${resource.primary}`);
-            // Don't reject - continue with what we have
-            resolve();
-            return;
-        }
-
-        const url = resource.fallbacks[index];
-        
-        if (type === 'style') {
-            const link = document.createElement('link');
-            link.rel = 'stylesheet';
-            link.href = url;
-            
-            link.onload = () => {
-                console.log(`✅ Loaded fallback: ${url}`);
-                resolve();
-            };
-            
-            link.onerror = () => {
-                console.warn(`⚠️ Fallback failed: ${url}`);
-                tryFallbacks(resource, index + 1, type, resolve, reject);
-            };
-            
-            document.head.appendChild(link);
-        } else {
-            const script = document.createElement('script');
-            script.src = url;
-            
-            script.onload = () => {
-                if (resource.check && window[resource.check]) {
-                    console.log(`✅ Loaded fallback: ${url}`);
-                    resolve();
-                } else {
-                    setTimeout(() => {
-                        if (resource.check && window[resource.check]) {
-                            console.log(`✅ Loaded fallback: ${url}`);
-                            resolve();
-                        } else {
-                            tryFallbacks(resource, index + 1, type, resolve, reject);
-                        }
-                    }, 100);
-                }
-            };
-            
-            script.onerror = () => {
-                console.warn(`⚠️ Fallback failed: ${url}`);
-                tryFallbacks(resource, index + 1, type, resolve, reject);
-            };
-            
-            document.head.appendChild(script);
-        }
+    body {
+      background: var(--bg-primary);
+      color: var(--text-primary);
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+      font-size: 14px;
+      line-height: 1.6;
+      transition: background-color 0.3s ease, color 0.3s ease;
+      min-height: 100vh;
     }
 
-    // Load all resources
-    async function loadAllResources() {
-        try {
-            // Load styles first
-            for (const resource of resources.styles) {
-                await loadResource({...resource, type: 'style'});
-            }
-            
-            // Then load scripts
-            for (const resource of resources.scripts) {
-                await loadResource({...resource, type: 'script'});
-            }
-            
-            console.log('✅ All resources loaded successfully');
-            
-            // Dispatch event when everything is ready
-            window.dispatchEvent(new Event('resourcesLoaded'));
-            
-        } catch (error) {
-            console.error('❌ Failed to load some resources:', error);
-            // Still dispatch event so app tries to continue
-            window.dispatchEvent(new Event('resourcesLoaded'));
-        }
+    /* ===== BNS.COM LOGO STYLES ===== */
+    .bns-logo {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 0.25rem;
     }
 
-    // Start loading after DOM is ready
-    if (document.readyState === 'loading') {
-        document.addEventListener('DOMContentLoaded', loadAllResources);
-    } else {
-        loadAllResources();
+    .bns-logo-large {
+      transform: scale(1.2);
     }
-  </script>
-  <!-- REMOVED EXTRA </script> TAG -->
+
+    .bns-letters {
+      display: flex;
+      gap: 0.2rem;
+      font-size: 2.5rem;
+      font-weight: 900;
+      line-height: 1;
+      letter-spacing: -2px;
+    }
+
+    .bns-letters span {
+      background: linear-gradient(135deg, var(--nova-blue), var(--code-green));
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      text-shadow: 0 0 30px var(--nova-blue);
+      font-family: 'Inter', 'Arial Black', sans-serif;
+    }
+
+    .bns-logo-small .bns-letters {
+      font-size: 1.8rem;
+    }
+
+    .bns-logo-tiny .bns-letters {
+      font-size: 1.2rem;
+    }
+
+    .dot-com {
+      font-size: 0.9rem;
+      color: var(--gray-500);
+      letter-spacing: 1px;
+    }
+
+    .dot-com .com {
+      color: var(--nova-blue);
+      font-weight: 600;
+    }
+
+    .star-row {
+      display: flex;
+      gap: 0.2rem;
+      margin-top: 0.25rem;
+    }
+
+    .star {
+      color: var(--star-gold);
+      font-size: 0.8rem;
+      animation: pulse 2s infinite;
+      animation-delay: calc(var(--i) * 0.2s);
+    }
+
+    @keyframes pulse {
+      0%, 100% { opacity: 1; transform: scale(1); }
+      50% { opacity: 0.7; transform: scale(1.1); }
+    }
+
+    /* ===== UTILITIES ===== */
+    .hidden { display: none !important; }
+    .loading-overlay {
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background: rgba(0,0,0,0.5);
+      display: none;
+      justify-content: center;
+      align-items: center;
+      z-index: 9999;
+    }
+    .loading-spinner {
+      width: 50px;
+      height: 50px;
+      border: 3px solid #f3f3f3;
+      border-top: 3px solid #00F0FF;
+      border-radius: 50%;
+      animation: spin 1s linear infinite;
+    }
+    @keyframes spin {
+      from { transform: rotate(0deg); }
+      to { transform: rotate(360deg); }
+    }
+    .toast {
+      margin-bottom: 8px;
+      border-radius: 8px;
+      color: #fff;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 12px 16px;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+      animation: slideIn 0.3s ease;
+    }
+    .toast-content { flex: 1; padding-right: 8px; }
+    .toast-close {
+      border: none;
+      background: transparent;
+      color: #fff;
+      font-size: 18px;
+      cursor: pointer;
+    }
+    @keyframes slideIn {
+      from { opacity: 0; transform: translateY(-12px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+    .container { max-width: 1400px; margin: 0 auto; padding: 0 24px; }
+    .text-center { text-align: center; }
+    .text-gradient { 
+      background: linear-gradient(135deg, var(--nova-blue), var(--code-green));
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      font-weight: 700;
+    }
+
+    /* ===== THEME TOGGLE ===== */
+    .theme-toggle {
+      position: fixed;
+      top: 20px;
+      right: 130px;
+      background: var(--bg-card);
+      padding: 10px 16px;
+      border-radius: 50px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      border: 1px solid var(--border-color);
+      transition: all 0.3s ease;
+      z-index: 1000;
+      box-shadow: var(--shadow);
+    }
+
+    .theme-toggle + .header-right,
+    .header-right {
+      position: relative;
+      z-index: 800;
+    }
+
+    @media (max-width: 1024px) {
+      .theme-toggle {
+        right: 20px;
+        top: 70px;
+      }
+    }
+
+    .theme-toggle:hover {
+      border-color: var(--nova-blue);
+      box-shadow: var(--shadow-glow);
+      transform: translateY(-2px);
+    }
+
+    .theme-icon {
+      width: 20px;
+      height: 20px;
+      color: var(--nova-blue);
+    }
+
+    /* ===== AUTH SCREEN ===== */
+    #auth-overlay {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 100vh;
+      background: radial-gradient(circle at 50% 50%, var(--bg-secondary), var(--bg-primary));
+      padding: 20px;
+    }
+
+    #auth-box {
+      width: 100%;
+      max-width: 440px;
+    }
+
+    .auth-container {
+      background: var(--bg-card);
+      border: 1px solid var(--border-color);
+      padding: 40px;
+      border-radius: var(--radius);
+      box-shadow: var(--shadow-lg);
+      animation: slideUp 0.4s ease-out;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .auth-container::before {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      height: 4px;
+      background: linear-gradient(90deg, var(--nova-blue), var(--code-green), var(--burst-orange));
+    }
+
+    @keyframes slideUp {
+      from { opacity: 0; transform: translateY(20px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    .auth-header {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      margin-bottom: 30px;
+      gap: 20px;
+    }
+
+    /* ===== FORMS ===== */
+    .form-group { margin-bottom: 20px; }
+
+    .form-label {
+      display: block;
+      margin-bottom: 8px;
+      font-weight: 600;
+      color: var(--text-primary);
+      font-size: 13px;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+
+    .form-control {
+      width: 100%;
+      padding: 12px 16px;
+      border: 1px solid var(--border-color);
+      border-radius: var(--radius-sm);
+      background: var(--bg-secondary);
+      color: var(--text-primary);
+      font-size: 14px;
+      font-family: 'Inter', sans-serif;
+      transition: all 0.3s ease;
+    }
+
+    .form-control:focus {
+      outline: none;
+      border-color: var(--nova-blue);
+      box-shadow: 0 0 0 3px rgba(0, 240, 255, 0.1);
+    }
+
+    .input-group {
+      display: flex;
+      gap: 8px;
+    }
+
+    .input-group .form-control {
+      flex: 1;
+    }
+
+    /* ===== BUTTONS ===== */
+    .btn {
+      padding: 12px 20px;
+      border-radius: var(--radius-sm);
+      border: none;
+      font-weight: 600;
+      font-size: 14px;
+      cursor: pointer;
+      transition: all 0.3s ease;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      font-family: 'Inter', sans-serif;
+    }
+
+    .btn-lg { padding: 14px 24px; font-size: 16px; }
+    .btn-sm { padding: 8px 14px; font-size: 12px; }
+    .btn-icon { width: 18px; height: 18px; }
+
+    .btn-primary {
+      background: linear-gradient(135deg, var(--nova-blue), var(--code-green));
+      color: var(--deep-space);
+      font-weight: 700;
+    }
+
+    .btn-primary:hover {
+      transform: translateY(-2px);
+      box-shadow: var(--shadow-glow);
+    }
+
+    .btn-success {
+      background: linear-gradient(135deg, #10b981, #059669);
+      color: white;
+    }
+
+    .btn-warning {
+      background: linear-gradient(135deg, var(--star-gold), #d97706);
+      color: white;
+    }
+
+    .btn-danger {
+      background: linear-gradient(135deg, #ef4444, #dc2626);
+      color: white;
+    }
+
+    .btn-outline {
+      background: transparent;
+      border: 1px solid var(--border-color);
+      color: var(--text-primary);
+    }
+
+    .btn-outline:hover {
+      border-color: var(--nova-blue);
+      color: var(--nova-blue);
+    }
+
+    .btn-outline-danger {
+      border: 1px solid var(--danger);
+      color: var(--danger);
+      background: transparent;
+    }
+
+    .btn-outline-danger:hover {
+      background: rgba(239, 68, 68, 0.1);
+    }
+
+    .btn-close {
+      background: none;
+      border: none;
+      font-size: 24px;
+      color: var(--text-secondary);
+      cursor: pointer;
+    }
+
+    /* ===== QR SCANNER ===== */
+    .qr-scanner-overlay {
+      position: fixed;
+      inset: 0;
+      background: rgba(0, 0, 0, 0.9);
+      backdrop-filter: blur(8px);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 2000;
+      padding: 20px;
+    }
+
+    .qr-scanner-box {
+      background: var(--bg-card);
+      border: 1px solid var(--border-color);
+      border-radius: var(--radius);
+      padding: 24px;
+      max-width: 500px;
+      width: 100%;
+    }
+
+    .qr-scanner-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 20px;
+    }
+
+    #qr-reader {
+      border: 2px dashed var(--nova-blue) !important;
+      border-radius: var(--radius-sm) !important;
+    }
+
+    /* Mobile responsiveness for QR scanner */
+    @media (max-width: 768px) {
+      .qr-scanner-overlay {
+        padding: 10px;
+      }
+
+      .qr-scanner-box {
+        padding: 16px;
+        max-width: 100%;
+      }
+
+      .qr-scanner-header h3 {
+        font-size: 1.2rem;
+      }
+    }
+
+    @media (max-width: 480px) {
+      .qr-scanner-overlay {
+        padding: 5px;
+      }
+
+      .qr-scanner-box {
+        padding: 12px;
+      }
+
+      .qr-scanner-header {
+        margin-bottom: 12px;
+      }
+
+      .qr-scanner-header h3 {
+        font-size: 1rem;
+      }
+    }
+
+    /* ===== DASHBOARD ===== */
+    .dashboard-wrapper {
+      min-height: 100vh;
+      padding: 80px 0 40px;
+    }
+
+    .dashboard-header {
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      background: var(--bg-card);
+      border-bottom: 1px solid var(--border-color);
+      padding: 12px 30px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      z-index: 100;
+      backdrop-filter: blur(10px);
+      background: rgba(26, 26, 26, 0.95);
+    }
+
+    .header-left {
+      display: flex;
+      align-items: center;
+      gap: 20px;
+    }
+
+    .header-right {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .welcome-text h4 {
+      font-size: 16px;
+      font-weight: 600;
+      color: var(--text-primary);
+    }
+
+    .welcome-text p {
+      font-size: 12px;
+      color: var(--text-secondary);
+    }
+
+    /* ===== STATS GRID ===== */
+    .stats-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+      gap: 20px;
+      margin-bottom: 30px;
+    }
+
+    .stat-card {
+      background: var(--bg-card);
+      border: 1px solid var(--border-color);
+      border-radius: var(--radius);
+      padding: 20px;
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      transition: all 0.3s ease;
+    }
+
+    .stat-card:hover {
+      border-color: var(--nova-blue);
+      box-shadow: var(--shadow-glow);
+      transform: translateY(-2px);
+    }
+
+    .stat-icon {
+      width: 48px;
+      height: 48px;
+      border-radius: 12px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: rgba(0, 240, 255, 0.1);
+      color: var(--nova-blue);
+    }
+
+    .stat-icon svg {
+      width: 24px;
+      height: 24px;
+    }
+
+    .stat-content {
+      flex: 1;
+    }
+
+    .stat-label {
+      font-size: 12px;
+      color: var(--text-secondary);
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      margin-bottom: 4px;
+    }
+
+    .stat-value {
+      font-size: 28px;
+      font-weight: 700;
+      color: var(--text-primary);
+    }
+
+    /* ===== CARDS ===== */
+    .card {
+      background: var(--bg-card);
+      border: 1px solid var(--border-color);
+      border-radius: var(--radius);
+      padding: 24px;
+      margin-bottom: 24px;
+      transition: all 0.3s ease;
+    }
+
+    .card:hover {
+      border-color: var(--nova-blue);
+      box-shadow: var(--shadow-lg);
+    }
+
+    .card-header {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin-bottom: 20px;
+      padding-bottom: 16px;
+      border-bottom: 1px solid var(--border-color);
+    }
+
+    .card-header svg {
+      width: 24px;
+      height: 24px;
+      color: var(--nova-blue);
+    }
+
+    .card-header h5 {
+      font-size: 18px;
+      font-weight: 700;
+      color: var(--text-primary);
+      margin: 0;
+    }
+
+    /* ===== TASKS ===== */
+    .task-list {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+
+    .task-item {
+      background: var(--bg-secondary);
+      border: 1px solid var(--border-color);
+      border-radius: var(--radius-sm);
+      padding: 16px;
+      transition: all 0.3s ease;
+    }
+
+    .task-item:hover {
+      border-color: var(--nova-blue);
+    }
+
+    .badge {
+      display: inline-block;
+      padding: 4px 10px;
+      border-radius: 20px;
+      font-size: 11px;
+      font-weight: 600;
+      text-transform: uppercase;
+    }
+
+    .badge.bg-success { background: rgba(16, 185, 129, 0.2); color: #10b981; }
+    .badge.bg-primary { background: rgba(0, 240, 255, 0.2); color: var(--nova-blue); }
+    .badge.bg-warning { background: rgba(251, 191, 36, 0.2); color: var(--star-gold); }
+    .badge.bg-danger { background: rgba(239, 68, 68, 0.2); color: #ef4444; }
+    .badge.bg-info { background: rgba(86, 156, 214, 0.2); color: var(--code-blue); }
+    .badge.bg-secondary { background: rgba(107, 114, 128, 0.2); color: var(--gray-400); }
+
+    /* Priority badges */
+    .priority-high { background: rgba(239, 68, 68, 0.2); color: #ef4444; }
+    .priority-medium { background: rgba(251, 191, 36, 0.2); color: var(--star-gold); }
+    .priority-low { background: rgba(16, 185, 129, 0.2); color: #10b981; }
+    .priority-critical { background: rgba(220, 38, 38, 0.2); color: #dc2626; }
+
+    /* ===== EMPLOYEE GRID ===== */
+    .employee-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+      gap: 16px;
+    }
+
+    .employee-card {
+      background: var(--bg-secondary);
+      border: 1px solid var(--border-color);
+      border-radius: var(--radius-sm);
+      padding: 16px;
+      text-align: center;
+    }
+
+    .employee-avatar {
+      width: 48px;
+      height: 48px;
+      background: linear-gradient(135deg, var(--nova-blue), var(--code-green));
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: var(--deep-space);
+      font-weight: bold;
+      font-size: 20px;
+      margin: 0 auto 12px;
+    }
+
+    /* ===== TEAM CARDS ===== */
+    .team-card {
+      background: var(--bg-secondary);
+      border: 1px solid var(--border-color);
+      border-radius: var(--radius-sm);
+      padding: 16px;
+      margin-bottom: 12px;
+    }
+
+    .team-lead-badge {
+      background: rgba(0, 240, 255, 0.1);
+      color: var(--nova-blue);
+      padding: 2px 8px;
+      border-radius: 12px;
+      font-size: 11px;
+      font-weight: 600;
+    }
+
+    /* ===== WORKER STATS ===== */
+    .worker-stats {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+      gap: 16px;
+    }
+
+    .stat-box {
+      background: var(--bg-secondary);
+      border: 1px solid var(--border-color);
+      border-radius: var(--radius-sm);
+      padding: 16px;
+      text-align: center;
+    }
+
+    .stat-box .stat-label {
+      font-size: 11px;
+      margin-bottom: 8px;
+    }
+
+    .stat-box .stat-number {
+      font-size: 24px;
+      font-weight: 700;
+    }
+
+    /* ===== NOTIFICATIONS ===== */
+    .notifications-panel {
+      position: fixed;
+      top: 80px;
+      right: 20px;
+      width: 300px;
+      max-height: 400px;
+      overflow-y: auto;
+      z-index: 1000;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+
+    .notification-item {
+      background: var(--bg-card);
+      border: 1px solid var(--border-color);
+      border-left: 4px solid var(--nova-blue);
+      border-radius: var(--radius-sm);
+      padding: 12px;
+      box-shadow: var(--shadow-lg);
+      animation: slideIn 0.3s ease;
+    }
+
+    @keyframes slideIn {
+      from { opacity: 0; transform: translateX(20px); }
+      to { opacity: 1; transform: translateX(0); }
+    }
+
+    /* ===== MODAL ===== */
+    .modal {
+      position: fixed;
+      inset: 0;
+      background: rgba(0, 0, 0, 0.8);
+      display: none;
+      align-items: center;
+      justify-content: center;
+      z-index: 2000;
+      padding: 20px;
+    }
+
+    .modal.active {
+      display: flex;
+    }
+
+    .modal-content {
+      background: var(--bg-card);
+      border: 1px solid var(--border-color);
+      border-radius: var(--radius);
+      max-width: 600px;
+      width: 100%;
+      max-height: 90vh;
+      overflow-y: auto;
+    }
+
+    .modal-header {
+      padding: 20px;
+      border-bottom: 1px solid var(--border-color);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .modal-body {
+      padding: 20px;
+    }
+
+    .modal-footer {
+      padding: 20px;
+      border-top: 1px solid var(--border-color);
+      display: flex;
+      gap: 12px;
+      justify-content: flex-end;
+    }
+
+    /* ===== LOGS ===== */
+    .log-box {
+      background: var(--bg-secondary);
+      border: 1px solid var(--border-color);
+      border-radius: var(--radius-sm);
+      padding: 16px;
+      max-height: 300px;
+      overflow-y: auto;
+      font-family: 'Fira Code', monospace;
+      font-size: 12px;
+    }
+
+    .log-box p {
+      margin: 4px 0;
+      color: var(--code-green);
+    }
+
+    /* ===== ANIMATIONS ===== */
+    @keyframes spin {
+      from { transform: rotate(0deg); }
+      to { transform: rotate(360deg); }
+    }
+
+    .btn.loading .btn-icon {
+      animation: spin 1s linear infinite;
+    }
+
+    /* ===== RESPONSIVE ===== */
+    @media (max-width: 768px) {
+      .dashboard-header {
+        padding: 12px 16px;
+      }
+
+      .header-left {
+        gap: 12px;
+      }
+
+      .bns-logo-small .bns-letters {
+        font-size: 1.2rem;
+      }
+
+      .stats-grid {
+        grid-template-columns: 1fr;
+      }
+
+      .worker-stats {
+        grid-template-columns: repeat(2, 1fr);
+      }
+
+      .employee-grid {
+        grid-template-columns: repeat(2, 1fr);
+      }
+
+      .notifications-panel {
+        width: calc(100% - 40px);
+        right: 20px;
+        left: 20px;
+      }
+    }
+
+    @media (max-width: 480px) {
+      .auth-container {
+        padding: 24px;
+      }
+
+      .worker-stats {
+        grid-template-columns: 1fr;
+      }
+
+      .employee-grid {
+        grid-template-columns: 1fr;
+      }
+    }
+  </style>
 </head>
 <body>
+  <div id="toast-container" style="position: fixed; top: 20px; right: 20px; z-index: 10000;"></div>
   <!-- ===== THEME TOGGLE ===== -->
   <div class="theme-toggle" onclick="toggleTheme()">
-    <svg id="themeSvg" class="theme-icon" viewBox="0 0 24 24" fill="currentColor">
+    <svg id="themeSvg" class="theme-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
       <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z" />
     </svg>
     <span id="themeText">Dark</span>
@@ -254,26 +909,39 @@
   <div id="auth-overlay">
     <div id="auth-box">
       <!-- LOGIN FORM -->
-      <div id="login-container" class="auth-container form-animate">
-        <div class="auth-header header-animate">
-          <svg class="auth-logo logo-animate" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
-            <circle cx="12" cy="7" r="4" />
-          </svg>
-          <h2 class="text-center">Sign In</h2>
+      <div id="login-container" class="auth-container">
+        <div class="auth-header">
+          <div class="bns-logo bns-logo-large">
+            <div class="bns-letters">
+              <span>B</span>
+              <span>N</span>
+              <span>S</span>
+            </div>
+            <div class="dot-com">
+              <span class="com">.com</span>
+            </div>
+            <div class="star-row">
+              <span class="star" style="--i:1">⭐</span>
+              <span class="star" style="--i:2">⭐</span>
+              <span class="star" style="--i:3">⭐</span>
+              <span class="star" style="--i:4">⭐</span>
+              <span class="star" style="--i:5">⭐</span>
+            </div>
+          </div>
+          <h2 class="text-gradient">Shift Into the Future</h2>
         </div>
 
-        <div class="form-group form-group-animate" style="animation-delay: 0.1s">
-          <label class="form-label label-animate">Email</label>
-          <input type="email" id="username" class="form-control input-animate" placeholder="Enter your email" autocomplete="email" />
+        <div class="form-group">
+          <label class="form-label">Email</label>
+          <input type="email" id="username" class="form-control" placeholder="Enter your email" autocomplete="email" />
         </div>
 
-        <div class="form-group form-group-animate" style="animation-delay: 0.15s">
-          <label class="form-label label-animate">Password</label>
-          <input type="password" id="password" class="form-control input-animate" placeholder="Enter your password" autocomplete="current-password" />
+        <div class="form-group">
+          <label class="form-label">Password</label>
+          <input type="password" id="password" class="form-control" placeholder="Enter your password" autocomplete="current-password" />
         </div>
 
-        <button class="btn btn-primary w-100 btn-lg btn-animate" style="animation-delay: 0.25s" onclick="login()">
+        <button class="btn btn-primary w-100 btn-lg" onclick="window.login()">
           <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4" />
             <polyline points="10 17 15 12 10 7" />
@@ -282,15 +950,15 @@
           Sign In
         </button>
 
-        <div style="position: relative; margin: 1.5rem 0; animation-delay: 0.27s" class="form-animate">
-          <div style="display: flex; align-items: center; gap: 0.75rem;">
-            <hr style="flex: 1; border: none; border-top: 1px solid var(--text-secondary);" />
-            <span style="color: var(--text-secondary); font-size: 0.875rem;">Or continue with</span>
-            <hr style="flex: 1; border: none; border-top: 1px solid var(--text-secondary);" />
+        <div style="position: relative; margin: 20px 0;">
+          <div style="display: flex; align-items: center; gap: 10px;">
+            <hr style="flex: 1; border: none; border-top: 1px solid var(--border-color);" />
+            <span style="color: var(--text-secondary); font-size: 12px;">Or continue with</span>
+            <hr style="flex: 1; border: none; border-top: 1px solid var(--border-color);" />
           </div>
         </div>
 
-        <button type="button" class="btn btn-outline-secondary w-100 btn-animate" style="animation-delay: 0.28s" onclick="loginWithGoogle()">
+        <button class="btn btn-outline w-100" onclick="window.location.href='/api/auth/google'">
           <svg class="btn-icon" viewBox="0 0 24 24" fill="currentColor">
             <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
             <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
@@ -300,242 +968,285 @@
           Sign in with Google
         </button>
 
-        <div class="button-group-inline" style="animation-delay: 0.3s">
-          <button class="btn btn-outline-secondary w-100 btn-animate" onclick="startScan()">
+        <button class="btn btn-outline w-100" style="margin-top: 10px;" onclick="window.initQRScanner('login')">
+          <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M3 7V5a2 2 0 0 1 2-2h2M17 3h2a2 2 0 0 1 2 2v2M21 17v2a2 2 0 0 1-2 2h-2M7 21H5a2 2 0 0 1-2-2v-2M7 7h10v10H7z" />
+          </svg>
+          Scan QR Code
+        </button>
+        <button class="btn btn-outline w-100" style="margin-top: 5px;" onclick="manualQREntry()">
             <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <path d="M3 7V5a2 2 0 0 1 2-2h2M17 3h2a2 2 0 0 1 2 2v2M21 17v2a2 2 0 0 1-2 2h-2M7 21H5a2 2 0 0 1-2-2v-2M7 7h10v10H7z" />
+                <path d="M4 7V5a1 1 0 0 1 1-1h2M20 7V5a1 1 0 0 0-1-1h-2M4 17v2a1 1 0 0 0 1 1h2M20 17v2a1 1 0 0 1-1 1h-2" />
+                <rect x="8" y="8" width="8" height="8" rx="1" />
+                <line x1="12" y1="8" x2="12" y2="16" />
+                <line x1="8" y1="12" x2="16" y2="12" />
             </svg>
-            Scan QR Code
-          </button>
-        </div>
+            Manual QR Entry
+        </button>
 
-        <p class="auth-link text-center link-animate" style="animation-delay: 0.4s" onclick="showRegister()">
-          Don't have an account? <span class="link-text">Create one</span>
+        <div id="form-error" class="form-message error-message" style="display: none;"></div>
+        <div id="form-success" class="form-message success-message" style="display: none;"></div>
+
+        <p class="text-center" style="margin-top: 20px; color: var(--text-secondary);">
+          Don't have an account? 
+          <span onclick="window.showRegister()" style="color: var(--nova-blue); font-weight: 600; cursor: pointer;">Create one</span>
         </p>
       </div>
 
       <!-- REGISTER FORM -->
-      <div id="register-container" class="auth-container hidden form-animate">
-        <div class="auth-header header-animate">
-          <svg class="auth-logo logo-animate" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
-            <circle cx="10.5" cy="7" r="3.5" />
-            <path d="M22 16v-5h-3v-2a1 1 0 0 0-1-1h-1v2h2v5h3" />
-          </svg>
-          <h2 class="text-center">Create Account</h2>
+      <div id="register-container" class="auth-container hidden">
+        <div class="auth-header">
+          <div class="bns-logo bns-logo-large">
+            <div class="bns-letters">
+              <span>B</span>
+              <span>N</span>
+              <span>S</span>
+            </div>
+            <div class="dot-com">
+              <span class="com">.com</span>
+            </div>
+          </div>
+          <h2 class="text-gradient">Join the Shift</h2>
         </div>
 
-        <div class="form-group form-group-animate" style="animation-delay: 0.1s">
-          <label class="form-label label-animate">Full Name</label>
-          <input type="text" id="regUsername" class="form-control input-animate" placeholder="Enter your full name" autocomplete="name" />
+        <div class="form-group">
+          <label class="form-label">Full Name</label>
+          <input type="text" id="regUsername" class="form-control" placeholder="Enter your full name" autocomplete="name" />
         </div>
 
-        <div class="form-group form-group-animate" style="animation-delay: 0.15s">
-          <label class="form-label label-animate">Email</label>
-          <input type="email" id="regEmail" class="form-control input-animate" placeholder="Enter your email" autocomplete="email" />
+        <div class="form-group">
+          <label class="form-label">Email</label>
+          <input type="email" id="regEmail" class="form-control" placeholder="Enter your email" autocomplete="email" />
         </div>
 
-        <div class="form-group form-group-animate" style="animation-delay: 0.2s">
-          <label class="form-label label-animate">Password</label>
+        <div class="form-group">
+          <label class="form-label">Password</label>
           <div class="input-group">
-            <input type="password" id="regPassword" class="form-control input-animate" placeholder="Enter a strong password (min 6 chars)" autocomplete="new-password" />
-            <button id="regPasswordToggle" class="btn btn-outline-secondary" type="button" aria-label="Show password" title="Show password" onclick="toggleRegPassword()">
-              <i id="regPasswordIcon" class="bi bi-eye"></i>
+            <input type="password" id="regPassword" class="form-control" placeholder="Min 6 characters" autocomplete="new-password" />
+            <button class="btn btn-outline" type="button" onclick="toggleRegPassword()">
+              <i id="regPasswordIcon" class="btn-icon">👁️</i>
             </button>
           </div>
         </div>
 
-        <div class="form-group form-group-animate" style="animation-delay: 0.25s">
-          <label for="regRole" class="form-label label-animate">Role</label>
-          <select id="regRole" class="form-control input-animate">
-            <option value="employee">Employee</option>
+        <div class="form-group">
+          <label class="form-label">Role</label>
+          <select id="regRole" class="form-control">
+            <option value="worker">Employee</option>
             <option value="admin">Admin</option>
           </select>
         </div>
 
-        <button class="btn btn-success w-100 btn-lg btn-animate" style="animation-delay: 0.3s" onclick="register()">
+        <button class="btn btn-primary w-100 btn-lg" onclick="register()">
           <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <polyline points="20 6 9 17 4 12" />
           </svg>
           Create Account
         </button>
 
-        <div id="generatedQr" class="qr-generated-container"></div>
-
-        <p class="auth-link text-center link-animate" style="animation-delay: 0.4s" onclick="backToLogin()">
-          Already have an account? <span class="link-text">Sign in</span>
+        <p class="text-center" style="margin-top: 20px; color: var(--text-secondary);">
+          Already have an account? 
+          <span onclick="window.backToLogin()" style="color: var(--nova-blue); font-weight: 600; cursor: pointer;">Sign in</span>
         </p>
       </div>
     </div>
   </div>
 
-  <!-- QR SCANNER MODAL -->
-  <div id="qrScannerContainer" class="hidden qr-scanner-overlay">
-    <div class="qr-scanner-box">
-      <div class="qr-scanner-header">
-        <h5>Scan QR Code</h5>
-        <button class="btn-close" aria-label="Close" onclick="stopScan()"></button>
-      </div>
-      <div id="qr-reader"></div>
-    </div>
-  </div>
 
   <!-- ===== DASHBOARD ===== -->
-  <div id="dashboard" class="hidden dashboard-wrapper">
-    <div class="container-xl">
-      <!-- DASHBOARD HEADER -->
-      <div class="dashboard-header">
-        <div class="header-left">
-          <svg class="header-logo" viewBox="0 0 24 24" fill="currentColor">
-            <path d="M18 9h-1.26a8 8 0 1 0-16 0h-1.26a2 2 0 0 0-2 2v7a2 2 0 0 0 2 2h18a2 2 0 0 0 2-2v-7a2 2 0 0 0-2-2zm-7 2h2v2h-2v-2z" />
-          </svg>
-          <div>
-            <h4 id="welcome" class="m-0">Welcome</h4>
-            <p class="text-muted small mb-0">Workforce Management System</p>
+  <div id="dashboard" class="dashboard-wrapper hidden">
+    <div class="dashboard-header">
+      <div class="header-left">
+        <div class="bns-logo bns-logo-small">
+          <div class="bns-letters">
+            <span>B</span>
+            <span>N</span>
+            <span>S</span>
+          </div>
+          <div class="dot-com">
+            <span class="com">.com</span>
           </div>
         </div>
-        <div class="header-right">
-          <button id="notifBtn" class="btn-icon-circle" title="Notifications" onclick="document.getElementById('notificationsPanel').classList.toggle('hidden')">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" />
-              <path d="M13.73 21a2 2 0 0 1-3.46 0" />
-            </svg>
-            <span id="notifBadge" class="notif-badge hidden">0</span>
-          </button>
-          <button class="btn btn-outline-danger btn-sm" onclick="logout()">
-            <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
-              <polyline points="16 17 21 12 16 7" />
-              <line x1="21" y1="12" x2="9" y2="12" />
-            </svg>
-            Logout
-          </button>
+        <div class="welcome-text">
+          <h4 id="welcome">Welcome</h4>
+          <p>Workforce Management System</p>
         </div>
       </div>
+      <div class="header-right">
+        <button class="btn-icon-circle" onclick="document.getElementById('notificationsPanel').classList.toggle('hidden')">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" />
+            <path d="M13.73 21a2 2 0 0 1-3.46 0" />
+          </svg>
+          <span class="notif-badge hidden">0</span>
+        </button>
+        <button class="btn btn-outline-danger btn-sm" onclick="logout()">
+          <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
+            <polyline points="16 17 21 12 16 7" />
+            <line x1="21" y1="12" x2="9" y2="12" />
+          </svg>
+          Logout
+        </button>
+      </div>
+    </div>
 
+    <div class="container">
       <!-- STATS SECTION -->
-      <div class="stats-grid mb-5">
+      <div class="stats-grid">
         <div class="stat-card">
-          <div class="stat-icon employees">
+          <div class="stat-icon">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
-              <circle cx="9" cy="7" r="4" />
-              <path d="M23 21v-2a4 4 0 0 0-3-3.87" />
-              <path d="M16 3.13a4 4 0 0 1 0 7.75" />
+              <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
+              <circle cx="12" cy="7" r="4" />
             </svg>
           </div>
           <div class="stat-content">
-            <h6 class="stat-label">Employees</h6>
-            <p class="stat-value" id="totalEmployees">0</p>
+            <div class="stat-label">Employees</div>
+            <div class="stat-value" id="totalEmployees">0</div>
           </div>
         </div>
 
         <div class="stat-card">
-          <div class="stat-icon tasks">
+          <div class="stat-icon">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <polyline points="8 6 21 6 21 20 3 20 3 6 10 6" />
               <polyline points="12 3 12 6" />
-              <line x1="4" y1="9" x2="20" y2="9" />
-              <rect x="7" y="11" width="2" height="2" />
-              <rect x="13" y="11" width="2" height="2" />
             </svg>
           </div>
           <div class="stat-content">
-            <h6 class="stat-label">Active Tasks</h6>
-            <p class="stat-value" id="totalTasks">0</p>
+            <div class="stat-label">Active Tasks</div>
+            <div class="stat-value" id="totalTasks">0</div>
           </div>
         </div>
 
         <div class="stat-card">
-          <div class="stat-icon logs">
+          <div class="stat-icon">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
               <polyline points="14 2 14 8 20 8" />
-              <line x1="12" y1="11" x2="12" y2="17" />
-              <line x1="9" y1="14" x2="15" y2="14" />
             </svg>
           </div>
           <div class="stat-content">
-            <h6 class="stat-label">System Logs</h6>
-            <p class="stat-value" id="totalLogs">0</p>
+            <div class="stat-label">System Logs</div>
+            <div class="stat-value" id="totalLogs">0</div>
           </div>
         </div>
       </div>
 
       <!-- ATTENDANCE SECTION -->
-      <div class="card section">
-        <div class="card-header-custom">
+      <div class="card">
+        <div class="card-header">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <circle cx="12" cy="12" r="1" />
-            <path d="M12 1v6m0 6v6M4.22 4.22l4.24 4.24m5.08 5.08l4.24 4.24M1 12h6m6 0h6M4.22 19.78l4.24-4.24m5.08-5.08l4.24-4.24" />
+            <circle cx="12" cy="12" r="10" />
+            <polyline points="12 6 12 12 16 14" />
           </svg>
-          <h5 class="mb-0">Attendance</h5>
+          <h5>Attendance</h5>
         </div>
-        <div class="attendance-buttons">
-          <button class="btn btn-success btn-lg" onclick="clockIn()">
-            <svg viewBox="0 0 24 24" fill="currentColor">
-              <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.42 0-8-3.58-8-8s3.58-8 8-8 8 3.58 8 8-3.58 8-8 8zm-5-9h10v2H7z" />
-            </svg>
-            Clock In
-          </button>
-          <button class="btn btn-warning btn-lg" onclick="breakStart()">
-            <svg viewBox="0 0 24 24" fill="currentColor">
-              <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.42 0-8-3.58-8-8s3.58-8 8-8 8 3.58 8 8-3.58 8-8 8zm3.5-9c.83 0 1.5-.67 1.5-1.5S16.33 8 15.5 8 14 8.67 14 9.5s.67 1.5 1.5 1.5zm-7 0c.83 0 1.5-.67 1.5-1.5S9.33 8 8.5 8 7 8.67 7 9.5 7.67 11 8.5 11z" />
-            </svg>
-            Break Start
-          </button>
-          <button class="btn btn-info btn-lg" onclick="breakEnd()">
-            <svg viewBox="0 0 24 24" fill="currentColor">
-              <path d="M11 17h2v-6h-2v6zm1-15C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8zm0-14c-3.31 0-6 2.69-6 6s2.69 6 6 6 6-2.69 6-6-2.69-6-6-6z" />
-            </svg>
-            Break End
-          </button>
-          <button class="btn btn-danger btn-lg" onclick="clockOut()">
-            <svg viewBox="0 0 24 24" fill="currentColor">
-              <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z" />
-            </svg>
-            Clock Out
-          </button>
+        <div class="attendance-buttons" style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px;">
+          <button class="btn btn-success" onclick="clockIn()">✅ Clock In</button>
+          <button class="btn btn-warning" onclick="breakStart()">☕ Break Start</button>
+          <button class="btn btn-info" onclick="breakEnd()">🔄 Break End</button>
+          <button class="btn btn-danger" onclick="clockOut()">👋 Clock Out</button>
         </div>
       </div>
 
       <!-- TASKS SECTION -->
-      <div class="card section">
-        <div class="card-header-custom">
+      <div class="card">
+        <div class="card-header">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <polyline points="8 6 21 6 21 20 3 20 3 6 10 6" />
-            <polyline points="12 3 12 6" />
+            <polyline points="9 11 12 14 22 4" />
+            <path d="M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0z" />
           </svg>
-          <h5 class="mb-0">Tasks</h5>
+          <h5>Tasks</h5>
         </div>
         <div id="taskList" class="task-list"></div>
       </div>
 
       <!-- ADMIN PANEL -->
       <div id="admin-panel" class="hidden">
-        <!-- Create Task -->
-        <div class="card section">
-          <div class="card-header-custom">
+
+        <div class="card">
+          <div class="card-header">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M21 16v2a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-2" />
+              <path d="M7 10l3-3 3 3 4-4" />
+              <path d="M17 10V4h-3" />
+            </svg>
+            <h5>Performance Analytics</h5>
+          </div>
+          <div class="chart-container" style="padding:15px;">
+            <canvas id="performanceChart"></canvas>
+          </div>
+        </div>
+
+        <!-- Create Task with all features -->
+        <div class="card">
+          <div class="card-header">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <polyline points="12 5 12 19" />
               <polyline points="5 12 19 12" />
             </svg>
-            <h5 class="mb-0">Create Task</h5>
+            <h5>Create Task</h5>
           </div>
 
-          <div class="form-group">
-            <label class="form-label">Task Title</label>
-            <input type="text" id="taskTitle" class="form-control" placeholder="Enter task title" />
-          </div>
+          <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 20px;">
+            <div>
+              <div class="form-group">
+                <label class="form-label">Task Title</label>
+                <input type="text" id="taskTitle" class="form-control" placeholder="Enter task title" />
+              </div>
 
-          <div class="form-group">
-            <label class="form-label">Description</label>
-            <textarea id="taskDesc" class="form-control" placeholder="Task description" rows="3"></textarea>
-          </div>
+              <div class="form-group">
+                <label class="form-label">Description</label>
+                <textarea id="taskDesc" class="form-control" placeholder="Task description" rows="3"></textarea>
+              </div>
 
-          <div class="form-group">
-            <label for="taskAssign" class="form-label">Assign To</label>
-            <select id="taskAssign" class="form-control"></select>
+              <div class="form-group">
+                <label class="form-label">Assign To</label>
+                <select id="taskAssign" class="form-control"></select>
+              </div>
+            </div>
+
+            <div>
+              <div class="form-group">
+                <label class="form-label">Priority</label>
+                <select id="taskPriority" class="form-control">
+                  <option value="low">Low</option>
+                  <option value="medium" selected>Medium</option>
+                  <option value="high">High</option>
+                  <option value="critical">Critical</option>
+                </select>
+              </div>
+
+              <div class="form-group">
+                <label class="form-label">Category</label>
+                <select id="taskCategory" class="form-control">
+                  <option value="">Select Category</option>
+                </select>
+              </div>
+
+              <div class="form-group">
+                <label class="form-label">Tags (comma-separated)</label>
+                <input type="text" id="taskTags" class="form-control" placeholder="e.g., urgent, bug" />
+                <div id="commonTags" class="mt-2" style="display: flex; gap: 5px; flex-wrap: wrap; margin-top: 8px;"></div>
+              </div>
+
+              <div class="form-group">
+                <label class="form-label">Due Date</label>
+                <input type="date" id="taskDueDate" class="form-control" />
+              </div>
+
+              <div class="form-group">
+                <label class="form-label">Task Template</label>
+                <div style="display: flex; gap: 10px;">
+                  <select id="taskTemplate" class="form-control">
+                    <option value="">Use Template</option>
+                  </select>
+                  <button type="button" class="btn btn-outline" disabled>Apply</button>
+                </div>
+              </div>
+            </div>
           </div>
 
           <button class="btn btn-primary w-100" onclick="addTask()">
@@ -543,249 +1254,387 @@
               <polyline points="12 5 12 19" />
               <polyline points="5 12 19 12" />
             </svg>
-            Add Task
+            Create Task
           </button>
         </div>
 
-        <!-- Team Members Management -->
-        <div class="card section">
-          <div class="card-header-custom">
+        <!-- Team Management -->
+        <div class="card">
+          <div class="card-header">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
               <circle cx="9" cy="7" r="4" />
               <path d="M23 21v-2a4 4 0 0 0-3-3.87" />
               <path d="M16 3.13a4 4 0 0 1 0 7.75" />
             </svg>
-            <h5 class="mb-0">Team Members</h5>
+            <h5>Team Management</h5>
+          </div>
+
+          <div style="margin-bottom: 20px; padding: 15px; background: var(--bg-secondary); border-radius: var(--radius-sm);">
+            <h6 style="margin-bottom: 15px;">Create New Team</h6>
+            <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 15px;">
+              <div class="form-group">
+                <label class="form-label">Team Name</label>
+                <input type="text" id="teamName" class="form-control" placeholder="e.g., Development Team" />
+              </div>
+              <div class="form-group">
+                <label class="form-label">Department</label>
+                <input type="text" id="teamDepartment" class="form-control" placeholder="e.g., Engineering" />
+              </div>
+              <div class="form-group" style="grid-column: span 2;">
+                <label class="form-label">Description</label>
+                <textarea id="teamDescription" class="form-control" placeholder="Team purpose" rows="2"></textarea>
+              </div>
+              <div class="form-group">
+                <label class="form-label">Team Lead</label>
+                <select id="teamLead" class="form-control">
+                  <option value="">Select Team Lead</option>
+                </select>
+              </div>
+              <div class="form-group">
+                <label class="form-label">Initial Members</label>
+                <select id="teamMembers" class="form-control" multiple size="3"></select>
+                <small style="color: var(--text-secondary);">Hold Ctrl/Cmd to select multiple</small>
+              </div>
+            </div>
+            <button class="btn btn-primary" onclick="createTeam()" style="margin-top: 10px;">Create Team</button>
+          </div>
+
+          <div id="teamsList"></div>
+        </div>
+
+        <!-- Employee List -->
+        <div class="card">
+          <div class="card-header">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
+              <circle cx="12" cy="7" r="4" />
+            </svg>
+            <h5>Team Members</h5>
           </div>
           <div id="employeeList" class="employee-grid"></div>
         </div>
-
-        <!-- Performance Chart -->
-        <div class="card section">
-          <div class="card-header-custom">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <polyline points="23 6 13.5 15.5 8.5 10.5 1 17" />
-              <polyline points="17 6 23 6 23 12" />
-            </svg>
-            <h5 class="mb-0">Performance Overview</h5>
-          </div>
-          <canvas id="performanceChart" class="admin-chart" style="max-height: 400px;"></canvas>
-        </div>
-
-        <!-- Download Report -->
-        <button class="btn btn-outline-primary btn-lg w-100 mt-4" onclick="downloadReport()">
-          <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
-            <polyline points="14 2 14 8 20 8" />
-            <path d="M12 17v-6" />
-            <path d="M9 14h6" />
-          </svg>
-          Download Report (PDF)
-        </button>
       </div>
 
       <!-- WORKER PANEL -->
       <div id="worker-panel" class="hidden">
         <!-- My Tasks -->
-        <div class="card section">
-          <div class="card-header-custom">
+        <div class="card">
+          <div class="card-header">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <polyline points="9 11 12 14 22 4" />
               <path d="M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0z" />
             </svg>
-            <h5 class="mb-0">My Assigned Tasks</h5>
+            <h5>My Assigned Tasks</h5>
           </div>
           <div id="myTaskList" class="task-list"></div>
-          <p class="text-muted text-center mt-3" id="noTasksMsg" style="display: none">No tasks assigned yet</p>
         </div>
 
-        <!-- My Performance -->
-        <div class="card section">
-          <div class="card-header-custom">
+        <!-- My Performance Stats -->
+        <div class="card">
+          <div class="card-header">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <circle cx="12" cy="12" r="10" />
               <polyline points="12 6 12 12 16 14" />
             </svg>
-            <h5 class="mb-0">My Performance</h5>
+            <h5>My Performance</h5>
           </div>
           <div class="worker-stats">
-            <div class="worker-stat-box">
-              <div class="stat-label">Tasks Completed</div>
+            <div class="stat-box">
+              <div class="stat-label">Assigned</div>
+              <div class="stat-number" id="workerTasksAssigned">0</div>
+            </div>
+            <div class="stat-box">
+              <div class="stat-label">Completed</div>
               <div class="stat-number" id="workerCompletedTasks">0</div>
             </div>
-            <div class="worker-stat-box">
-              <div class="stat-label">Tasks Pending</div>
+            <div class="stat-box">
+              <div class="stat-label">In Progress</div>
+              <div class="stat-number" id="workerInProgressTasks">0</div>
+            </div>
+            <div class="stat-box">
+              <div class="stat-label">Pending</div>
               <div class="stat-number" id="workerPendingTasks">0</div>
             </div>
-            <div class="worker-stat-box">
-              <div class="stat-label">Attendance Rate</div>
-              <div class="stat-number" id="workerAttendanceRate">-</div>
+            <div class="stat-box">
+              <div class="stat-label">Hours</div>
+              <div class="stat-number" id="workerHoursWorked">0</div>
+            </div>
+            <div class="stat-box">
+              <div class="stat-label">Completion</div>
+              <div class="stat-number" id="workerAttendanceRate">0%</div>
             </div>
           </div>
         </div>
 
         <!-- My Attendance -->
-        <div class="card section">
-          <div class="card-header-custom">
+        <div class="card">
+          <div class="card-header">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <rect x="3" y="4" width="18" height="18" rx="2" />
               <polyline points="16 2 16 6 8 6 8 2" />
-              <line x1="3" y1="10" x2="21" y2="10" />
-              <path d="M9 16h.01" />
-              <path d="M15 16h.01" />
             </svg>
-            <h5 class="mb-0">My Attendance (This Month)</h5>
+            <h5>My Attendance</h5>
           </div>
           <div id="myAttendance" class="attendance-summary"></div>
         </div>
-
-        <!-- My Time Logs -->
-        <div class="card section">
-          <div class="card-header-custom">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <circle cx="12" cy="12" r="10" />
-              <polyline points="12 6 12 12 16 14" />
-            </svg>
-            <h5 class="mb-0">My Time Logs (Recent)</h5>
-          </div>
-          <div id="myTimeLogs" class="time-log-list"></div>
-        </div>
       </div>
 
-      <!-- LOGS SECTION -->
-      <div class="card section">
-        <div class="card-header-custom">
+      <div class="card">
+        <div class="card-header">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M3 12h18" />
+            <path d="M3 6h18" />
+            <path d="M3 18h18" />
+          </svg>
+          <h5>Attendance Summary (This Week)</h5>
+        </div>
+        <div id="attendanceSummary" class="attendance-summary"></div>
+      </div>
+
+      <!-- System Logs -->
+      <div class="card">
+        <div class="card-header">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
             <polyline points="14 2 14 8 20 8" />
-            <line x1="12" y1="11" x2="12" y2="17" />
-            <line x1="9" y1="14" x2="15" y2="14" />
           </svg>
-          <h5 class="mb-0">System Logs</h5>
+          <h5>System Logs</h5>
         </div>
         <div id="log" class="log-box"></div>
       </div>
     </div>
   </div>
 
+  <!-- TASK REPORT MODAL -->
+  <div id="taskReportModal" class="modal">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5>Submit Task Report</h5>
+        <button class="btn-close" onclick="closeTaskReport()">×</button>
+      </div>
+      <div class="modal-body">
+        <div class="form-group">
+          <label class="form-label">Task</label>
+          <input type="text" id="reportTaskTitle" class="form-control" readonly />
+        </div>
+        <div class="form-group">
+          <label class="form-label">Work Completed</label>
+          <textarea id="reportContent" class="form-control" placeholder="Describe what you've done..." rows="4" required></textarea>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Hours Spent</label>
+          <input type="number" id="reportHours" class="form-control" placeholder="0.5" step="0.5" min="0" required />
+        </div>
+        <div class="form-group">
+          <label class="form-label">Status</label>
+          <select id="reportStatus" class="form-control">
+            <option value="in-progress">In Progress</option>
+            <option value="completed">Completed</option>
+          </select>
+        </div>
+        <input type="hidden" id="reportTaskId" />
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-outline" onclick="closeTaskReport()">Cancel</button>
+        <button class="btn btn-primary" onclick="submitTaskReport()">Submit Report</button>
+      </div>
+    </div>
+  </div>
+
   <!-- NOTIFICATIONS PANEL -->
-  <div id="notificationsPanel" class="notifications-panel hidden" aria-live="polite"></div>
+  <div id="notificationsPanel" class="notifications-panel hidden"></div>
 
-  <!-- ===== SCRIPTS ===== -->
-  <!-- Main app.js - loaded after resources -->
-  <script src="app.js"></script>
-  
-  <!-- Service Worker Registration -->
+  <!-- ===== SCRIPTS WITH QR LIBRARY FALLBACKS ===== -->
+  <script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
+
+  <!-- QR Code Library with Faster CDNs and Preloading -->
+  <link rel="preload" href="https://cdn.jsdelivr.net/npm/html5-qrcode@2.3.8/html5-qrcode.min.js" as="script">
   <script>
-    if ('serviceWorker' in navigator) {
-      window.addEventListener('load', () => {
-        navigator.serviceWorker.register('/sw.js')
-          .then(registration => {
-            console.log('✅ ServiceWorker registered successfully:', registration.scope);
-            
-            // Clean old caches after registration
-            setTimeout(() => {
-              if (registration.active) {
-                registration.active.postMessage('clean-caches');
-              }
-            }, 5000);
-          })
-          .catch(error => {
-            console.error('❌ ServiceWorker registration failed:', error);
-          });
-      });
-    }
+  // Optimized QR Code Library Loader with Faster CDNs
+  (function loadQRLibrary() {
+      // Faster CDNs with better performance
+      const QR_LIBRARIES = [
+          // Latest version from jsDelivr (fastest)
+          'https://cdn.jsdelivr.net/npm/html5-qrcode@2.3.8/html5-qrcode.min.js',
+          // UNPKG (reliable fallback)
+          'https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js',
+          // Cloudflare CDN
+          'https://cdnjs.cloudflare.com/ajax/libs/html5-qrcode/2.3.8/html5-qrcode.min.js'
+      ];
 
-    // Monitor online/offline status
-    window.addEventListener('online', () => {
-      console.log('📶 Application is online');
-      document.body.classList.remove('offline-mode');
-    });
+      function tryLoadLibrary(index) {
+          if (index >= QR_LIBRARIES.length) {
+              console.error('❌ All QR library CDNs failed to load');
+              window.Html5Qrcode = createFallbackQRScanner();
+              console.log('🔄 Using fallback QR scanner placeholder');
+              window.dispatchEvent(new CustomEvent('qr-library-loaded'));
+              return;
+          }
 
-    window.addEventListener('offline', () => {
-      console.log('📴 Application is offline');
-      document.body.classList.add('offline-mode');
-    });
+          const script = document.createElement('script');
+          script.src = QR_LIBRARIES[index];
+          script.async = false;
 
-    // Check initial status
-    if (!navigator.onLine) {
-      document.body.classList.add('offline-mode');
-    }
-  </script>
+          script.onload = function() {
+              // Wait a moment for library to initialize
+              setTimeout(() => {
+                  if (typeof window.Html5Qrcode !== 'undefined') {
+                      console.log(`✅ QR library loaded from: ${QR_LIBRARIES[index]}`);
+                      window.dispatchEvent(new CustomEvent('qr-library-loaded'));
+                  } else {
+                      console.warn('⚠️ Script loaded but Html5Qrcode not defined, trying next...');
+                      tryLoadLibrary(index + 1);
+                  }
+              }, 100);
+          };
 
-  <!-- Offline banner -->
-  <div class="offline-banner">
-    📴 You are offline - Some features may be unavailable
-  </div>
-    <!-- ===== SCRIPTS ===== -->
-  <!-- Main app.js - loaded after resources -->
-  <script src="app.js"></script>
-  
-  <!-- Service Worker Registration -->
-  <script>
-    if ('serviceWorker' in navigator) {
-      window.addEventListener('load', () => {
-        navigator.serviceWorker.register('/sw.js')
-          .then(registration => {
-            console.log('✅ ServiceWorker registered successfully:', registration.scope);
-            
-            // Clean old caches after registration
-            setTimeout(() => {
-              if (registration.active) {
-                registration.active.postMessage('clean-caches');
-              }
-            }, 5000);
-          })
-          .catch(error => {
-            console.error('❌ ServiceWorker registration failed:', error);
-          });
-      });
-    }
+          script.onerror = function() {
+              console.warn(`⚠️ Failed to load from: ${QR_LIBRARIES[index]}`);
+              tryLoadLibrary(index + 1);
+          };
 
-    // Monitor online/offline status
-    window.addEventListener('online', () => {
-      console.log('📶 Application is online');
-      document.body.classList.remove('offline-mode');
-    });
-
-    window.addEventListener('offline', () => {
-      console.log('📴 Application is offline');
-      document.body.classList.add('offline-mode');
-    });
-
-    // Check initial status
-    if (!navigator.onLine) {
-      document.body.classList.add('offline-mode');
-    }
-  </script>
-
-  <!-- ===== EMERGENCY FUNCTION DEFINITIONS ===== -->
-  <script>
-    // Emergency function definitions - these will ALWAYS be available
-    console.log('🆘 Loading emergency functions...');
-    
-    window.downloadReport = function() {
-      console.log('📊 downloadReport called from emergency script');
-      alert('Report function is working! The full PDF generation will be added soon.');
-      
-      // We'll add the full implementation later
-      const user = JSON.parse(localStorage.getItem('wfms_current_user') || 'null');
-      if (!user || user.role !== 'admin') {
-        alert('❌ Only admins can download reports');
-        return;
+          document.head.appendChild(script);
       }
-      
-      // Simple confirmation
-      console.log('Report download initiated by:', user.name);
-    };
-    
-    console.log('✅ Emergency functions loaded. downloadReport defined:', typeof window.downloadReport !== 'undefined');
+
+      function createFallbackQRScanner() {
+          console.warn('Creating fallback QR scanner implementation');
+          return function(config) {
+              return {
+                  start(cameraId, config, onSuccess, onError) {
+                      console.log('Fallback QR scanner started');
+                      setTimeout(() => {
+                          const code = prompt('📱 Camera unavailable. Please enter QR code manually:');
+                          if (code && onSuccess) onSuccess(code);
+                      }, 500);
+                      return Promise.resolve();
+                  },
+                  stop() {
+                      console.log('Fallback QR scanner stopped');
+                      return Promise.resolve();
+                  }
+              };
+          };
+      }
+
+      tryLoadLibrary(0);
+  })();
+
+  // Preload QR library on page load for faster startup
+  window.addEventListener('load', () => {
+    setTimeout(() => {
+      if (typeof window.Html5Qrcode === 'undefined') {
+        console.log('[QR] Preloading QR library in background...');
+        // The library should already be loaded, but this ensures it's ready
+      }
+    }, 1000);
+  });
+  </script>
   </script>
 
-  <!-- Offline banner -->
-  <div class="offline-banner">
-    📴 You are offline - Some features may be unavailable
+  <!-- Chart.js for performance charts -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+
+  <!-- Html5Qrcode library for QR scanning -->
+  <script src="https://cdn.jsdelivr.net/npm/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
+
+  <!-- Your main app.js - load after QR library attempts -->
+  <script src="app.js"></script>
+
+  <script>
+    // Theme management
+    const themeToggle = document.querySelector('.theme-toggle');
+    const themeText = document.getElementById('themeText');
+    const themeSvg = document.getElementById('themeSvg');
+
+    window.toggleTheme = function() {
+      document.body.classList.toggle('light-theme');
+      const isLight = document.body.classList.contains('light-theme');
+      
+      themeSvg.innerHTML = isLight 
+        ? '<circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/>'
+        : '<path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>';
+      
+      themeText.innerText = isLight ? 'Light' : 'Dark';
+      localStorage.setItem('wfms_theme', isLight ? 'light' : 'dark');
+    };
+
+    // Apply saved theme
+    const savedTheme = localStorage.getItem('wfms_theme');
+    if (savedTheme === 'light') {
+      document.body.classList.add('light-theme');
+      themeText.innerText = 'Light';
+      themeSvg.innerHTML = '<circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/>';
+    }
+  </script>
+
+  <!-- QR Scanner Container -->
+  <div id="qrScannerContainer" class="qr-scanner-overlay hidden">
+    <div class="qr-scanner-box">
+      <div class="qr-scanner-header">
+        <h5 style="color: var(--text-primary); margin: 0;">Scan QR Code</h5>
+        <button class="btn-close" onclick="window.stopQRScanner ? window.stopQRScanner() : closeQRScanner()" style="font-size: 28px; cursor: pointer; background: none; border: none;">×</button>
+      </div>
+      <div id="qr-reader" style="width: 100%; min-height: 300px;"></div>
+      <div id="qr-scanner-status" style="text-align: center; margin-top: 10px; color: var(--text-secondary);"></div>
+    </div>
   </div>
+
+  <!-- QR Scanner CSS -->
+  <style>
+  .qr-scanner-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0, 0, 0, 0.95);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 100000;
+  }
+  .qr-scanner-overlay.hidden { display: none !important; }
+  .qr-scanner-box {
+    background: var(--bg-card);
+    border-radius: 24px;
+    padding: 20px;
+    max-width: 500px;
+    width: 90%;
+    border: 1px solid var(--border-color);
+    box-shadow: 0 20px 40px rgba(0, 0, 0, 0.3);
+  }
+  .qr-scanner-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 15px;
+    padding-bottom: 10px;
+    border-bottom: 1px solid var(--border-color);
+  }
+  #qr-reader {
+    width: 100% !important;
+    min-height: 300px !important;
+    border: 2px dashed var(--primary) !important;
+    border-radius: 16px !important;
+    overflow: hidden;
+  }
+  #qr-reader video {
+    width: 100% !important;
+    height: auto !important;
+    border-radius: 14px;
+  }
+  </style>
+
+  <script>
+  function closeQRScanner() {
+    const container = document.getElementById('qrScannerContainer');
+    if (container) {
+      container.classList.add('hidden');
+      container.style.display = 'none';
+    }
+    if (window.stopQRScanner) window.stopQRScanner();
+  }
+  </script>
 </body>
 </html>

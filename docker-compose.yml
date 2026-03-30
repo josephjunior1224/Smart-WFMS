@@ -1,33 +1,37 @@
+version: '3.8'
+
 services:
-  db:
-    image: mysql:8.0
-    restart: always
-    environment:
-      MYSQL_ROOT_PASSWORD: rootpass
-      MYSQL_DATABASE: wfms
-      MYSQL_USER: wfmsuser
-      MYSQL_PASSWORD: wfms_pass
-    volumes:
-      - db_data:/var/lib/mysql
+  mongodb:
+    image: mongo:6
+    container_name: bns-mongodb
+    restart: unless-stopped
     ports:
-      - "3306:3306"
+      - "27017:27017"
+    volumes:
+      - mongodb_data:/data/db
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: admin
+      MONGO_INITDB_ROOT_PASSWORD: ${MONGO_ROOT_PASSWORD:-secret}
+      MONGO_INITDB_DATABASE: bns-wfms
 
   app:
     build: .
-    depends_on:
-      - db
-    environment:
-      DB_HOST: db
-      DB_USER: wfmsuser
-      DB_PASS: wfms_pass
-      DB_NAME: wfms
-      SEED_ADMIN_EMAIL: admin@wfms.local
-      SEED_ADMIN_PASS: admin
+    container_name: bns-wfms
+    restart: unless-stopped
     ports:
       - "8000:8000"
+    depends_on:
+      - mongodb
+    environment:
+      NODE_ENV: production
+      MONGODB_URI: mongodb://admin:${MONGO_ROOT_PASSWORD:-secret}@mongodb:27017/bns-wfms?authSource=admin
+      JWT_SECRET: ${JWT_SECRET}
+      SESSION_SECRET: ${SESSION_SECRET}
+      FRONTEND_URL: ${FRONTEND_URL}
     volumes:
-      - ./:/usr/src/app
-    command: npm start
+      - ./uploads:/app/uploads
+    env_file:
+      - .env
 
 volumes:
-  db_data:
+  mongodb_data:
