@@ -1175,10 +1175,28 @@
             </svg>
             <h5>Performance Analytics</h5>
           </div>
-          <div class="chart-container" style="padding:15px;">
+<div class="chart-container" style="padding:15px;">
             <canvas id="performanceChart"></canvas>
+            <div style="margin-top: 20px; padding: 20px; background: var(--bg-secondary); border-radius: 12px; border: 1px solid var(--border-color);">
+              <h6 style="margin-bottom: 12px; color: var(--text-primary);">📊 Download Reports</h6>
+              <div style="display: flex; gap: 12px; flex-wrap: wrap;">
+                <button class="btn btn-primary btn-sm" onclick="downloadReport('pdf')">
+                  📄 PDF Report (Detailed)
+                </button>
+                <button class="btn btn-success btn-sm" onclick="downloadReport('excel')">
+                  📈 Excel Report
+                </button>
+                <button class="btn btn-info btn-sm" onclick="downloadReport('csv')">
+                  📋 CSV Summary
+                </button>
+              </div>
+              <small style="display: block; margin-top: 12px; color: var(--text-secondary);">
+                Reports include all employees, tasks, attendance, QR scans, and performance metrics
+              </small>
+            </div>
           </div>
         </div>
+
 
         <!-- Create Task with all features -->
         <div class="card">
@@ -1529,7 +1547,6 @@
       }
     }, 1000);
   });
-  </script>
   </script>
 
   <!-- Chart.js for performance charts -->

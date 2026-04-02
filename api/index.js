@@ -805,15 +805,19 @@ app.post('/api/attendance', async (req, res) => {
     if (!user_id || !action) {
       return res.status(400).json({ error: 'user_id and action required' });
     }
-    
-    const attendance = new Attendance({
-      user_id,
-      action,
-      timestamp: new Date()
-    });
-    
+    // Prefer centralized recorder if available on the app
+    try {
+      if (app && typeof app.recordAttendance === 'function') {
+        const result = await app.recordAttendance(user_id, action, req, { skipValidation: false });
+        return res.json({ ok: true, recorded: result.recorded, action: action, timestamp: result.timestamp, attendanceId: result.attendanceId });
+      }
+    } catch (err) {
+      console.warn('app.recordAttendance failed:', err && err.message ? err.message : err);
+      // fallthrough to legacy behavior
+    }
+
+    const attendance = new Attendance({ user_id, action, timestamp: new Date() });
     await attendance.save();
-    
     res.json({ ok: true, id: attendance._id });
   } catch (err) {
     console.error(err);
@@ -841,14 +845,23 @@ app.post('/api/time', async (req, res) => {
   try {
     const { user_id, action, time } = req.body;
 
-    const timeLog = new TimeLog({
-      user_id,
-      action,
-      time: time || new Date()
-    });
-    
+    if (!user_id || !action) {
+      return res.status(400).json({ error: 'user_id and action required' });
+    }
+
+    // Prefer centralized recorder which also creates AuditLog + TimeLog
+    try {
+      if (app && typeof app.recordAttendance === 'function') {
+        const result = await app.recordAttendance(user_id, action, req, { skipValidation: false });
+        return res.json({ ok: true, recorded: result.recorded, action: action, timestamp: result.timestamp, attendanceId: result.attendanceId });
+      }
+    } catch (err) {
+      console.warn('app.recordAttendance failed:', err && err.message ? err.message : err);
+      // fallback to legacy timeLog creation
+    }
+
+    const timeLog = new TimeLog({ user_id, action, time: time || new Date() });
     await timeLog.save();
-    
     res.json({ ok: true, id: timeLog._id });
   } catch (err) {
     console.error(err);

@@ -1,7169 +1,1557 @@
-/*************************************************
- * WFMS – Frontend Logic (Updated)
- * Backend: Node.js + Express + MongoDB
- *************************************************/
-
-// ============================================
-// CRITICAL FIX - MUST BE AT TOP OF app.js
-// ============================================
-// Declare all functions BEFORE anything else
-window.enterDashboard = function(user) {
-  console.log('📊 Entering dashboard for:', user.name);
-  const auth = document.getElementById('auth-overlay');
-  const dash = document.getElementById('dashboard');
-  if (auth) auth.classList.add('hidden');
-  if (dash) dash.classList.remove('hidden');
-  const welcome = document.getElementById('welcome');
-  if (welcome) welcome.innerText = `Welcome, ${user.name}`;
-
-  const adminPanel = document.getElementById('admin-panel');
-  const workerPanel = document.getElementById('worker-panel');
-  
-  if (user.role === 'admin') {
-    if (adminPanel) adminPanel.classList.remove('hidden');
-    if (workerPanel) workerPanel.classList.add('hidden');
-    
-    // Add role switcher for admin (so you can switch to worker without logging out)
-    if (typeof addRoleSwitcher === 'function') {
-      addRoleSwitcher(user);
-    }
-    
-    // Populate ALL dropdowns using the unified function
-    if (typeof populateAllDropdowns === 'function') {
-      window.populateAllDropdowns();
-    }
-    
-    // Load admin dashboard data
-    loadAdminDashboard();
-    initializeAdminApprovalPanel();
-    loadTeams();
-  } else {
-    if (adminPanel) adminPanel.classList.add('hidden');
-    if (workerPanel) workerPanel.classList.remove('hidden');
-    
-    // Load worker dashboard
-    loadWorkerDashboard(user);
-  }
-  
-  // Always load these
-  updateDashboardStats();
-  renderTasks();
-  
-  // Add QR logout button if not already added
-  setTimeout(() => addQRLogoutButton(user), 500);
-};
-
-// ============================================
-// ROLE SWITCHER FUNCTIONS - For admin to switch between users
-// ============================================
-
-// Role Switcher - Shows only for admin users
-function addRoleSwitcher(currentUser) {
-    // Only show for admin users
-    if (currentUser.role !== 'admin') return;
-    
-    const headerRight = document.querySelector('.header-right');
-    if (!headerRight) return;
-    
-    // Check if already exists
-    if (document.getElementById('roleSwitcher')) return;
-    
-    // Create role switcher container
-    const roleSwitcher = document.createElement('div');
-    roleSwitcher.id = 'roleSwitcher';
-    roleSwitcher.style.cssText = `
-        position: relative;
-        margin-right: 15px;
-    `;
-    
-    // Main button
-    const switcherBtn = document.createElement('button');
-    switcherBtn.style.cssText = `
-        display: flex;
-        align-items: center;
-        gap: 8px;
-        padding: 8px 16px;
-        background: linear-gradient(135deg, #2563eb, #1e40af);
-        border: none;
-        border-radius: 8px;
-        color: white;
-        cursor: pointer;
-        font-size: 14px;
-        font-weight: 500;
-        transition: all 0.3s ease;
-    `;
-    switcherBtn.innerHTML = `
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/>
-        </svg>
-        <span>👥 Switch User</span>
-        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <polyline points="6 9 12 15 18 9"></polyline>
-        </svg>
-    `;
-    
-    // Dropdown menu
-    const dropdown = document.createElement('div');
-    dropdown.id = 'userDropdown';
-    dropdown.style.cssText = `
-        position: absolute;
-        top: 45px;
-        right: 0;
-        background: var(--bg-card);
-        border: 1px solid var(--border-color);
-        border-radius: 12px;
-        min-width: 280px;
-        max-height: 400px;
-        overflow-y: auto;
-        display: none;
-        z-index: 1000;
-        box-shadow: 0 10px 25px rgba(0,0,0,0.2);
-        animation: fadeIn 0.2s ease;
-    `;
-    
-    // Header
-    dropdown.innerHTML = `
-        <div style="padding: 12px 16px; border-bottom: 1px solid var(--border-color); background: var(--bg-secondary); border-radius: 12px 12px 0 0;">
-            <div style="font-weight: bold; margin-bottom: 4px;">🔄 Switch User Account</div>
-            <div style="font-size: 12px; color: var(--text-secondary);">Select a user to impersonate</div>
-        </div>
-        <div id="userListContainer" style="padding: 8px 0;">
-            <div style="padding: 12px; text-align: center; color: var(--text-secondary);">
-                <div class="loading-spinner-small"></div>
-                Loading users...
-            </div>
-        </div>
-    `;
-    
-    roleSwitcher.appendChild(switcherBtn);
-    roleSwitcher.appendChild(dropdown);
-    
-    // Toggle dropdown
-    switcherBtn.onclick = (e) => {
-        e.stopPropagation();
-        if (dropdown.style.display === 'none' || !dropdown.style.display) {
-            dropdown.style.display = 'block';
-            loadUsersForSwitcher();
-        } else {
-            dropdown.style.display = 'none';
-        }
-    };
-    
-    // Close when clicking outside
-    document.addEventListener('click', (e) => {
-        if (!roleSwitcher.contains(e.target)) {
-            dropdown.style.display = 'none';
-        }
-    });
-    
-    headerRight.insertBefore(roleSwitcher, headerRight.firstChild);
-    
-    // Add animation keyframes if not present
-    if (!document.querySelector('#roleSwitcherStyles')) {
-        const style = document.createElement('style');
-        style.id = 'roleSwitcherStyles';
-        style.textContent = `
-            @keyframes fadeIn {
-                from { opacity: 0; transform: translateY(-10px); }
-                to { opacity: 1; transform: translateY(0); }
-            }
-            .loading-spinner-small {
-                width: 20px;
-                height: 20px;
-                border: 2px solid var(--border-color);
-                border-top-color: var(--primary);
-                border-radius: 50%;
-                animation: spin 0.8s linear infinite;
-                margin: 0 auto;
-            }
-            @keyframes spin {
-                to { transform: rotate(360deg); }
-            }
-            .user-item {
-                padding: 10px 16px;
-                cursor: pointer;
-                transition: all 0.2s ease;
-                display: flex;
-                align-items: center;
-                gap: 12px;
-                border-bottom: 1px solid var(--border-color);
-            }
-            .user-item:hover {
-                background: var(--bg-secondary);
-            }
-            .user-avatar {
-                width: 36px;
-                height: 36px;
-                border-radius: 50%;
-                background: linear-gradient(135deg, var(--primary), var(--primary-dark));
-                display: flex;
-                align-items: center;
-                justify-content: center;
-                font-weight: bold;
-                color: white;
-            }
-            .user-info {
-                flex: 1;
-            }
-            .user-name {
-                font-weight: 600;
-                margin-bottom: 2px;
-            }
-            .user-email {
-                font-size: 11px;
-                color: var(--text-secondary);
-            }
-            .user-role {
-                font-size: 10px;
-                padding: 2px 6px;
-                border-radius: 10px;
-                background: rgba(37, 99, 235, 0.1);
-                color: var(--primary);
-            }
-            .user-role.admin {
-                background: rgba(239, 68, 68, 0.1);
-                color: #ef4444;
-            }
-            .user-role.worker {
-                background: rgba(16, 185, 129, 0.1);
-                color: #10b981;
-            }
-        `;
-        document.head.appendChild(style);
-    }
-}
-
-// Load users for the switcher
-async function loadUsersForSwitcher() {
-    const container = document.getElementById('userListContainer');
-    if (!container) return;
-    
-    const token = localStorage.getItem('wfms_token');
-    const currentUser = JSON.parse(localStorage.getItem('wfms_current_user'));
-    
-    try {
-        const response = await fetch('/api/users', {
-            headers: { 'Authorization': 'Bearer ' + token }
-        });
-        const data = await response.json();
-        
-        if (!data.users) {
-            container.innerHTML = '<div style="padding: 12px; text-align: center; color: var(--text-secondary);">Error loading users</div>';
-            return;
-        }
-        
-        // Group users by role
-        const admins = data.users.filter(u => u.role === 'admin');
-        const workers = data.users.filter(u => u.role === 'worker');
-        
-        container.innerHTML = `
-            <div style="padding: 8px 12px; background: var(--bg-secondary); font-size: 12px; font-weight: bold; color: var(--text-secondary);">
-                👑 ADMIN USERS
-            </div>
-            ${admins.map(user => `
-                <div class="user-item" data-user-id="${user.id}" data-user-email="${user.email}" data-user-name="${user.name}" data-user-role="${user.role}">
-                    <div class="user-avatar" style="background: linear-gradient(135deg, #ef4444, #dc2626);">
-                        ${user.name.charAt(0).toUpperCase()}
-                    </div>
-                    <div class="user-info">
-                        <div class="user-name">${user.name} ${user.id === currentUser.id ? '(Current)' : ''}</div>
-                        <div class="user-email">${user.email}</div>
-                        <span class="user-role admin">Admin</span>
-                    </div>
-                    ${user.id !== currentUser.id ? '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>' : ''}
-                </div>
-            `).join('')}
-            
-            <div style="padding: 8px 12px; background: var(--bg-secondary); font-size: 12px; font-weight: bold; color: var(--text-secondary); margin-top: 8px;">
-                👥 WORKER USERS
-            </div>
-            ${workers.map(user => `
-                <div class="user-item" data-user-id="${user.id}" data-user-email="${user.email}" data-user-name="${user.name}" data-user-role="${user.role}">
-                    <div class="user-avatar" style="background: linear-gradient(135deg, #10b981, #059669);">
-                        ${user.name.charAt(0).toUpperCase()}
-                    </div>
-                    <div class="user-info">
-                        <div class="user-name">${user.name}</div>
-                        <div class="user-email">${user.email}</div>
-                        <span class="user-role worker">Worker</span>
-                    </div>
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
-                </div>
-            `).join('')}
-        `;
-        
-        // Add click handlers
-        container.querySelectorAll('.user-item').forEach(item => {
-            item.onclick = async () => {
-                const userId = item.dataset.userId;
-                const userName = item.dataset.userName;
-                const userEmail = item.dataset.userEmail;
-                const userRole = item.dataset.userRole;
-                const currentUserId = currentUser.id;
-                
-                if (userId === currentUserId) {
-                    document.getElementById('userDropdown').style.display = 'none';
-                    return;
-                }
-                
-                // Show loading state
-                item.style.opacity = '0.5';
-                item.style.pointerEvents = 'none';
-                
-                await switchToUser(userEmail, userName, userRole);
-            };
-        });
-        
-    } catch (err) {
-        console.error('Error loading users:', err);
-        container.innerHTML = '<div style="padding: 12px; text-align: center; color: var(--text-secondary);">Error loading users</div>';
-    }
-}
-
-// Switch to selected user
-async function switchToUser(email, name, role) {
-    console.log(`🔄 Switching to user: ${name} (${role})`);
-    
-    // Define passwords based on user
-    const userPasswords = {
-        'junior@gmail.com': '12blackSt@*',
-        'otto@gmail.com': 'admin123',
-        'black@gmail.com': 'admin123',
-        'white@gmail.com': 'admin123',
-        'brown@gmail.com': 'admin123',
-        'amin@gmail.com': '123456',
-        'wilson': 'admin123',
-        'prosper': 'admin123'
-    };
-    
-    const password = userPasswords[email] || 'admin123';
-    
-    try {
-        const response = await fetch('/api/login', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ email, password })
-        });
-        
-        const data = await response.json();
-        
-        if (data.ok) {
-            console.log(`✅ Switched to ${data.user.name} (${data.user.role})`);
-            localStorage.setItem('wfms_current_user', JSON.stringify(data.user));
-            localStorage.setItem('wfms_token', data.token);
-            localStorage.setItem('wfms_refresh_token', data.refreshToken);
-            
-            // Show success message
-            if (typeof showToast === 'function') {
-                showToast(`Switched to ${data.user.name} (${data.user.role})`, 'success');
-            }
-            
-            // Reload page after short delay
-            setTimeout(() => {
-                window.location.reload();
-            }, 500);
-        } else {
-            console.error('Login failed:', data.error);
-            if (typeof showToast === 'function') {
-                showToast(`Failed to switch to ${name}: ${data.error}`, 'error');
-            }
-        }
-    } catch (err) {
-        console.error('Switch error:', err);
-        if (typeof showToast === 'function') {
-            showToast('Error switching user', 'error');
-        }
-    }
-}
-
-// Make functions globally available
-window.addRoleSwitcher = addRoleSwitcher;
-window.switchToUser = switchToUser;
-
-// Define the populateAllDropdowns function
-window.populateAllDropdowns = function() {
-  console.log('🔄 Populating all dropdowns...');
-  
-  // 1. Load employees into Assign To dropdown
-  if (typeof loadEmployees === 'function') {
-    loadEmployees();
-  }
-  
-  // 2. Populate Category dropdown
-  const categorySelect = document.getElementById('taskCategory');
-  if (categorySelect) {
-    const categories = [
-      'Development', 'Design', 'Testing', 'Documentation',
-      'Bug Fix', 'Feature Request', 'Meeting', 'Research',
-      'Support', 'Maintenance'
-    ];
-    
-    // Only populate if empty or only has placeholder
-    if (categorySelect.options.length <= 1) {
-      categorySelect.innerHTML = '<option value="">Select Category</option>';
-      categories.forEach(cat => {
-        const option = document.createElement('option');
-        option.value = cat.toLowerCase().replace(/\s/g, '_');
-        option.textContent = cat;
-        categorySelect.appendChild(option);
-      });
-      console.log(`✅ Added ${categories.length} categories to dropdown`);
-    } else {
-      console.log(`✅ Category dropdown already has ${categorySelect.options.length} options`);
-    }
-  }
-  
-  // 3. Populate Priority dropdown
-  const prioritySelect = document.getElementById('taskPriority');
-  if (prioritySelect) {
-    const priorities = ['Low', 'Medium', 'High', 'Critical'];
-    
-    // Only populate if empty or only has one option
-    if (prioritySelect.options.length <= 1) {
-      prioritySelect.innerHTML = '<option value="medium">Medium</option>';
-      priorities.forEach(p => {
-        if (p !== 'Medium') {
-          const option = document.createElement('option');
-          option.value = p.toLowerCase();
-          option.textContent = p;
-          prioritySelect.appendChild(option);
-        }
-      });
-      console.log(`✅ Added ${priorities.length} priority options`);
-    } else {
-      console.log(`✅ Priority dropdown already has ${prioritySelect.options.length} options`);
-    }
-  }
-  
-  console.log('✅ All dropdowns populated successfully');
-};
-window.ensureQRContainer = function() {
-  if (document.getElementById('qrScannerContainer')) return true;
-  const container = document.createElement('div');
-  container.id = 'qrScannerContainer';
-  container.className = 'qr-scanner-overlay hidden';
-  container.innerHTML = `
-    <div class="qr-scanner-box">
-      <div class="qr-scanner-header">
-        <h5>Scan QR Code</h5>
-        <button onclick="window.stopQRScanner()">×</button>
-      </div>
-      <div id="qr-reader"></div>
-      <div id="qr-scanner-status"></div>
-    </div>
-  `;
-  document.body.appendChild(container);
-  return true;
-};
-
-window.showFormError = function(input, msg) {
-  if (!input) return;
-  const parent = input.parentElement;
-  const existing = parent?.querySelector('.form-error');
-  if (existing) existing.remove();
-  input.style.borderColor = '#ef4444';
-  const error = document.createElement('div');
-  error.className = 'form-error';
-  error.textContent = msg;
-  error.style.cssText = 'color:#ef4444;font-size:12px;margin-top:4px;';
-  if (parent) parent.appendChild(error);
-  setTimeout(() => {
-    input.style.borderColor = '';
-    if (error.parentElement) error.remove();
-  }, 4000);
-};
-
-window.showFormSuccess = function(input) {
-  if (!input) return;
-  input.style.borderColor = '#10b981';
-  setTimeout(() => { input.style.borderColor = ''; }, 2000);
-};
-
-window.showRegister = function() {
-  const login = document.getElementById('login-container');
-  const register = document.getElementById('register-container');
-  if (login) login.classList.add('hidden');
-  if (register) register.classList.remove('hidden');
-};
-
-window.backToLogin = function() {
-  const login = document.getElementById('login-container');
-  const register = document.getElementById('register-container');
-  if (register) register.classList.add('hidden');
-  if (login) login.classList.remove('hidden');
-};
-
-window.isValidEmail = function(email) {
-  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
-};
-
-window.toggleRegPassword = function() {
-  const pwd = document.getElementById('regPassword');
-  if (pwd) pwd.type = pwd.type === 'password' ? 'text' : 'password';
-};
-
-window.showToast = function(message, type = 'info') {
-  const container = document.getElementById('toast-container');
-  const toast = document.createElement('div');
-  toast.className = `toast toast-${type}`;
-  toast.innerHTML = `
-    <div class="toast-content">${message}</div>
-    <button class="toast-close" onclick="this.parentElement.remove()">×</button>
-  `;
-  toast.style.cssText = `
-    background: ${type === 'error' ? '#ef4444' : type === 'success' ? '#10b981' : '#3b82f6'};
-    color: white;
-    padding: 12px 20px;
-    margin-bottom: 10px;
-    border-radius: 8px;
-    box-shadow: 0 4px 12px rgba(0,0,0,0.15);
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    min-width: 250px;
-    animation: slideIn 0.3s ease;
-  `;
-  container.appendChild(toast);
-  setTimeout(() => toast.remove(), 5000);
-};
-
-// ========== FIXED QR SCANNER FOR iOS/MOBILE ==========
-
-// Global flag to track camera permission
-window._cameraPermissionGranted = false;
-window._cameraPermissionRequested = false;
-
-// Request camera permission with user gesture
-async function requestCameraPermission() {
-  if (window._cameraPermissionGranted) return true;
-  if (window._cameraPermissionRequested) return false;
-  
-  window._cameraPermissionRequested = true;
-  
-  try {
-    console.log('[QR] Requesting camera permission...');
-    
-    // iOS requires specific constraints
-    const constraints = {
-      video: {
-        width: { ideal: 1280 },
-        height: { ideal: 720 },
-        facingMode: { ideal: 'environment' }
-      },
-      audio: false
-    };
-    
-    const stream = await navigator.mediaDevices.getUserMedia(constraints);
-    
-    // Stop all tracks immediately - we just need permission
-    stream.getTracks().forEach(track => {
-      track.stop();
-      console.log('[QR] Stopped permission test track');
-    });
-    
-    window._cameraPermissionGranted = true;
-    console.log('[QR] Camera permission granted');
-    return true;
-    
-  } catch (err) {
-    console.error('[QR] Camera permission denied:', err.name, err.message);
-    window._cameraPermissionRequested = false;
-    
-    // Provide user-friendly error message
-    let errorMessage = 'Camera access is required for QR scanning. ';
-    if (err.name === 'NotAllowedError') {
-      errorMessage += 'Please allow camera access in your browser settings.';
-    } else if (err.name === 'NotFoundError') {
-      errorMessage += 'No camera found on this device.';
-    } else if (err.name === 'NotReadableError') {
-      errorMessage += 'Camera is being used by another application.';
-    } else {
-      errorMessage += 'Please check your camera permissions.';
-    }
-    
-    window.showToast(errorMessage, 'error');
-    return false;
-  }
-}
-
-// ========== ADD stopQRScanner HERE - BEFORE initQRScanner ==========
-
-window.stopQRScanner = async function() {
-  console.log('[QR] Stopping QR scanner...');
-  
-  if (window.currentScanner) {
-    try {
-      await window.currentScanner.stop();
-    } catch(e) {}
-    window.currentScanner = null;
-  }
-  
-  const videos = document.querySelectorAll('video');
-  videos.forEach(video => {
-    if (video.srcObject) {
-      video.srcObject.getTracks().forEach(track => track.stop());
-      video.srcObject = null;
-    }
-  });
-  
-  const container = document.getElementById('qrScannerContainer');
-  if (container) {
-    container.classList.add('hidden');
-    container.style.display = 'none';
-  }
-  
-  const reader = document.getElementById('qr-reader');
-  if (reader) reader.innerHTML = '';
-};
-
-// ========== NOW initQRScanner - stopQRScanner EXISTS ==========
-
-window.initQRScanner = async function(action) {
-  // Wait for DOM to be ready
-  if (document.readyState === 'loading') {
-    await new Promise(resolve => document.addEventListener('DOMContentLoaded', resolve));
-  }
-  
-  // Request camera permission first
-  const hasPermission = await requestCameraPermission();
-  if (!hasPermission) {
-    window.showToast('Camera permission required to scan QR codes', 'warning');
-    return false;
-  }
-  
-  window.ensureQRContainer();
-  
-  let reader = document.getElementById('qr-reader');
-  let attempts = 0;
-  while (!reader && attempts < 10) {
-    await new Promise(r => setTimeout(r, 100));
-    reader = document.getElementById('qr-reader');
-    attempts++;
-  }
-  
-  if (!reader) {
-    window.showToast('QR scanner initialization failed. Please refresh.', 'error');
-    return false;
-  }
-  
-  const container = document.getElementById('qrScannerContainer');
-  if (!container) return false;
-
-  await window.stopQRScanner();  // ← NOW stopQRScanner EXISTS!
-  reader.innerHTML = '';
-  container.classList.remove('hidden');
-  container.style.display = 'flex';
-
-  if (typeof Html5Qrcode === 'undefined') {
-    const status = document.getElementById('qr-scanner-status');
-    if (status) status.textContent = '📦 Loading QR library...';
-    
-    await new Promise((resolve) => {
-      const script = document.createElement('script');
-      script.src = 'https://cdn.jsdelivr.net/npm/html5-qrcode@2.3.8/html5-qrcode.min.js';
-      script.onload = resolve;
-      script.onerror = resolve;
-      document.head.appendChild(script);
-    });
-    await new Promise(r => setTimeout(r, 200));
-  }
-  
-  if (typeof Html5Qrcode === 'undefined') {
-    window.showToast('QR library failed to load. Please refresh.', 'error');
-    return false;
-  }
-
-  const status = document.getElementById('qr-scanner-status');
-  if (status) status.textContent = '🎥 Starting camera...';
-
-  try {
-    const scanner = new Html5Qrcode('qr-reader');
-    window.currentScanner = scanner;
-    let scanned = false;
-
-    await scanner.start(
-      { facingMode: 'environment' },
-      { fps: 15, qrbox: { width: 250, height: 250 } },
-      async (text) => {
-        if (scanned) return;
-        scanned = true;
-        if (status) status.textContent = '✅ QR detected!';
-        await window.stopQRScanner();
-
-        const response = await fetch('/api/qr/scan', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ qrToken: text, action, timestamp: new Date().toISOString() })
-        });
-        const data = await response.json();
-
-        if (data.ok && action === 'login' && data.token) {
-          localStorage.setItem('wfms_token', data.token);
-          localStorage.setItem('wfms_refresh_token', data.refreshToken);
-          localStorage.setItem('wfms_current_user', JSON.stringify({
-            id: data.userId, name: data.userName, email: data.userEmail, role: data.userRole
-          }));
-          window.showToast(`Welcome ${data.userName}!`, 'success');
-          setTimeout(() => window.enterDashboard({
-            id: data.userId, name: data.userName, email: data.userEmail, role: data.userRole
-          }), 500);
-        } else {
-          window.showToast(data.message || 'QR scanned!', 'success');
-        }
-      },
-      (errorMessage) => {
-        // Ignore normal scanning errors
-        if (errorMessage && !errorMessage.includes('No MultiFormat') && !errorMessage.includes('NotFoundException')) {
-          console.debug('[QR] Scan attempt:', errorMessage);
-        }
-      }
-    );
-
-    if (status) status.textContent = '📱 Position QR code in frame';
-    setTimeout(() => { if (!scanned) window.stopQRScanner(); }, 15000);
-    return true;
-  } catch(e) {
-    console.error('[QR] Scanner error:', e);
-    if (status) status.textContent = '❌ Camera failed';
-    window.showToast('Camera failed: ' + (e.message || 'Unknown error'), 'error');
-    setTimeout(() => window.stopQRScanner(), 2000);
-    return false;
-  }
-};
-
-console.log('✅ QR Scanner functions loaded');
-/* ========= HELPERS ========= */
-const qs = (id) => document.getElementById(id);
-const save = (k, v) => localStorage.setItem(k, JSON.stringify(v));
-const load = (k, d) => {
-  try {
-    const raw = localStorage.getItem(k);
-    if (raw === null || raw === undefined) return d;
-    try {
-      return JSON.parse(raw);
-    } catch (e) {
-      return raw;
-    }
-  } catch (err) {
-    console.warn('LocalStorage read error for', k, err);
-    return d;
-  }
-};
-
-/* ========= NETWORK AND DEPENDENCY CHECK ========= */
-if (typeof navigator !== 'undefined' && !navigator.onLine) {
-    console.warn('⚠️ Application is offline');
-    document.body.classList.add('offline-mode');
-}
-
-window.addEventListener('online', () => {
-    console.log('📶 Application is online');
-    document.body.classList.remove('offline-mode');
-});
-
-window.addEventListener('offline', () => {
-    console.log('📴 Application is offline');
-    document.body.classList.add('offline-mode');
-});
-
-function isQRLibraryLoaded() {
-    return typeof Html5Qrcode !== 'undefined';
-}
-
-// XSS sanitation helper
-function sanitizeHTML(str) {
-  if (!str) return '';
-  return String(str)
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&#x27;')
-    .replace(/\//g, '&#x2F;');
-}
-
-// Loading state helpers
-function showLoading() {
-  let overlay = document.querySelector('.loading-overlay');
-  if (!overlay) {
-    overlay = document.createElement('div');
-    overlay.className = 'loading-overlay';
-    overlay.innerHTML = '<div class="loading-spinner"></div>';
-    document.body.appendChild(overlay);
-  }
-  overlay.style.display = 'flex';
-}
-
-function hideLoading() {
-  const overlay = document.querySelector('.loading-overlay');
-  if (overlay) overlay.style.display = 'none';
-}
-
-function notify(message) {
-  const type = message.startsWith('❌') ? 'error' : message.startsWith('✅') ? 'success' : 'info';
-  showToast(message, type);
-}
-
-// 9. updateDashboardStats - Update stats on dashboard
-async function updateDashboardStats() {
-  try {
-    const tasks = await api('/api/tasks');
-    const users = await api('/api/users');
-    const logs = document.getElementById('log');
-    
-    const totalTasks = document.getElementById('totalTasks');
-    const totalEmployees = document.getElementById('totalEmployees');
-    const totalLogs = document.getElementById('totalLogs');
-    
-    if (totalTasks) totalTasks.innerText = tasks?.length || 0;
-    if (totalEmployees) totalEmployees.innerText = users?.length || 0;
-    if (totalLogs && logs) totalLogs.innerText = logs.children?.length || 0;
-    
-  } catch (err) {
-    console.error('Error updating stats:', err);
-  }
-}
-
-// 
-function createApprovalPanel() {
-  const adminPanel = document.getElementById('admin-panel');
-  if (!adminPanel) return null;
-  
-  let panel = document.querySelector('[data-approval-panel]');
-  if (!panel) {
-    panel = document.createElement('div');
-    panel.setAttribute('data-approval-panel', '');
-    panel.className = 'card';
-    panel.style.marginBottom = '20px';
-    adminPanel.appendChild(panel);
-  }
-  return panel;
-}
-
-// 13. approveTask - Approve task
-window.approveTask = async function(taskId, feedback = '') {
-  if (!feedback) {
-    feedback = prompt('Optional feedback for the employee:');
-    if (feedback === null) return;
-  }
-  
-  try {
-    const response = await api(`/api/tasks/${taskId}/approve`, 'POST', { feedback });
-    if (response.ok) {
-      showToast('✅ Task approved!', 'success');
-      initializeAdminApprovalPanel();
-      loadAdminDashboard();
-    } else {
-      showToast('❌ Failed to approve task', 'error');
-    }
-  } catch (err) {
-    showToast('Error: ' + err.message, 'error');
-  }
-};
-
-// 14. rejectTask - Reject task
-window.rejectTask = async function(taskId) {
-  const feedback = prompt('Please provide feedback for rejection:');
-  if (!feedback) return;
-  
-  try {
-    const response = await api(`/api/tasks/${taskId}/reject`, 'POST', { feedback });
-    if (response.ok) {
-      showToast('⚠️ Task rejected', 'warning');
-      initializeAdminApprovalPanel();
-      loadAdminDashboard();
-    } else {
-      showToast('❌ Failed to reject task', 'error');
-    }
-  } catch (err) {
-    showToast('Error: ' + err.message, 'error');
-  }
-};
-
-//// 15. loadWorkerDashboard - Load worker dashboard (UPDATED)
-async function loadWorkerDashboard(user) {
-  console.log('📋 Loading worker dashboard for:', user.name, 'ID:', user.id);
-  
-  try {
-    const response = await api('/api/tasks');
-    console.log('Tasks API response:', response);
-    
-    // Handle different response formats
-    let tasks = [];
-    if (response.data && Array.isArray(response.data)) {
-      tasks = response.data;
-    } else if (Array.isArray(response)) {
-      tasks = response;
-    } else if (response.tasks && Array.isArray(response.tasks)) {
-      tasks = response.tasks;
-    } else {
-      console.error('Unexpected tasks format:', response);
-      tasks = [];
-    }
-    
-    console.log(`📊 Total tasks in system: ${tasks.length}`);
-    
-    const myTasks = tasks.filter(t => {
-      const assignedId = t.assigned_to?._id || t.assigned_to;
-      return String(assignedId) === String(user.id);
-    });
-    
-    console.log(`📋 Found ${myTasks.length} tasks assigned to ${user.name}`);
-    
-    const myTaskList = document.getElementById('myTaskList');
-    if (!myTaskList) {
-      console.error('❌ myTaskList element not found');
-      return;
-    }
-    
-    if (myTasks.length === 0) {
-      myTaskList.innerHTML = '<div class="text-center text-muted">📭 No tasks assigned to you yet. Check back later!</div>';
-      return;
-    }
-    
-    myTaskList.innerHTML = myTasks.map(task => {
-      const taskId = task._id;
-      const taskTitle = task.title;
-      const taskStatus = task.status || 'pending';
-      const hasReport = task.daily_report;
-      const approvalStatus = task.approval_status;
-      
-      // Status badge
-      let statusBadge = '';
-      if (taskStatus === 'completed' || approvalStatus === 'approved') {
-        statusBadge = '<span class="badge bg-success">✓ Completed</span>';
-      } else if (taskStatus === 'in-progress') {
-        statusBadge = '<span class="badge bg-primary">🔄 In Progress</span>';
-      } else if (approvalStatus === 'pending') {
-        statusBadge = '<span class="badge bg-info">⏳ Awaiting Approval</span>';
-      } else if (approvalStatus === 'rejected') {
-        statusBadge = '<span class="badge bg-danger">✗ Rejected</span>';
-      } else {
-        statusBadge = '<span class="badge bg-warning">⏳ Pending</span>';
-      }
-      
-      // Action buttons
-      let actionButtons = '';
-      if (taskStatus === 'pending' && !hasReport) {
-        actionButtons = `<button class="btn btn-sm btn-primary mt-2" onclick="startTask('${taskId}', '${taskTitle.replace(/'/g, "\\'")}')">
-          ▶️ Start Task
-        </button>`;
-      } else if (taskStatus === 'in-progress' && !hasReport) {
-        actionButtons = `<button class="btn btn-sm btn-success mt-2" onclick="openTaskReport('${taskId}', '${taskTitle.replace(/'/g, "\\'")}')">
-          📝 Submit Report
-        </button>`;
-      } else if (approvalStatus === 'rejected') {
-        actionButtons = `<button class="btn btn-sm btn-warning mt-2" onclick="openTaskReport('${taskId}', '${taskTitle.replace(/'/g, "\\'")}')">
-          🔄 Resubmit
-        </button>`;
-      }
-      
-      return `
-        <div class="task-item" style="margin-bottom: 15px; padding: 15px; border: 1px solid var(--border-color); border-radius: 8px;">
-          <div style="display: flex; justify-content: space-between; align-items: flex-start; flex-wrap: wrap; gap: 10px;">
-            <div style="flex: 1;">
-              <strong style="font-size: 16px;">📌 ${sanitizeHTML(task.title)}</strong>
-              <p style="margin: 8px 0; color: var(--text-secondary);">${sanitizeHTML(task.description || 'No description')}</p>
-              <div style="display: flex; gap: 8px; flex-wrap: wrap; margin-top: 8px;">
-                ${statusBadge}
-                ${task.category ? `<span class="badge bg-info">🏷️ ${task.category}</span>` : ''}
-                ${task.priority ? `<span class="badge ${task.priority === 'high' || task.priority === 'critical' ? 'bg-danger' : 'bg-secondary'}">⚡ ${task.priority}</span>` : ''}
-                ${task.hours_spent ? `<span class="badge bg-secondary">⏱️ ${task.hours_spent} hrs</span>` : ''}
-              </div>
-              ${task.admin_feedback ? `<div class="text-muted small mt-2">📝 Admin feedback: ${task.admin_feedback}</div>` : ''}
-            </div>
-            <div>
-              ${actionButtons}
-            </div>
-          </div>
-        </div>
-      `;
-    }).join('');
-    
-    // Load additional worker data (wrap in try-catch to prevent errors from breaking task display)
-    try {
-      if (typeof loadWorkerPerformance === 'function') await loadWorkerPerformance(user);
-    } catch(e) { console.warn('Performance load failed:', e.message); }
-    
-    try {
-      if (typeof loadWorkerAttendance === 'function') await loadWorkerAttendance(user);
-    } catch(e) { console.warn('Attendance load failed:', e.message); }
-    
-    try {
-      if (typeof loadWorkerTimeLogs === 'function') await loadWorkerTimeLogs(user);
-    } catch(e) { console.warn('Time logs load failed:', e.message); }
-    
-    console.log(`✅ Worker dashboard loaded with ${myTasks.length} tasks`);
-    
-  } catch (err) {
-    console.error('❌ Error loading worker dashboard:', err);
-    const myTaskList = document.getElementById('myTaskList');
-    if (myTaskList) {
-      myTaskList.innerHTML = '<div class="text-center text-danger">Error loading tasks. Please refresh.</div>';
-    }
-  }
-}
-// 16. loadWorkerPerformance - Load performance stats
-async function loadWorkerPerformance(user) {
-  try {
-    const response = await api(`/api/employee/performance/${user.id}`);
-    if (response.ok && response.performance) {
-      const perf = response.performance;
-      
-      const elements = {
-        workerTasksAssigned: perf.tasks_assigned || 0,
-        workerCompletedTasks: perf.tasks_completed || 0,
-        workerInProgressTasks: perf.tasks_in_progress || 0,
-        workerPendingTasks: perf.tasks_pending || 0,
-        workerHoursWorked: perf.total_hours_worked || 0,
-        workerAttendanceRate: `${perf.completion_rate || 0}%`
-      };
-      
-      for (const [id, value] of Object.entries(elements)) {
-        const el = document.getElementById(id);
-        if (el) el.innerText = value;
-      }
-    }
-  } catch (err) {
-    console.error('Error loading performance:', err);
-  }
-}
-
-// 17. loadWorkerAttendance - Load attendance
-async function loadWorkerAttendance(user) {
-  try {
-    const response = await api(`/api/attendance/${user.id}`);
-    // CRITICAL FIX: Handle both response formats
-    const records = response.records || response || [];
-    
-    // Check if records is an array before using .filter
-    if (!Array.isArray(records)) {
-      console.warn('Attendance records is not an array:', records);
-      return;
-    }
-    
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    
-    const todayRecords = records.filter(r => new Date(r.timestamp) >= today);
-    const clockedIn = todayRecords.some(r => r.action === 'clock_in');
-    const onBreak = todayRecords.some(r => r.action === 'break_start') && 
-                    !todayRecords.some(r => r.action === 'break_end');
-    
-    const attendanceDiv = document.getElementById('myAttendance');
-    if (attendanceDiv) {
-      attendanceDiv.innerHTML = `
-        <div style="display: flex; gap: 10px;">
-          <div class="badge ${clockedIn ? 'bg-success' : 'bg-secondary'}">${clockedIn ? '✅ Clocked In' : '⏰ Not Clocked In'}</div>
-          <div class="badge ${onBreak ? 'bg-warning' : 'bg-secondary'}">${onBreak ? '☕ On Break' : '🔄 Not on Break'}</div>
-        </div>
-      `;
-    }
-  } catch (err) {
-    console.error('Error loading attendance:', err);
-  }
-}
-
-// 18. loadWorkerTimeLogs - Load time logs
-async function loadWorkerTimeLogs(user) {
-  try {
-    const response = await api(`/api/time/${user.id}`);
-    // CRITICAL FIX: Handle both response formats
-    const logs = response.logs || response || [];
-    
-    if (!Array.isArray(logs)) {
-      console.warn('Time logs is not an array:', logs);
-      return;
-    }
-    
-    const timeLogsDiv = document.getElementById('myTimeLogs');
-    if (timeLogsDiv && logs.length > 0) {
-      timeLogsDiv.innerHTML = logs.slice(0, 5).map(log => `
-        <div style="padding: 5px; border-bottom: 1px solid var(--border-color);">
-          ${log.action}: ${new Date(log.time || log.timestamp).toLocaleTimeString()}
-        </div>
-      `).join('');
-    } else if (timeLogsDiv) {
-      timeLogsDiv.innerHTML = '<div style="text-align: center; color: var(--text-secondary); padding: 20px;">No time logs yet</div>';
-    }
-  } catch (err) {
-    console.error('Error loading time logs:', err);
-  }
-}
-// 19. renderTasks - Render tasks
-async function renderTasks() {
-  const taskList = document.getElementById('taskList');
-  if (!taskList) return;
-  
-  try {
-    const tasks = await api('/api/tasks');
-    const user = load(CURRENT_KEY);
-    
-    const filteredTasks = user?.role === 'admin' ? tasks : tasks.filter(t => {
-      const assignedId = t.assigned_to?._id || t.assigned_to;
-      return assignedId === user?.id;
-    });
-    
-    if (filteredTasks.length === 0) {
-      taskList.innerHTML = '<div class="text-center text-muted">No tasks found</div>';
-      return;
-    }
-    
-    taskList.innerHTML = filteredTasks.map(task => `
-      <div class="task-item">
-        <strong>${sanitizeHTML(task.title)}</strong>
-        <p>${sanitizeHTML(task.description || 'No description')}</p>
-        <span class="badge ${task.status === 'completed' ? 'bg-success' : 'bg-warning'}">${task.status || 'pending'}</span>
-      </div>
-    `).join('');
-    
-    const totalTasks = document.getElementById('totalTasks');
-    if (totalTasks) totalTasks.innerText = tasks.length;
-    
-  } catch (err) {
-    console.error('Error rendering tasks:', err);
-  }
-}
-
-// 20. startTask - Start a task
-window.startTask = async function(taskId, taskTitle) {
-  if (!confirm(`Start working on "${taskTitle}"?`)) return;
-  
-  try {
-    const response = await api(`/api/tasks/${taskId}`, 'PUT', { status: 'in-progress' });
-    if (response.ok) {
-      showToast(`✓ Started working on: ${taskTitle}`, 'success');
-      renderTasks();
-      if (typeof loadWorkerDashboard === 'function') {
-        const user = load(CURRENT_KEY);
-        if (user) loadWorkerDashboard(user);
-      }
-      setTimeout(() => openTaskReport(taskId, taskTitle), 500);
-    } else {
-      showToast('Failed to start task', 'error');
-    }
-  } catch (err) {
-    showToast('Error: ' + err.message, 'error');
-  }
-};
-
-// 21. openTaskReport - Open report modal
-window.openTaskReport = function(taskId, taskTitle) {
-  const modal = document.getElementById('taskReportModal');
-  if (!modal) {
-    console.error('Task report modal not found');
-    return;
-  }
-  
-  const titleInput = document.getElementById('reportTaskTitle');
-  const taskIdInput = document.getElementById('reportTaskId');
-  const contentInput = document.getElementById('reportContent');
-  const hoursInput = document.getElementById('reportHours');
-  const statusInput = document.getElementById('reportStatus');
-  
-  if (titleInput) titleInput.value = taskTitle || '';
-  if (contentInput) contentInput.value = '';
-  if (hoursInput) hoursInput.value = '';
-  if (statusInput) statusInput.value = 'in-progress';
-  
-  if (!taskIdInput) {
-    const hiddenId = document.createElement('input');
-    hiddenId.type = 'hidden';
-    hiddenId.id = 'reportTaskId';
-    hiddenId.value = taskId;
-    modal.querySelector('.modal-body')?.appendChild(hiddenId);
-  } else {
-    taskIdInput.value = taskId;
-  }
-  
-  modal.style.display = 'flex';
-};
-
-// 22. closeTaskReport - Close report modal
-window.closeTaskReport = function() {
-  const modal = document.getElementById('taskReportModal');
-  if (modal) modal.style.display = 'none';
-};
-
-// 23. submitTaskReport - Submit task report
-window.submitTaskReport = async function() {
-  const taskId = document.getElementById('reportTaskId')?.value;
-  const content = document.getElementById('reportContent')?.value.trim();
-  const hours = parseFloat(document.getElementById('reportHours')?.value) || 0;
-  const status = document.getElementById('reportStatus')?.value;
-  
-  if (!taskId) {
-    showToast('Error: Task ID missing', 'error');
-    closeTaskReport();
-    return;
-  }
-  
-  if (!content) {
-    showToast('Please describe your work completed', 'warning');
-    return;
-  }
-  
-  if (hours <= 0) {
-    showToast('Please enter hours spent', 'warning');
-    return;
-  }
-  
-  const user = load(CURRENT_KEY);
-  if (!user) {
-    showToast('You must be logged in', 'error');
-    return;
-  }
-  
-  try {
-    const response = await api(`/api/tasks/${taskId}/submit-report`, 'POST', {
-      daily_report: content,
-      status: status,
-      hours_spent: hours,
-      submitted_by: user.id
-    });
-    
-    if (!response.ok) {
-      showToast('Error: ' + (response.error || 'Submission failed'), 'error');
-      return;
-    }
-    
-    showToast('✅ Report submitted for review!', 'success');
-    closeTaskReport();
-    
-    if (typeof renderTasks === 'function') renderTasks();
-    if (typeof loadWorkerDashboard === 'function') loadWorkerDashboard(user);
-    
-  } catch (err) {
-    showToast('Error: ' + err.message, 'error');
-  }
-};
-
-// 24. loadTeams - Load teams
-async function loadTeams() {
-  try {
-    const teams = await api('/api/teams');
-    const teamsList = document.getElementById('teamsList');
-    if (!teamsList) return;
-    
-    if (!teams || teams.length === 0) {
-      teamsList.innerHTML = '<div class="text-center text-muted">No teams created yet</div>';
-      return;
-    }
-    
-    teamsList.innerHTML = teams.map(team => `
-      <div class="team-card">
-        <strong>${team.name}</strong>
-        <p>${team.description || ''}</p>
-        <small>Lead: ${team.team_lead?.name || 'Not assigned'}</small>
-        <small>Members: ${team.members?.length || 0}</small>
-        <button class="btn btn-sm btn-primary" onclick="viewTeam('${team._id}')">View</button>
-      </div>
-    `).join('');
-  } catch (err) {
-    console.error('Error loading teams:', err);
-  }
-}
-
-// 25. loadTeamDropdowns - Load team dropdowns
-async function loadTeamDropdowns() {
-  try {
-    const users = await api('/api/users');
-    const employees = users.filter(u => u.role === 'worker');
-    
-    const teamLeadSelect = document.getElementById('teamLead');
-    const teamMembersSelect = document.getElementById('teamMembers');
-    
-    if (teamLeadSelect) {
-      teamLeadSelect.innerHTML = '<option value="">Select Team Lead</option>';
-      employees.forEach(emp => {
-        const opt = document.createElement('option');
-        opt.value = emp.id || emp._id;
-        opt.textContent = emp.name;
-        teamLeadSelect.appendChild(opt);
-      });
-    }
-    
-    if (teamMembersSelect) {
-      teamMembersSelect.innerHTML = '';
-      employees.forEach(emp => {
-        const opt = document.createElement('option');
-        opt.value = emp.id || emp._id;
-        opt.textContent = emp.name;
-        teamMembersSelect.appendChild(opt);
-      });
-    }
-  } catch (err) {
-    console.error('Error loading team dropdowns:', err);
-  }
-}
-
-// 26. createTeam - Create new team
-window.createTeam = async function() {
-  const name = document.getElementById('teamName')?.value.trim();
-  const description = document.getElementById('teamDescription')?.value.trim();
-  const teamLead = document.getElementById('teamLead')?.value;
-  const memberSelect = document.getElementById('teamMembers');
-  const members = memberSelect ? Array.from(memberSelect.selectedOptions).map(opt => opt.value) : [];
-  
-  if (!name) {
-    showToast('Please enter a team name', 'warning');
-    return;
-  }
-  
-  try {
-    const response = await api('/api/teams', 'POST', { name, description, team_lead: teamLead, members });
-    if (response.ok) {
-      showToast(`✅ Team "${name}" created!`, 'success');
-      document.getElementById('teamName').value = '';
-      document.getElementById('teamDescription').value = '';
-      loadTeams();
-      loadTeamDropdowns();
-    } else {
-      showToast('Error: ' + (response.error || 'Failed to create team'), 'error');
-    }
-  } catch (err) {
-    showToast('Error: ' + err.message, 'error');
-  }
-};
-
-// 27. viewTeam - View team details
-window.viewTeam = async function(teamId) {
-  try {
-    const team = await api(`/api/teams/${teamId}`);
-    if (!team) {
-      showToast('Team not found', 'error');
-      return;
-    }
-    
-    alert(`Team: ${team.name}\nDescription: ${team.description || 'N/A'}\nLead: ${team.team_lead?.name || 'Not assigned'}\nMembers: ${team.members?.length || 0}`);
-  } catch (err) {
-    showToast('Error loading team', 'error');
-  }
-};
-
-// 28. addMembersToTeam - Add members to team
-window.addMembersToTeam = async function(teamId) {
-  const memberIds = prompt('Enter member IDs (comma separated):');
-  if (!memberIds) return;
-  
-  const ids = memberIds.split(',').map(id => id.trim());
-  
-  try {
-    const response = await api(`/api/teams/${teamId}/members`, 'POST', { memberIds: ids });
-    if (response.ok) {
-      showToast('✅ Members added!', 'success');
-      loadTeams();
-    } else {
-      showToast('Error: ' + (response.error || 'Failed to add members'), 'error');
-    }
-  } catch (err) {
-    showToast('Error: ' + err.message, 'error');
-  }
-};
-
-// 29. deleteTeam - Delete team
-window.deleteTeam = async function(teamId) {
-  if (!confirm('Are you sure you want to delete this team?')) return;
-  
-  try {
-    const response = await api(`/api/teams/${teamId}`, 'DELETE');
-    if (response.ok) {
-      showToast('✅ Team deleted', 'success');
-      loadTeams();
-    } else {
-      showToast('Error deleting team', 'error');
-    }
-  } catch (err) {
-    showToast('Error: ' + err.message, 'error');
-  }
-};
-
-// 30. assignTeamTask - Assign task to team
-window.assignTeamTask = async function(teamId) {
-  const taskTitle = prompt('Enter task title:');
-  if (!taskTitle) return;
-  
-  const taskDesc = prompt('Enter task description:');
-  
-  try {
-    const team = await api(`/api/teams/${teamId}`);
-    if (!team || !team.members) {
-      showToast('Team not found', 'error');
-      return;
-    }
-    
-    let success = 0;
-    for (const member of team.members) {
-      const response = await api('/api/tasks', 'POST', {
-        title: `${taskTitle} (Team Task)`,
-        description: taskDesc,
-        assigned_to: member._id
-      });
-      if (response.ok) success++;
-    }
-    
-    showToast(`✅ Assigned to ${success}/${team.members.length} members`, 'success');
-    renderTasks();
-  } catch (err) {
-    showToast('Error: ' + err.message, 'error');
-  }
-};
-
-// 31. logUI - Add log message
-function logUI(msg) {
-  const log = document.getElementById('log');
-  const p = document.createElement('p');
-  p.textContent = `[${new Date().toLocaleTimeString()}] ${msg}`;
-  if (log) log.prepend(p);
-  
-  const totalLogs = document.getElementById('totalLogs');
-  if (totalLogs && log) totalLogs.innerText = log.children.length;
-}
-
-// 32. clockIn - Clock in
-window.clockIn = async function() {
-  const user = load(CURRENT_KEY);
-  if (!user) {
-    showToast('Please login first', 'error');
-    return;
-  }
-  
-  try {
-    await api('/api/time', 'POST', { user_id: user.id, action: 'clock_in', time: new Date().toISOString() });
-    showToast('✅ Clocked in', 'success');
-    logUI('Clock In');
-    if (typeof loadWorkerAttendance === 'function') loadWorkerAttendance(user);
-  } catch (err) {
-    showToast('Error: ' + err.message, 'error');
-  }
-};
-
-// 33. clockOut - Clock out
-window.clockOut = async function() {
-  const user = load(CURRENT_KEY);
-  if (!user) return;
-  
-  try {
-    await api('/api/time', 'POST', { user_id: user.id, action: 'clock_out', time: new Date().toISOString() });
-    showToast('👋 Clocked out', 'success');
-    logUI('Clock Out');
-    if (typeof loadWorkerAttendance === 'function') loadWorkerAttendance(user);
-  } catch (err) {
-    showToast('Error: ' + err.message, 'error');
-  }
-};
-
-// 34. breakStart - Start break
-window.breakStart = async function() {
-  const user = load(CURRENT_KEY);
-  if (!user) return;
-  
-  try {
-    await api('/api/time', 'POST', { user_id: user.id, action: 'break_start', time: new Date().toISOString() });
-    showToast('☕ Break started', 'success');
-    logUI('Break Start');
-    if (typeof loadWorkerAttendance === 'function') loadWorkerAttendance(user);
-  } catch (err) {
-    showToast('Error: ' + err.message, 'error');
-  }
-};
-
-// 35. breakEnd - End break
-window.breakEnd = async function() {
-  const user = load(CURRENT_KEY);
-  if (!user) return;
-  
-  try {
-    await api('/api/time', 'POST', { user_id: user.id, action: 'break_end', time: new Date().toISOString() });
-    showToast('🔄 Break ended', 'success');
-    logUI('Break End');
-    if (typeof loadWorkerAttendance === 'function') loadWorkerAttendance(user);
-  } catch (err) {
-    showToast('Error: ' + err.message, 'error');
-  }
-};
-
-// 36. addTask - Add new task
-window.addTask = async function() {
-  const title = document.getElementById('taskTitle')?.value.trim();
-  const description = document.getElementById('taskDesc')?.value.trim();
-  const assigned_to = document.getElementById('taskAssign')?.value;
-  
-  if (!title || !assigned_to) {
-    showToast('Please fill in all fields', 'warning');
-    return;
-  }
-  
-  try {
-    const response = await api('/api/tasks', 'POST', { title, description, assigned_to });
-    if (response.ok) {
-      showToast('✅ Task assigned!', 'success');
-      document.getElementById('taskTitle').value = '';
-      document.getElementById('taskDesc').value = '';
-      renderTasks();
-    } else {
-      showToast('Error: ' + (response.error || 'Failed to create task'), 'error');
-    }
-  } catch (err) {
-    showToast('Error: ' + err.message, 'error');
-  }
-};
-
-// Note: All global functions are already exposed at the top of the file
-// Removed redundant reassignments that were causing conflicts
-window.loadTeams = loadTeams;
-window.loadTeamDropdowns = loadTeamDropdowns;
-window.logUI = logUI;
-
-console.log('✅ All functions registered');
-console.log('✅ enterDashboard type:', typeof window.enterDashboard);
-
-function createFallbackQRScanner() {
-    return function(config) {
-        return {
-            start(cameraId, config, onSuccess) {
-                console.warn('Fallback QR scanner started');
-                setTimeout(() => {
-                    const code = prompt('Camera unavailable. Enter QR code manually:');
-                    if (code && onSuccess) onSuccess(code);
-                }, 300);
-                return Promise.resolve();
-            },
-            stop() {
-                return Promise.resolve();
-            }
-        };
-    };
-}
-
-window.addEventListener('error', function(e) {
-    if (e.target && e.target.tagName === 'SCRIPT') {
-        console.error('Script failed to load:', e.target.src);
-        if (e.target.src && e.target.src.includes('html5-qrcode')) {
-            console.warn('QR library failed to load, using fallback');
-            window.Html5Qrcode = createFallbackQRScanner();
-        }
-    }
-}, true);
-
-/* ========= QR LIBRARY CHECK AND FALLBACK ========= */
-function waitForQRLibrary(timeout = 10000) {
-  return new Promise((resolve) => {
-    const checkInterval = 100;
-    let elapsed = 0;
-    const timer = setInterval(() => {
-      if (typeof Html5Qrcode !== 'undefined') {
-        clearInterval(timer);
-        console.log('✅ Html5Qrcode library detected');
-        resolve(true);
-        return;
-      }
-      elapsed += checkInterval;
-      if (elapsed >= timeout) {
-        clearInterval(timer);
-        console.warn('⚠️ Html5Qrcode library not detected after timeout');
-        resolve(false);
-      }
-    }, checkInterval);
-  });
-}
-
-// Placeholder for initQRScanner; final implementation defined later in the file.
-
-// testQRScanner alias to final function definition later in the file
-window.testQRScanner = async function() {
-  if (window.initQRScanner) return window.initQRScanner();
-};
-
-/* ========= STORAGE KEYS ========= */
+// Global storage keys and helpers
 const CURRENT_KEY = 'wfms_current_user';
 const TOKEN_KEY = 'wfms_token';
 const REFRESH_TOKEN_KEY = 'wfms_refresh_token';
 const TOKEN_EXPIRES_KEY = 'wfms_token_expires';
-const THEME_KEY = 'wfms_theme';
 
-let csrfToken = null;
-
-/* ========= JWT TOKEN MANAGEMENT ========= */
-function saveToken(token, refreshToken, expiresIn) {
-  save(TOKEN_KEY, token);
-  save(REFRESH_TOKEN_KEY, refreshToken);
-  const expiresAt = Date.now() + (expiresIn * 1000);
-  save(TOKEN_EXPIRES_KEY, expiresAt);
+function save(key, value) {
+    try { localStorage.setItem(key, JSON.stringify(value)); } catch (e) { /* ignore */ }
 }
 
-function getToken() {
-  return load(TOKEN_KEY, null);
-}
-
-function getRefreshToken() {
-  return load(REFRESH_TOKEN_KEY, null);
-}
-
-function isTokenExpired() {
-  const expiresAt = load(TOKEN_EXPIRES_KEY, 0);
-  return Date.now() + 3600000 > expiresAt;
-}
-
-async function refreshAccessToken() {
-  try {
-    const refreshToken = getRefreshToken();
-    if (!refreshToken) {
-      console.warn('No refresh token available');
-      return false;
-    }
-
-    const res = await fetch('/api/auth/refresh', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ refreshToken }),
-      credentials: 'include'
-    });
-
-    if (!res.ok) {
-      console.warn('Token refresh failed');
-      return false;
-    }
-
-    const data = await res.json();
-    if (data.ok && data.token) {
-      save(TOKEN_KEY, data.token);
-      const expiresAt = Date.now() + (data.expiresIn * 1000);
-      save(TOKEN_EXPIRES_KEY, expiresAt);
-      console.log('✓ Token refreshed successfully');
-      return true;
-    }
-    return false;
-  } catch (err) {
-    console.error('❌ Token refresh error:', err);
-    return false;
-  }
-}
-
-function clearSession() {
-  localStorage.removeItem(CURRENT_KEY);
-  localStorage.removeItem(TOKEN_KEY);
-  localStorage.removeItem(REFRESH_TOKEN_KEY);
-  localStorage.removeItem(TOKEN_EXPIRES_KEY);
-}
-
-async function getCSRFToken() {
-  try {
-    const res = await fetch('/api/csrf-token', {
-      method: 'GET',
-      credentials: 'include',
-      headers: { 'Content-Type': 'application/json' }
-    });
-
-    if (!res.ok) {
-      console.warn('Failed to fetch CSRF token, status', res.status);
-      return null;
-    }
-
-    const data = await res.json();
-    csrfToken = data.csrfToken || csrfToken;
-    return csrfToken;
-  } catch (err) {
-    console.warn('Failed to get CSRF token:', err);
-    return null;
-  }
-}
-
-/* ========= API HELPER ========= */
-async function api(url, method = 'GET', body) {
-  const maxRetries = 2;
-  let retryCount = 0;
-
-  async function requestOnce() {
+function load(key, defaultValue = null) {
     try {
-      if (isTokenExpired()) {
-        const refreshed = await refreshAccessToken();
-        if (!refreshed) {
-          console.warn('Token refresh failed or expired during API request');
-        }
-      }
-
-      const headers = { 'Content-Type': 'application/json' };
-      const token = getToken();
-      if (token) {
-        headers.Authorization = `Bearer ${token}`;
-      }
-
-      if (method !== 'GET' && csrfToken) {
-        headers['X-CSRF-Token'] = csrfToken;
-      }
-
-      const res = await fetch(url, {
-        method,
-        headers,
-        body: body ? JSON.stringify(body) : undefined,
-        credentials: 'include'
-      });
-
-      if (res.status === 401) {
-        if (retryCount < maxRetries) {
-          retryCount += 1;
-          const refreshed = await refreshAccessToken();
-          if (refreshed) {
-            return requestOnce();
-          }
-        }
-        clearSession();
-        window.location.href = '/';
-        return { ok: false, error: 'Session expired. Please login again.' };
-      }
-
-      if (res.status === 403) {
-        let csrfError = null;
-        try {
-          const errData = await res.json();
-          csrfError = errData.error;
-        } catch (_){ }
-
-        if (csrfError === 'invalid csrf token' && retryCount < maxRetries) {
-          retryCount += 1;
-          await getCSRFToken();
-          return requestOnce();
-        }
-      }
-
-      if (res.status === 429) {
-        return { ok: false, error: 'Too many requests. Please wait a few minutes.' };
-      }
-
-      const data = await res.json();
-      if (!res.ok) {
-        console.warn(`⚠️ API ${method} ${url} returned status ${res.status}`, data);
-      }
-
-      return data;
-    } catch (err) {
-      console.error(`❌ API Error ${method} ${url}:`, err);
-      return { ok: false, error: err.message };
-    }
-  }
-
-  return requestOnce();
+        const raw = localStorage.getItem(key);
+        if (raw === null || raw === undefined) return defaultValue;
+        try { return JSON.parse(raw); } catch (e) { return raw; }
+    } catch (e) { return defaultValue; }
 }
 
-// Initialize CSRF on page load
-getCSRFToken();
-
-/* ========= THEME ========= */
-function toggleTheme() {
-  // Toggle the class on body
-  document.body.classList.toggle('light-theme');
-  
-  // Check if light theme is active
-  const isLight = document.body.classList.contains('light-theme');
-  
-  // Update the icon
-  const svg = qs('themeSvg');
-  if (svg) {
-    if (isLight) {
-      svg.innerHTML = '<circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/>';
-    } else {
-      svg.innerHTML = '<path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>';
+function showToast(msg, type = 'info') {
+    let container = document.getElementById('toast-container');
+    if (!container) {
+        container = document.createElement('div');
+        container.id = 'toast-container';
+        container.style.cssText = 'position:fixed;top:20px;right:20px;z-index:100001;';
+        document.body.appendChild(container);
     }
-  }
-  
-  // Update the text
-  const themeText = qs('themeText');
-  if (themeText) {
-    themeText.innerText = isLight ? 'Light' : 'Dark';
-  }
-  
-  // Save to localStorage
-  localStorage.setItem(THEME_KEY, isLight ? 'light' : 'dark');
-  
-  console.log(`Theme switched to ${isLight ? 'light' : 'dark'} mode`);
-  
-  // Force a complete repaint
-  document.body.style.transition = 'none';
-  document.body.offsetHeight; // Trigger reflow
-  document.body.style.transition = '';
+    const toast = document.createElement('div');
+    const colors = { success: '#10b981', error: '#ef4444', warning: '#f59e0b', info: '#3b82f6' };
+    toast.style.cssText = `background:${colors[type] || colors.info};color:white;padding:12px 20px;border-radius:8px;margin-bottom:10px;`;
+    toast.innerHTML = `${msg}<button onclick="this.parentElement.remove()" style="margin-left:12px;background:none;border:none;color:white;">×</button>`;
+    container.appendChild(toast);
+    setTimeout(() => { if (toast.parentElement) toast.remove(); }, 5000);
+    return toast;
 }
 
-// Apply saved theme on load
-(function applyTheme() {
-  const savedTheme = localStorage.getItem(THEME_KEY);
-  if (savedTheme === 'light') {
-    document.body.classList.add('light-theme');
-    const svg = qs('themeSvg');
-    if (svg) {
-      svg.innerHTML = '<circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/>';
-    }
-    const themeText = qs('themeText');
-    if (themeText) themeText.innerText = 'Light';
-  } else {
-    document.body.classList.remove('light-theme');
-    const svg = qs('themeSvg');
-    if (svg) {
-      svg.innerHTML = '<path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>';
-    }
-    const themeText = qs('themeText');
-    if (themeText) themeText.innerText = 'Dark';
-  }
-})();
-
-/* ========= SESSION RECOVERY ========= */
-// Moved to end of file to ensure all functions are defined before execution
-
-/* ========= SOCKET.IO REAL-TIME NOTIFICATIONS ========= */
-let socket = null;
-let notificationCheckInterval = null;
-
-function initializeSocket() {
-  if (socket) return;
-  
-  if (typeof io === 'undefined') {
-    console.warn('Socket.IO not loaded, using polling fallback for notifications');
-    startNotificationPolling();
-    return;
-  }
-  
-  try {
-    socket = io({
-      reconnectionAttempts: 5,
-      reconnectionDelay: 1000,
-      timeout: 10000
-    });
+// Add createTeam function at end of app.js (before console.log)
+window.createTeam = async function() {
+    const name = document.getElementById('teamName')?.value.trim();
+    const department = document.getElementById('teamDepartment')?.value.trim();
+    const description = document.getElementById('teamDescription')?.value.trim();
+    const teamLead = document.getElementById('teamLead')?.value;
+    const teamMembers = Array.from(document.getElementById('teamMembers')?.selectedOptions || []).map(opt => opt.value);
     
-    socket.on('connect', () => {
-      console.log('✓ Connected to notification server:', socket.id);
-    });
-
-    socket.on('connected', (data) => {
-      console.log('✓ Notification server ready:', data.message);
-    });
-
-    socket.on('notification', (data) => {
-      console.log('📬 Notification received:', data);
-      showNotification(data);
-    });
-
-    socket.on('disconnect', (reason) => {
-      console.warn('⚠️ Disconnected from notification server:', reason);
-      startNotificationPolling();
-    });
-
-    socket.on('connect_error', (error) => {
-      console.warn('⚠️ Socket connection error:', error);
-      startNotificationPolling();
-    });
-  } catch (error) {
-    console.warn('⚠️ Failed to initialize socket:', error);
-    startNotificationPolling();
-  }
-}
-
-function startNotificationPolling() {
-  if (notificationCheckInterval) return;
-  
-  console.log('📋 Starting notification polling (every 30 seconds)');
-  notificationCheckInterval = setInterval(async () => {
-    const user = load(CURRENT_KEY);
-    if (!user) return;
+    if (!name) {
+        showToast('Team name required', 'error');
+        return;
+    }
     
+    showLoading();
     try {
-      const pendingTasks = await api('/api/tasks?filter=pending');
-      const notifications = [];
-      
-      if (pendingTasks && pendingTasks.length > 0) {
-        pendingTasks.forEach(task => {
-          if (task.assigned_to === user.id && task.status === 'pending') {
-            notifications.push({
-              type: 'task_assigned',
-              message: `New task assigned: ${task.title}`,
-              taskId: task.id
-            });
-          }
+        const response = await api('/api/teams', 'POST', {
+            name, department, description, team_lead: teamLead, members: teamMembers
         });
-      }
-      
-      notifications.forEach(notif => showNotification(notif));
-      
-    } catch (error) {
-      console.error('Error polling notifications:', error);
-    }
-  }, 30000);
-}
-
-function registerUserForNotifications(userId) {
-  if (!socket) {
-    initializeSocket();
-  }
-  if (socket && socket.connected) {
-    socket.emit('register-user', userId);
-    console.log('✓ User registered for notifications:', userId);
-  } else {
-    console.log('📋 Notifications will be polled instead');
-  }
-}
-
-function showNotification(data) {
-  const panel = qs('notificationsPanel');
-  if (!panel) return;
-
-  const notification = document.createElement('div');
-  notification.className = `notification-item notification-${data.type || 'info'}`;
-  notification.style.cssText = `
-    background: var(--card-dark);
-    border: 1px solid var(--border-dark);
-    border-left: 4px solid ${data.type === 'task_assigned' ? '#3b82f6' : data.type === 'approval_status' ? '#10b981' : '#f59e0b'};
-    border-radius: 8px;
-    padding: 12px;
-    margin-bottom: 10px;
-    box-shadow: var(--shadow);
-    animation: slideDown 0.3s ease-out;
-  `;
-  
-  notification.innerHTML = `
-    <div style="display: flex; justify-content: space-between; align-items: start; margin-bottom: 8px;">
-      <strong style="color: ${data.type === 'task_assigned' ? '#3b82f6' : data.type === 'approval_status' ? '#10b981' : '#f59e0b'};">
-        ${data.type === 'task_assigned' ? '📋 New Task' : data.type === 'approval_status' ? '✓ Task Update' : 'ℹ️ Notification'}
-      </strong>
-      <button class="btn-close" style="background: none; border: none; color: var(--text-dark-muted); cursor: pointer; font-size: 18px;" onclick="this.closest('.notification-item').remove()">×</button>
-    </div>
-    <div style="color: var(--text-dark); font-size: 13px; margin-bottom: 8px;">
-      ${data.message}
-    </div>
-    ${data.taskId ? `
-      <div style="display: flex; gap: 8px;">
-        <button class="btn btn-sm btn-primary" style="padding: 4px 12px; font-size: 12px;" onclick="viewTask(${data.taskId})">View Task</button>
-      </div>
-    ` : ''}
-  `;
-
-  panel.classList.remove('hidden');
-  panel.insertBefore(notification, panel.firstChild);
-
-  setTimeout(() => {
-    if (notification.parentElement) {
-      notification.style.animation = 'fadeOut 0.3s ease-out';
-      setTimeout(() => notification.remove(), 300);
-    }
-  }, 10000);
-
-  if ('Notification' in window && Notification.permission === 'granted') {
-    new Notification('WFMS - ' + (data.type === 'task_assigned' ? 'New Task' : 'Update'), {
-      body: data.message,
-      icon: '/icons/favicon.png'
-    });
-  }
-}
-
-function requestNotificationPermission() {
-  if ('Notification' in window && Notification.permission === 'default') {
-    Notification.requestPermission();
-  }
-}
-
-window.viewTask = function(taskId) {
-  console.log('Viewing task:', taskId);
-  notify(`Viewing task ${taskId} - Implement task details view`);
-};
-
-function stopNotificationPolling() {
-  if (notificationCheckInterval) {
-    clearInterval(notificationCheckInterval);
-    notificationCheckInterval = null;
-  }
-}
-
-/* ========= CUSTOM AUTH ========= */
-window.login = async function () {
-  const emailInput = qs('username');
-  const passwordInput = qs('password');
-  
-  const email = emailInput.value.trim();
-  const password = passwordInput.value.trim();
-  
-  if (!email) {
-    showFormError(emailInput, 'Email is required');
-    return;
-  }
-  
-  if (!password) {
-    showFormError(passwordInput, 'Password is required');
-    return;
-  }
-
-  showLoading();
-  const loginBtn = document.querySelector('#login-container .btn-primary');
-  const originalText = loginBtn.innerHTML;
-  loginBtn.classList.add('loading');
-  loginBtn.innerHTML = '<svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>Signing in...';
-
-  try {
-    console.log('🔐 Attempting login:', email);
-    
-    const data = await api('/api/login', 'POST', {
-      email: email,
-      password: password
-    });
-
-    console.log('📨 Login response:', data);
-
-    if (!data.ok) {
-      console.error('❌ Login failed:', data.error);
-      showFormError(emailInput, data.error || 'Login failed');
-      return;
-    }
-
-    if (!data.user) {
-      console.error('❌ No user data in response');
-      showFormError(emailInput, 'Invalid server response');
-      return;
-    }
-
-    console.log('✓ Login successful for user:', data.user.name);
-    showFormSuccess(emailInput);
-    
-    const user = {
-      id: data.user.id,
-      name: data.user.name || email,
-      email: data.user.email,
-      role: data.user.role
-    };
-
-    save(CURRENT_KEY, user);
-    if (data.token && data.refreshToken) {
-      saveToken(data.token, data.refreshToken, data.expiresIn);
-      console.log('✓ Tokens saved to localStorage');
-    }
-    console.log('✓ User saved to localStorage:', user);
-    
-    setTimeout(() => enterDashboard(user), 500);
-  } catch (err) {
-    console.error('❌ Login error:', err);
-    showFormError(emailInput, 'Connection error. Please try again.');
-  } finally {
-    loginBtn.classList.remove('loading');
-    loginBtn.innerHTML = originalText;
-    hideLoading();
-  }
-};
-/* ========= LOGOUT FUNCTION ========= */
-
-window.logout = function() {
-  console.log('🔴 Logging out...');
-  
-  // Clear all localStorage items
-  localStorage.removeItem('wfms_current_user');
-  localStorage.removeItem('wfms_token');
-  localStorage.removeItem('wfms_refresh_token');
-  localStorage.removeItem('wfms_token_expires');
-  localStorage.removeItem('wfms_theme');
-  
-  // Clear any QR-related items
-  Object.keys(localStorage).forEach(key => {
-    if (key && key.startsWith('qr_token_')) localStorage.removeItem(key);
-  });
-  
-  // Stop any running QR scanner
-  if (window.currentScanner) {
-    try {
-      window.currentScanner.stop();
-    } catch(e) {}
-    window.currentScanner = null;
-  }
-  
-  // Clear session storage
-  sessionStorage.clear();
-  
-  // Show the login screen
-  const authOverlay = document.getElementById('auth-overlay');
-  const dashboard = document.getElementById('dashboard');
-  
-  if (authOverlay) authOverlay.classList.remove('hidden');
-  if (dashboard) dashboard.classList.add('hidden');
-  
-  // Clear the login form
-  const usernameInput = document.getElementById('username');
-  const passwordInput = document.getElementById('password');
-  if (usernameInput) usernameInput.value = '';
-  if (passwordInput) passwordInput.value = '';
-  
-  window.showToast('Logged out successfully', 'success');
-};
-/* ========= GOOGLE LOGIN ========= */
-window.loginWithGoogle = async function () {
-  // Redirect to Google OAuth
-  window.location.href = '/api/auth/google';
-};
-
-async function checkEmailExists(email) {
-  try {
-    const data = await api('/api/check-email', 'POST', { email });
-    return data.exists || false;
-  } catch (err) {
-    console.error('Error checking email:', err);
-    return false;
-  }
-}
-/* ========= QR FUNCTIONS FOR SIGNUP ========= */
-
-window.showQrAfterSignup = async function(userData) {
-  const { userId, name, email, role } = userData;
-
-  try {
-    console.log('📱 Generating QR code for user:', userId);
-
-    const qrResponse = await api('/api/generate-user-qr', 'POST', {
-      userId: userId,
-      email: email,
-      name: name
-    });
-
-    if (!qrResponse.ok) {
-      console.error('QR generation error:', qrResponse.error);
-      notify('Account created successfully!\n\nPlease sign in with your email and password.');
-      backToLogin();
-      return;
-    }
-
-    showQrModal({
-      qrData: qrResponse.qrData,
-      qrToken: qrResponse.qrToken,
-      userId: userId,
-      userName: name,
-      userEmail: email,
-      userRole: role
-    });
-
-    console.log('✓ QR code displayed for user:', userId);
-  } catch (err) {
-    console.error('QR generation error:', err);
-    notify('Account created! Please sign in with your email and password.');
-    backToLogin();
-  }
-};
-
-window.showQrModal = function(qrData, title = 'QR Code') {
-  if (!qrData) {
-    notify('❌ No QR code data available.');
-    return;
-  }
-
-  const existingModal = document.getElementById('qrDisplayModal');
-  if (existingModal) existingModal.remove();
-
-  const modal = document.createElement('div');
-  modal.className = 'qr-modal-overlay';
-  modal.id = 'qrDisplayModal';
-  modal.setAttribute('role', 'dialog');
-  modal.setAttribute('aria-modal', 'true');
-
-  modal.innerHTML = `
-    <div class="qr-modal-container qr-modal-center">
-      <div class="qr-modal-header">
-        <h2>${title}</h2>
-        <button class="btn-close" onclick="this.closest('.qr-modal-overlay').remove()" aria-label="Close">×</button>
-      </div>
-      <div class="qr-modal-body">
-        <div style="text-align: center;">
-          <div class="qr-code-container" style="display: inline-block; padding: 15px; background: var(--bg-primary); border-radius: 8px; border: 2px solid var(--border-color);">
-            <img src="${qrData}" alt="${title}" style="max-width: 250px; max-height: 250px;" />
-          </div>
-        </div>
-        <div style="display: flex; flex-direction: column; gap: 12px; margin-top: 20px;">
-          <button class="btn btn-primary" onclick="downloadQRCode('${qrData}', '${title.replace(/[^a-zA-Z0-9]/g, '_')}.png')">
-            <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="margin-right: 8px;">
-                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
-                <polyline points="7 10 12 15 17 10" />
-                <line x1="12" y1="15" x2="12" y2="3" />
-            </svg>
-            💾 Download
-          </button>
-          <button class="btn btn-secondary" onclick="copyQRToClipboard('${qrData}')">
-            <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="margin-right: 8px;">
-                <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
-                <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
-            </svg>
-            📋 Copy Image
-          </button>
-        </div>
-      </div>
-    </div>
-  `;
-
-  document.body.appendChild(modal);
-  modal.style.display = 'flex';
-};
-
-window.downloadQRCode = function(qrData, fileName) {
-  const link = document.createElement('a');
-  link.href = qrData;
-  link.download = fileName;
-  link.click();
-};
-
-window.copyQRToClipboard = function(qrData) {
-  fetch(qrData)
-    .then(res => res.blob())
-    .then(blob => {
-      const item = new ClipboardItem({ 'image/png': blob });
-      navigator.clipboard.write([item]);
-      showToast('✅ QR code copied to clipboard!', 'success');
-    })
-    .catch(err => {
-      console.error('Copy failed:', err);
-      showToast('❌ Failed to copy QR code', 'error');
-    });
-};
-window.register = async function () {
-  const nameInput = qs('regUsername');
-  const emailInput = qs('regEmail');
-  const passwordInput = qs('regPassword');
-  const roleSelect = qs('regRole');
-  
-  const name = nameInput.value.trim();
-  const email = emailInput.value.trim();
-  const password = passwordInput.value.trim();
-  const role = roleSelect.value;
-
-  if (!name) {
-    showFormError(nameInput, 'Full name is required');
-    return;
-  }
-
-  if (!email) {
-    showFormError(emailInput, 'Email is required');
-    return;
-  }
-
-  if (!isValidEmail(email)) {
-    showFormError(emailInput, 'Please enter a valid email address');
-    return;
-  }
-
-  if (!password || password.length < 6) {
-    showFormError(passwordInput, 'Password must be at least 6 characters');
-    return;
-  }
-
-  // Find the register button robustly (HTML uses btn-primary in markup)
-  const registerBtn = document.querySelector('#register-container .btn-success')
-    || document.querySelector('#register-container .btn-primary')
-    || document.querySelector('#register-container button');
-  const originalText = registerBtn ? registerBtn.innerHTML : '';
-  if (registerBtn) {
-    registerBtn.classList.add('loading');
-    registerBtn.innerHTML = '<svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>Checking email...';
-  }
-
-  try {
-    console.log('👤 Checking if email exists:', email);
-    
-    const emailExists = await checkEmailExists(email);
-    if (emailExists) {
-      showFormError(emailInput, 'Email already registered. Please login or use a different email.');
-      registerBtn.classList.remove('loading');
-      registerBtn.innerHTML = originalText;
-      return;
-    }
-
-    console.log('✓ Email is available. Creating account...');
-    registerBtn.innerHTML = '<svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>Creating Account...';
-    
-    const data = await api('/api/signup', 'POST', {
-      name: name,
-      email: email,
-      password: password,
-      role: role === 'admin' ? 'admin' : 'worker'
-    });
-
-    console.log('📨 Registration response:', data);
-
-    if (!data.ok) {
-      console.error('❌ Registration failed:', data.error);
-      if (data.error.includes('already registered') || data.error.includes('Email already')) {
-        showFormError(emailInput, data.error);
-      } else if (data.error.includes('Invalid email')) {
-        showFormError(emailInput, data.error);
-      } else {
-        showFormError(nameInput, data.error || 'Registration failed');
-      }
-      return;
-    }
-
-    console.log('✓ Account created successfully');
-    showFormSuccess(nameInput);
-    
-    nameInput.value = '';
-    emailInput.value = '';
-    passwordInput.value = '';
-    // default to worker (HTML option value is 'worker')
-    roleSelect.value = 'worker';
-    
-    setTimeout(() => {
-      showQrAfterSignup({
-        userId: data.userId,
-        name: name,
-        email: email,
-        role: role === 'admin' ? 'admin' : 'worker'
-      });
-    }, 500);
-  } catch (err) {
-    console.error('❌ Registration failed:', err.message);
-    showFormError(nameInput, 'Connection error. Please try again.');
-  } finally {
-    if (registerBtn) {
-      registerBtn.classList.remove('loading');
-      registerBtn.innerHTML = originalText;
-    }
-  }
-};
-
-window.toggleRegPassword = function () {
-  const pwd = qs('regPassword');
-  const icon = qs('regPasswordIcon');
-  if (!pwd) return;
-  if (pwd.type === 'password') {
-    pwd.type = 'text';
-    if (icon) icon.className = 'bi bi-eye-slash';
-    const btn = qs('regPasswordToggle');
-    if (btn) { btn.setAttribute('aria-label', 'Hide password'); btn.title = 'Hide password'; }
-  } else {
-    pwd.type = 'password';
-    if (icon) icon.className = 'bi bi-eye';
-    const btn = qs('regPasswordToggle');
-    if (btn) { btn.setAttribute('aria-label', 'Show password'); btn.title = 'Show password'; }
-  }
-};
-
-/* ========= QR AUTHENTICATION SYSTEM ========= */
-
-// Generate QR code for user (called during signup)
-window.generateUserQR = async function(userId, userName, userEmail) {
-    try {
-        console.log('📱 Generating QR code for user:', userName);
         
-        const response = await api('/api/generate-user-qr', 'POST', {
-            userId: userId,
-            name: userName,
-            email: userEmail
-        });
-
         if (response.ok) {
-            // Store QR token in localStorage for this session
-            save('qr_token_' + userId, response.qrToken);
-            
-            // Display QR code modal
-            showQRCodeModal(response.qrData, userName, userEmail);
-            return response;
+            showToast(`✅ Team "${name}" created!`, 'success');
+            // Clear form
+            document.getElementById('teamName').value = '';
+            document.getElementById('teamDepartment').value = '';
+            document.getElementById('teamDescription').value = '';
+            document.getElementById('teamLead').value = '';
+            document.getElementById('teamMembers').selectedIndex = -1;
+            // Refresh teams
+            loadTeams();
         } else {
-            console.error('QR generation failed:', response.error);
-            return null;
+            showToast(response.error || 'Failed to create team', 'error');
         }
     } catch (err) {
-        console.error('QR generation error:', err);
-        return null;
+        showToast('Error: ' + err.message, 'error');
+    } finally {
+        hideLoading();
     }
 };
 
-// Show QR code modal with download option
-window.showQRCodeModal = function(qrData, userName, userEmail) {
-    // Create modal if it doesn't exist
-    let modal = qs('qrCodeModal');
-    if (!modal) {
-        modal = document.createElement('div');
-        modal.id = 'qrCodeModal';
-        modal.className = 'qr-modal-overlay';
-        document.body.appendChild(modal);
+// Initialize team selects when employees load
+window.loadTeams = async function() {
+    // Existing loadTeams code...
+    // After populating employees, populate team selects
+    const employees = await api('/api/users');
+    const teamLeadSelect = document.getElementById('teamLead');
+    const teamMembersSelect = document.getElementById('teamMembers');
+    if (teamLeadSelect) {
+        teamLeadSelect.innerHTML = '<option value="">Select Leader</option>' + 
+            (employees.users || []).filter(u => u.role !== 'admin').map(u => `<option value="${u._id}">${u.name}</option>`).join('');
+    }
+    if (teamMembersSelect) {
+        teamMembersSelect.innerHTML = (employees.users || []).filter(u => u.role !== 'admin').map(u => `<option value="${u._id}">${u.name}</option>`).join('');
+    }
+};
+
+function showLoading() {
+    let overlay = document.getElementById('loading-overlay');
+    if (!overlay) {
+        overlay = document.createElement('div');
+        overlay.id = 'loading-overlay';
+        overlay.style.cssText = `
+            position: fixed; top: 0; left: 0; right: 0; bottom: 0;
+            background: rgba(0,0,0,0.7); display: flex;
+            align-items: center; justify-content: center;
+            z-index: 10000; color: white; flex-direction: column;
+        `;
+        overlay.innerHTML = '<div class="spinner"></div><div style="margin-top: 10px;">Loading...</div>';
+        document.body.appendChild(overlay);
+    }
+    overlay.style.display = 'flex';
+}
+
+function hideLoading() {
+    const overlay = document.getElementById('loading-overlay');
+    if (overlay) overlay.style.display = 'none';
+}
+
+function sanitizeHTML(str) {
+    if (!str) return '';
+    return String(str).replace(/[&<>]/g, function(m) {
+        if (m === '&') return '&amp;';
+        if (m === '<') return '&lt;';
+        if (m === '>') return '&gt;';
+        return m;
+    });
+}
+
+const taskCategories = [
+    'General',
+    'Operations',
+    'Human Resources',
+    'Engineering',
+    'Support',
+    'Compliance',
+    'Maintenance',
+    'Onboarding'
+];
+
+const taskTemplates = [
+    {
+        id: 'onboarding',
+        name: 'New Employee Onboarding',
+        title: 'Onboard new employee',
+        description: 'Welcome the new hire, provide orientation, create required accounts, and assign first tasks.',
+        category: 'Human Resources',
+        priority: 'medium',
+        tags: ['onboarding', 'hr']
+    },
+    {
+        id: 'bug-fix',
+        name: 'Bug Fix Task',
+        title: 'Resolve reported bug',
+        description: 'Review the bug report, reproduce the issue, fix the root cause, and document the solution.',
+        category: 'Engineering',
+        priority: 'high',
+        tags: ['bug', 'urgent']
+    },
+    {
+        id: 'attendance-review',
+        name: 'Attendance Audit',
+        title: 'Review attendance records',
+        description: 'Verify the attendance logs for the current week and resolve any discrepancies.',
+        category: 'Operations',
+        priority: 'medium',
+        tags: ['attendance', 'audit']
+    }
+];
+
+function normalizeTasksResponse(response) {
+    if (!response) return [];
+    if (Array.isArray(response)) return response;
+    return response.data || response.tasks || [];
+}
+
+function populateTaskFormOptions() {
+    const categorySelect = document.getElementById('taskCategory');
+    const templateSelect = document.getElementById('taskTemplate');
+    if (categorySelect) {
+        categorySelect.innerHTML = '<option value="">Select Category</option>' +
+            taskCategories.map(category => `<option value="${category}">${category}</option>`).join('');
+    }
+    if (templateSelect) {
+        templateSelect.innerHTML = '<option value="">Use Template</option>' +
+            taskTemplates.map(template => `<option value="${template.id}">${template.name}</option>`).join('');
+    }
+}
+
+window.applyTaskTemplate = function() {
+    const templateId = document.getElementById('taskTemplate')?.value;
+    if (!templateId) return;
+    const template = taskTemplates.find(t => t.id === templateId);
+    if (!template) return;
+
+    const titleInput = document.getElementById('taskTitle');
+    const descInput = document.getElementById('taskDesc');
+    const categorySelect = document.getElementById('taskCategory');
+    const prioritySelect = document.getElementById('taskPriority');
+    const tagsInput = document.getElementById('taskTags');
+
+    if (titleInput) titleInput.value = template.title;
+    if (descInput) descInput.value = template.description;
+    if (categorySelect) categorySelect.value = template.category;
+    if (prioritySelect) prioritySelect.value = template.priority || 'medium';
+    if (tagsInput) tagsInput.value = template.tags.join(', ');
+}
+
+// ============================================
+// API HELPER
+// ============================================
+async function api(url, method = 'GET', body = null) {
+    try {
+        const token = localStorage.getItem(TOKEN_KEY);
+        const headers = { 'Content-Type': 'application/json' };
+        if (token) headers['Authorization'] = `Bearer ${token}`;
+
+        const options = { method, headers };
+        if (body) options.body = JSON.stringify(body);
+
+        const response = await fetch(url, options);
+        const data = await response.json();
+
+        if (!response.ok) {
+            console.error(`API Error ${method} ${url}:`, data);
+            return { ok: false, error: data.error || 'Request failed' };
+        }
+        return data;
+    } catch (err) {
+        console.error(`API Error ${method} ${url}:`, err);
+        return { ok: false, error: err.message };
+    }
+}
+
+// ============================================
+// AUTH FUNCTIONS
+// ============================================
+window.showRegister = function() {
+    console.log('showRegister called');
+    const login = document.getElementById('login-container');
+    const register = document.getElementById('register-container');
+    if (login) login.classList.add('hidden');
+    if (register) register.classList.remove('hidden');
+};
+
+window.backToLogin = function() {
+    console.log('backToLogin called');
+    const login = document.getElementById('login-container');
+    const register = document.getElementById('register-container');
+    if (register) register.classList.add('hidden');
+    if (login) login.classList.remove('hidden');
+};
+
+window.login = async function() {
+    console.log('login called');
+    const email = document.getElementById('username')?.value.trim();
+    const password = document.getElementById('password')?.value.trim();
+    
+    if (!email || !password) {
+        showToast('Please enter email and password', 'error');
+        return;
+    }
+
+    showLoading();
+    
+    try {
+        const data = await api('/api/login', 'POST', { email, password });
+        
+        if (!data.ok) {
+            showToast(data.error || 'Login failed', 'error');
+            return;
+        }
+        
+        if (data.user && data.token) {
+            save(CURRENT_KEY, data.user);
+            localStorage.setItem(TOKEN_KEY, data.token);
+            if (data.refreshToken) localStorage.setItem(REFRESH_TOKEN_KEY, data.refreshToken);
+            
+            showToast(`Welcome ${data.user.name}!`, 'success');
+            window.enterDashboard(data.user);
+        }
+    } catch (err) {
+        showToast('Login error: ' + err.message, 'error');
+    } finally {
+        hideLoading();
+    }
+};
+
+window.register = async function() {
+    console.log('register called');
+    const name = document.getElementById('regUsername')?.value.trim();
+    const email = document.getElementById('regEmail')?.value.trim();
+    const password = document.getElementById('regPassword')?.value.trim();
+    const role = document.getElementById('regRole')?.value || 'worker';
+    
+    if (!name || !email || !password) {
+        showToast('Please fill all fields', 'error');
+        return;
+    }
+    // Strong password validation (min 8 chars, upper/lower, number, special)
+    const passwordRegex = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&])[A-Za-z\d@$!%*?&]{8,}$/;
+    if (!passwordRegex.test(password)) {
+        const pwdInput = document.getElementById('regPassword');
+        if (pwdInput) showFormError(pwdInput, 'Password must be ≥8 chars with uppercase, lowercase, number and special char');
+        showToast('Password does not meet security requirements', 'error');
+        return;
     }
     
-    modal.innerHTML = `
-        <div class="qr-modal-container">
-            <div class="qr-modal-header">
-                <h2>🔐 Your Unique QR Code</h2>
-                <button class="btn-close" onclick="closeQRModal()">×</button>
-            </div>
-            <div class="qr-modal-body">
-                <div class="qr-user-info">
-                    <p><strong>Name:</strong> ${userName}</p>
-                    <p><strong>Email:</strong> ${userEmail}</p>
-                    <p class="qr-warning">⚠️ Save this QR code! You'll need it for quick login and attendance.</p>
-                </div>
-                <div class="qr-code-display">
-                    <img src="${qrData}" alt="Your QR Code" style="width: 200px; height: 200px;">
-                </div>
-                <div class="qr-instructions">
-                    <h4>📋 How to use your QR code:</h4>
-                    <ul>
-                        <li><strong>Quick Login:</strong> Scan to access dashboard without password</li>
-                        <li><strong>Attendance:</strong> Scan to automatically record clock in/out</li>
-                        <li><strong>Secure:</strong> Each scan is recorded with timestamp and IP</li>
-                    </ul>
-                </div>
-                <div class="qr-actions">
-                    <button class="btn btn-primary" onclick="downloadQRCode('${qrData}', '${userName}')">
-                        ⬇️ Download QR Code
-                    </button>
-                    <button class="btn btn-success" onclick="closeQRModal()">
-                        ✓ I've Saved My QR Code
-                    </button>
-                </div>
-            </div>
-        </div>
-    `;
-    modal.style.display = 'flex';
-};
-
-// Close QR modal
-window.closeQRModal = function() {
-    const modal = qs('qrCodeModal');
-    if (modal) modal.remove();
-};
-
-// Download QR code
-window.downloadQRCode = function(qrData, userName) {
-    const link = document.createElement('a');
-    link.href = qrData;
-    link.download = `BNS-QR-${userName.replace(/\s+/g, '-')}.png`;
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-};
-
-// Initialize QR scanner (simple version)
-// ========= QR SCANNER SYSTEM =========
-
-// Global QR scanner state with performance tracking
-window.qrScannerState = {
-  scanner: null,
-  isScanning: false,
-  currentCamera: null,
-  cameras: [],
-  flashlightSupported: false,
-  flashlightEnabled: false,
-  zoomSupported: false,
-  currentZoom: 1,
-  theme: 'light',
-  // Performance metrics
-  scanPerformanceMetrics: {
-    totalScans: 0,
-    avgDetectionTime: 0,
-    fastestScan: Infinity,
-    slowestScan: 0
-  }
-};
-
-// Progress bar for QR scanner
-let progressInterval = null;
-
-// Record scan performance
-function recordScanPerformance(detectionTimeMs) {
-  const seconds = detectionTimeMs / 1000;
-  const metrics = window.qrScannerState.scanPerformanceMetrics;
-
-  metrics.totalScans++;
-  metrics.avgDetectionTime = (metrics.avgDetectionTime * (metrics.totalScans - 1) + seconds) / metrics.totalScans;
-  metrics.fastestScan = Math.min(metrics.fastestScan, seconds);
-  metrics.slowestScan = Math.max(metrics.slowestScan, seconds);
-
-  console.log(`[QR Performance] Detection: ${seconds.toFixed(2)}s | Avg: ${metrics.avgDetectionTime.toFixed(2)}s | Fastest: ${metrics.fastestScan.toFixed(2)}s`);
-
-  // Show performance badge if consistently fast
-  if (metrics.avgDetectionTime < 3 && metrics.totalScans > 5) {
-    console.log('🏆 Excellent scan performance!');
-  }
-}
-
-// Universal QR parser for all formats
-function universalQRParser(scanData) {
-  console.log('[QR] Universal parsing started...');
-
-  // Strategy 1: Direct JSON
-  try {
-    const parsed = JSON.parse(scanData);
-    if (parsed.token || parsed.qrToken || parsed.qr_token) {
-      return parsed.token || parsed.qrToken || parsed.qr_token;
-    }
-    if (parsed.userId && parsed.token) {
-      return parsed.token;
-    }
-  } catch (e) {}
-
-  // Strategy 2: URL encoded data
-  try {
-    const urlDecoded = decodeURIComponent(scanData);
-    const match = urlDecoded.match(/[?&]token=([^&]+)/);
-    if (match) return match[1];
-  } catch (e) {}
-
-  // Strategy 3: UUID format
-  const uuidMatch = scanData.match(/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i);
-  if (uuidMatch) return uuidMatch[0];
-
-  // Strategy 4: Base64 encoded
-  try {
-    const base64Decoded = atob(scanData);
-    const parsed = JSON.parse(base64Decoded);
-    if (parsed.token) return parsed.token;
-  } catch (e) {}
-
-  // Strategy 5: Extract from query string
-  const queryMatch = scanData.match(/token=([^&\s]+)/);
-  if (queryMatch) return queryMatch[1];
-
-  // Strategy 6: Extract from path
-  const pathMatch = scanData.match(/\/token\/([^\/\s]+)/);
-  if (pathMatch) return pathMatch[1];
-
-  // Strategy 7: Raw token (last resort)
-  if (scanData.length > 20 && scanData.length < 200) {
-    return scanData;
-  }
-
-  return null;
-}
-
-// Optimized QR scanner with native API support
-async function startScanner(action) {
-  // Prevent multiple scanner instances
-  if (window.qrScannerState.isScanning) {
-    console.log('[QR] Scanner already active, stopping existing...');
-    await stopQRScanner();
-  }
-
-  const container = qs('qrScannerContainer');
-  const reader = qs('qr-reader');
-
-  if (!container || !reader) {
-    console.error('[QR] Scanner elements not found');
-    return false;
-  }
-
-  // Reset UI
-  reader.innerHTML = '';
-  container.classList.remove('hidden');
-  container.style.display = 'flex';
-
-  window.qrScannerState.isScanning = true;
-  currentQRAction = action;
-
-  // Add status indicator with timer
-  let statusDiv = qs('qr-scanner-status');
-  if (!statusDiv) {
-    statusDiv = document.createElement('div');
-    statusDiv.id = 'qr-scanner-status';
-    statusDiv.style.cssText = 'text-align: center; margin-top: 10px; padding: 8px; border-radius: 8px; background: rgba(0,0,0,0.7); color: white; font-size: 14px; font-family: monospace;';
-    reader.parentNode.appendChild(statusDiv);
-  }
-
-  // Start scan timer
-  let startTime = Date.now();
-  let scanTimerInterval = null;
-
-  const updateTimerDisplay = () => {
-    const elapsed = Math.floor((Date.now() - startTime) / 1000);
-    statusDiv.innerHTML = `📱 Scanning... ${elapsed}s ${elapsed < 5 ? '🔍' : elapsed < 8 ? '⚡' : '⏰'}`;
-    if (elapsed >= 5 && elapsed < 8) {
-      statusDiv.style.background = 'rgba(255,165,0,0.7)';
-      statusDiv.style.color = '#fff';
-    } else if (elapsed >= 8) {
-      statusDiv.style.background = 'rgba(255,0,0,0.7)';
-    }
-  };
-
-  updateTimerDisplay();
-  scanTimerInterval = setInterval(updateTimerDisplay, 1000);
-
-  // Start progress animation
-  startScanProgress();
-
-  let scanProcessed = false;
-  let scannerInstance = null;
-  let scanTimeout = null;
-
-  try {
-    const html5QrCode = new Html5Qrcode('qr-reader');
-    scannerInstance = html5QrCode;
-    window.qrScannerState.scanner = html5QrCode;
-
-    // OPTIMIZED CONFIGURATION - FASTER SCANNING
-    const config = {
-      fps: 30,                    // Increased from 10 to 30 for faster detection
-      qrbox: { width: 280, height: 280 },  // Larger scan area
-      aspectRatio: 1.0,
-      disableFlip: false,
-      rememberLastUsedCamera: true,
-
-      // CRITICAL: Enable faster scanning
-      experimentalFeatures: {
-        useBarCodeDetectorIfSupported: true  // Use native barcode detector if available
-      },
-
-      // Video constraints for better quality
-      videoConstraints: {
-        width: { ideal: 1280 },
-        height: { ideal: 720 },
-        facingMode: 'environment'
-      }
-    };
-
-    const onSuccess = async (decodedText) => {
-      // Prevent multiple scans
-      if (scanProcessed) return;
-      scanProcessed = true;
-
-      const detectionTime = Math.floor((Date.now() - startTime) / 1000);
-      console.log(`[QR] ✅ QR detected in ${detectionTime} seconds:`, decodedText.substring(0, 100));
-
-      // Record performance
-      recordScanPerformance(Date.now() - startTime);
-
-      // Clear timer
-      if (scanTimerInterval) clearInterval(scanTimerInterval);
-      if (scanTimeout) clearTimeout(scanTimeout);
-
-      // Stop progress animation
-      stopScanProgress();
-
-      statusDiv.innerHTML = `✅ QR detected! (${detectionTime}s) Processing...`;
-      statusDiv.style.background = 'rgba(0,255,0,0.2)';
-      statusDiv.style.color = '#00ff00';
-
-      // Vibrate on detection (mobile)
-      if (navigator.vibrate) navigator.vibrate(100);
-
-      // Stop scanner immediately
-      try {
-        if (scannerInstance && scannerInstance.stop) {
-          await scannerInstance.stop();
-        }
-      } catch (err) {}
-
-      // Hide scanner UI
-      container.classList.add('hidden');
-      container.style.display = 'none';
-      window.qrScannerState.isScanning = false;
-
-      // Process the scan
-      await processQRScan(decodedText, action);
-    };
-
-    const onError = (errorMessage, error) => {
-      // Only log actual errors, ignore normal scanning attempts
-      if (errorMessage && !errorMessage.includes('No MultiFormat Readers') &&
-          !errorMessage.includes('NotFoundException') && !errorMessage.includes('Scanning')) {
-        console.log('[QR] Scan error:', errorMessage);
-      }
-    };
-
-    // Try to use native BarcodeDetector API if available (fastest)
-    let useNativeDetector = false;
-    if ('BarcodeDetector' in window) {
-      try {
-        const detector = new BarcodeDetector({ formats: ['qr_code'] });
-        useNativeDetector = true;
-        console.log('[QR] Native BarcodeDetector available - using for faster scanning');
-      } catch (e) {
-        console.log('[QR] Native detector not available, using fallback');
-      }
-    }
-
-    // Start scanning with back camera
-    try {
-      await html5QrCode.start(
-        { facingMode: 'environment' },
-        config,
-        onSuccess,
-        onError
-      );
-
-      console.log('[QR] Scanner started with optimized settings (30 FPS)');
-      statusDiv.innerHTML = `📱 Camera ready. Position QR code in frame. (Max 10s)`;
-      statusDiv.style.background = 'rgba(0,0,0,0.7)';
-      statusDiv.style.color = '#00ff00';
-
-      // Auto timeout after 10 seconds (strict limit)
-      scanTimeout = setTimeout(() => {
-        if (!scanProcessed && scannerInstance) {
-          const elapsed = Math.floor((Date.now() - startTime) / 1000);
-          console.log(`[QR] Scanner timeout - no QR detected after ${elapsed} seconds`);
-          statusDiv.innerHTML = `⏱️ Timeout (${elapsed}s). Please try again.`;
-          statusDiv.style.background = 'rgba(255,0,0,0.7)';
-          statusDiv.style.color = '#fff';
-
-          setTimeout(() => {
-            if (!scanProcessed && scannerInstance) {
-              stopQRScanner();
-              showToast(`No QR code detected after ${elapsed} seconds. Please try again.`, 'warning');
-            }
-          }, 1500);
-        }
-      }, 10000); // 10 seconds max
-
-      return true;
-
-    } catch (cameraErr) {
-      console.error('[QR] Camera start error:', cameraErr);
-      statusDiv.innerHTML = '❌ Camera error. Trying front camera...';
-
-      // Try front camera as fallback
-      try {
-        await html5QrCode.start(
-          { facingMode: 'user' },
-          config,
-          onSuccess,
-          onError
-        );
-        console.log('[QR] Started with front camera');
-        statusDiv.innerHTML = `📱 Front camera active. Position QR code. (Max 10s)`;
-        statusDiv.style.background = 'rgba(0,0,0,0.7)';
-        statusDiv.style.color = '#00ff00';
-
-        scanTimeout = setTimeout(() => {
-          if (!scanProcessed && scannerInstance) {
-            stopQRScanner();
-            showToast('No QR code detected after 10 seconds', 'warning');
-          }
-        }, 10000);
-
-        return true;
-      } catch (frontErr) {
-        console.error('[QR] Front camera also failed:', frontErr);
-        throw frontErr;
-      }
-    }
-
-  } catch (err) {
-    console.error('[QR] Scanner initialization error:', err);
-    if (scanTimerInterval) clearInterval(scanTimerInterval);
-    statusDiv.innerHTML = '❌ Failed to start scanner';
-    statusDiv.style.background = 'rgba(255,0,0,0.7)';
-    container.classList.add('hidden');
-    showToast('Camera failed. Please refresh and try again.', 'error');
-    return false;
-  }
-}
-
-// Native BarcodeDetector API implementation for ultra-fast scanning
-async function startScannerWithNativeAPI(action) {
-  // Check if native BarcodeDetector is supported
-  if (!('BarcodeDetector' in window)) {
-    console.log('[QR] Native BarcodeDetector not supported, using fallback');
-    return startScanner(action);
-  }
-
-  console.log('[QR] Using native BarcodeDetector API for fastest scanning');
-
-  const container = qs('qrScannerContainer');
-  const reader = qs('qr-reader');
-
-  if (!container || !reader) return false;
-
-  // Reset UI
-  reader.innerHTML = '';
-  container.classList.remove('hidden');
-  container.style.display = 'flex';
-
-  window.qrScannerState.isScanning = true;
-  currentQRAction = action;
-
-  // Create video element
-  const video = document.createElement('video');
-  video.setAttribute('autoplay', '');
-  video.setAttribute('playsinline', '');
-  video.style.width = '100%';
-  video.style.height = 'auto';
-  video.style.borderRadius = '16px';
-  reader.appendChild(video);
-
-  // Status display
-  let statusDiv = qs('qr-scanner-status');
-  if (!statusDiv) {
-    statusDiv = document.createElement('div');
-    statusDiv.id = 'qr-scanner-status';
-    statusDiv.style.cssText = 'text-align: center; margin-top: 10px; padding: 8px; border-radius: 8px; background: rgba(0,0,0,0.7); color: white; font-family: monospace;';
-    reader.parentNode.appendChild(statusDiv);
-  }
-
-  let startTime = Date.now();
-  let scanProcessed = false;
-  let stream = null;
-  let animationId = null;
-  let scanTimeout = null;
-
-  const updateTimerDisplay = () => {
-    const elapsed = Math.floor((Date.now() - startTime) / 1000);
-    statusDiv.innerHTML = `📱 Scanning... ${elapsed}s ${elapsed < 5 ? '🔍' : elapsed < 8 ? '⚡' : '⏰'}`;
-    if (elapsed >= 8) {
-      statusDiv.style.background = 'rgba(255,0,0,0.7)';
-    }
-  };
-
-  updateTimerDisplay();
-  const timerInterval = setInterval(updateTimerDisplay, 1000);
-
-  try {
-    // Get camera stream
-    stream = await navigator.mediaDevices.getUserMedia({
-      video: { facingMode: 'environment', width: { ideal: 1280 }, height: { ideal: 720 } }
-    });
-    video.srcObject = stream;
-    await video.play();
-
-    statusDiv.innerHTML = `📱 Camera ready. Detecting QR... (Max 10s)`;
-    statusDiv.style.background = 'rgba(0,0,0,0.7)';
-    statusDiv.style.color = '#00ff00';
-
-    // Create canvas for frame capture
-    const canvas = document.createElement('canvas');
-    const ctx = canvas.getContext('2d');
-
-    // Create barcode detector
-    const detector = new BarcodeDetector({ formats: ['qr_code'] });
-
-    // Scan frames at high frequency
-    const scanFrame = async () => {
-      if (scanProcessed || !window.qrScannerState.isScanning) return;
-
-      if (video.videoWidth > 0 && video.videoHeight > 0) {
-        canvas.width = video.videoWidth;
-        canvas.height = video.videoHeight;
-        ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-
-        try {
-          const barcodes = await detector.detect(canvas);
-
-          if (barcodes && barcodes.length > 0) {
-            const qrCode = barcodes.find(b => b.format === 'qr_code');
-            if (qrCode && qrCode.rawValue) {
-              scanProcessed = true;
-              const detectionTime = Math.floor((Date.now() - startTime) / 1000);
-              console.log(`[QR] ✅ Native detection in ${detectionTime}s:`, qrCode.rawValue);
-
-              // Record performance
-              recordScanPerformance(Date.now() - startTime);
-
-              clearInterval(timerInterval);
-              if (scanTimeout) clearTimeout(scanTimeout);
-              if (animationId) cancelAnimationFrame(animationId);
-
-              statusDiv.innerHTML = `✅ QR detected! (${detectionTime}s) Processing...`;
-              statusDiv.style.background = 'rgba(0,255,0,0.2)';
-
-              if (navigator.vibrate) navigator.vibrate(100);
-
-              // Stop stream
-              if (stream) {
-                stream.getTracks().forEach(track => track.stop());
-              }
-
-              container.classList.add('hidden');
-              window.qrScannerState.isScanning = false;
-
-              await processQRScan(qrCode.rawValue, action);
-              return;
-            }
-          }
-        } catch (err) {
-          // Silent fail, continue scanning
-        }
-      }
-
-      if (!scanProcessed && window.qrScannerState.isScanning) {
-        animationId = requestAnimationFrame(scanFrame);
-      }
-    };
-
-    // Start scanning
-    animationId = requestAnimationFrame(scanFrame);
-
-    // Timeout after 10 seconds
-    scanTimeout = setTimeout(() => {
-      if (!scanProcessed && window.qrScannerState.isScanning) {
-        console.log('[QR] Native scanner timeout after 10 seconds');
-        clearInterval(timerInterval);
-        if (animationId) cancelAnimationFrame(animationId);
-        if (stream) {
-          stream.getTracks().forEach(track => track.stop());
-        }
-        container.classList.add('hidden');
-        window.qrScannerState.isScanning = false;
-        showToast('No QR code detected after 10 seconds', 'warning');
-      }
-    }, 10000);
-
-    return true;
-
-  } catch (err) {
-    console.error('[QR] Native scanner error:', err);
-    clearInterval(timerInterval);
-    if (stream) {
-      stream.getTracks().forEach(track => track.stop());
-    }
-    container.classList.add('hidden');
-    window.qrScannerState.isScanning = false;
-
-    // Fallback to regular scanner
-    return startScanner(action);
-  }
-}
-
-// DUPLICATE initQRScanner REMOVED - Proper definition is at top of file
-// The comprehensive version with DOM checks is already defined at line 181
-
-// DUPLICATE showManualEntryFallback REMOVED - Using version from top
-
-// DUPLICATE ensureQRContainer REMOVED - Already defined at top of file
-
-/* ARCHIVE - Duplicate functions removed to prevent conflicts:
-    <div class="qr-scanner-box">
-      <div class="qr-scanner-header">
-        <h5>Scan QR Code</h5>
-        <button onclick="window.stopQRScanner()">×</button>
-      </div>
-      <div id="qr-reader"></div>
-      <div id="qr-scanner-status"></div>
-    </div>
-  `;
-  document.body.appendChild(container);
-  return true;
-};
-
-// Create enhanced scanner UI
-function createScannerUI(showControls, enableGallery) {
-  const theme = window.qrScannerState.theme;
-
-  return `
-    <div class="qr-scanner-overlay" id="qrScannerOverlay">
-      <div class="qr-scanner-header">
-        <h3>📱 QR Code Scanner</h3>
-        <button class="btn-close-scanner" onclick="stopQRScanner()" aria-label="Close Scanner">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <line x1="18" y1="6" x2="6" y2="18"></line>
-            <line x1="6" y1="6" x2="18" y2="18"></line>
-          </svg>
-        </button>
-      </div>
-
-      <div class="qr-scanner-viewport">
-        <div class="qr-scanner-frame">
-          <div class="qr-corner top-left"></div>
-          <div class="qr-corner top-right"></div>
-          <div class="qr-corner bottom-left"></div>
-          <div class="qr-corner bottom-right"></div>
-          <div class="qr-scan-line"></div>
-        </div>
-      </div>
-
-      ${showControls ? `
-        <div class="qr-scanner-controls">
-          <div class="control-group">
-            <button class="control-btn" id="switchCameraBtn" onclick="switchCamera()" disabled>
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"></path>
-                <circle cx="12" cy="13" r="4"></circle>
-              </svg>
-              Switch Camera
-            </button>
-
-            <button class="control-btn" id="flashlightBtn" onclick="toggleFlashlight()" disabled>
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <path d="M9 12l2 2 4-4"></path>
-                <path d="M21 12h-3M5 12H2M12 5v3M12 16v3"></path>
-                <path d="M19 9l-2 2M7 15l-2 2M19 15l-2-2M7 9l-2-2"></path>
-              </svg>
-              Flashlight
-            </button>
-
-            <button class="control-btn" id="zoomBtn" onclick="toggleZoom()" disabled>
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <circle cx="11" cy="11" r="8"></circle>
-                <path d="m21 21-4.35-4.35"></path>
-                <line x1="13" y1="9" x2="9" y2="13"></line>
-              </svg>
-              Zoom
-            </button>
-          </div>
-
-          ${enableGallery ? `
-            <div class="control-group">
-              <button class="control-btn" onclick="scanFromGallery()">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                  <rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect>
-                  <circle cx="9" cy="9" r="2"></circle>
-                  <path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21"></path>
-                </svg>
-                Gallery
-              </button>
-            </div>
-          ` : ''}
-
-          <div class="control-group">
-            <button class="control-btn secondary" onclick="showManualEntry()">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"></path>
-              </svg>
-              Manual Entry
-            </button>
-          </div>
-        </div>
-      ` : ''}
-
-      <div class="qr-scanner-status">
-        <div class="status-indicator">
-          <div class="status-dot scanning"></div>
-          <span>Ready to scan</span>
-        </div>
-      </div>
-    </div>
-  `;
-}
-
-// Check camera capabilities
-async function checkCameraCapabilities(scanner, cameraId) {
-  try {
-    // Check flashlight support
-    const capabilities = await scanner.getRunningTrackCapabilities();
-    window.qrScannerState.flashlightSupported = capabilities.torch || false;
-
-    // Check zoom support
-    window.qrScannerState.zoomSupported = capabilities.zoom || false;
-
-    console.log('📷 Camera capabilities:', {
-      flashlight: window.qrScannerState.flashlightSupported,
-      zoom: window.qrScannerState.zoomSupported
-    });
-  } catch (err) {
-    console.warn('Could not check camera capabilities:', err);
-  }
-}
-
-// Update scanner UI based on state
-function updateScannerUI() {
-  const switchBtn = qs('switchCameraBtn');
-  const flashlightBtn = qs('flashlightBtn');
-  const zoomBtn = qs('zoomBtn');
-  const statusIndicator = qs('.status-indicator span');
-
-  if (switchBtn) {
-    switchBtn.disabled = window.qrScannerState.cameras.length <= 1;
-  }
-
-  if (flashlightBtn) {
-    flashlightBtn.disabled = !window.qrScannerState.flashlightSupported;
-    flashlightBtn.classList.toggle('active', window.qrScannerState.flashlightEnabled);
-  }
-
-  if (zoomBtn) {
-    zoomBtn.disabled = !window.qrScannerState.zoomSupported;
-  }
-
-  if (statusIndicator) {
-    statusIndicator.textContent = window.qrScannerState.isScanning ? 'Scanning...' : 'Ready to scan';
-  }
-}
-
-// Switch between cameras
-window.switchCamera = async function() {
-  if (window.qrScannerState.cameras.length <= 1) return;
-
-  const currentIndex = window.qrScannerState.cameras.findIndex(
-    camera => camera.id === window.qrScannerState.currentCamera.id
-  );
-  const nextIndex = (currentIndex + 1) % window.qrScannerState.cameras.length;
-  const nextCamera = window.qrScannerState.cameras[nextIndex];
-
-  try {
-    await window.qrScannerState.scanner.stop();
-    await window.qrScannerState.scanner.start(nextCamera.id, {
-      fps: 15,
-      qrbox: { width: 250, height: 250 }
-    });
-
-    window.qrScannerState.currentCamera = nextCamera;
-    updateScannerUI();
-
-    console.log('🔄 Switched to camera:', nextCamera.label);
-  } catch (err) {
-    console.error('Failed to switch camera:', err);
-    notify('❌ Failed to switch camera');
-  }
-};
-
-// Toggle flashlight
-window.toggleFlashlight = async function() {
-  if (!window.qrScannerState.flashlightSupported) return;
-
-  try {
-    const newState = !window.qrScannerState.flashlightEnabled;
-    await window.qrScannerState.scanner.applyVideoConstraints({
-      advanced: [{ torch: newState }]
-    });
-
-    window.qrScannerState.flashlightEnabled = newState;
-    updateScannerUI();
-
-    console.log('🔦 Flashlight:', newState ? 'ON' : 'OFF');
-  } catch (err) {
-    console.error('Failed to toggle flashlight:', err);
-    notify('❌ Flashlight not supported on this device');
-  }
-};
-
-// Toggle zoom
-window.toggleZoom = async function() {
-  if (!window.qrScannerState.zoomSupported) return;
-
-  try {
-    const newZoom = window.qrScannerState.currentZoom === 1 ? 2 : 1;
-    await window.qrScannerState.scanner.applyVideoConstraints({
-      advanced: [{ zoom: newZoom }]
-    });
-
-    window.qrScannerState.currentZoom = newZoom;
-    updateScannerUI();
-
-    console.log('🔍 Zoom level:', newZoom + 'x');
-  } catch (err) {
-    console.error('Failed to adjust zoom:', err);
-    notify('❌ Zoom not supported on this device');
-  }
-};
-
-// Scan QR code from gallery
-window.scanFromGallery = function() {
-  const input = document.createElement('input');
-  input.type = 'file';
-  input.accept = 'image/*';
-  input.onchange = async (event) => {
-    const file = event.target.files[0];
-    if (!file) return;
-
-    try {
-      const result = await window.qrScannerState.scanner.scanFile(file, true);
-      if (result) {
-        console.log('✅ QR code found in image:', result);
-        await stopQRScanner();
-        processQRScan(result);
-      } else {
-        notify('❌ No QR code found in the selected image');
-      }
-    } catch (err) {
-      console.error('Gallery scan error:', err);
-      notify('❌ Failed to scan image from gallery');
-    }
-  };
-  input.click();
-};
-
-// Camera diagnostic and recovery functions
-async function diagnoseCamera() {
-  console.log('[QR] Running camera diagnostic...');
-
-  const results = {
-    mediaDevices: !!navigator.mediaDevices,
-    getUserMedia: !!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia),
-    enumerateDevices: !!(navigator.mediaDevices && navigator.mediaDevices.enumerateDevices),
-    secureContext: window.isSecureContext,
-    camerasFound: 0,
-    cameraLabels: [],
-    permission: 'unknown',
-    errors: []
-  };
-
-  try {
-    // Test permission
-    const stream = await navigator.mediaDevices.getUserMedia({ video: true });
-    results.permission = 'granted';
-    stream.getTracks().forEach(track => track.stop());
-  } catch (err) {
-    results.permission = err.name === 'NotAllowedError' ? 'denied' : 'error';
-    results.errors.push(err.message);
-  }
-
-  try {
-    const devices = await navigator.mediaDevices.enumerateDevices();
-    const cameras = devices.filter(d => d.kind === 'videoinput');
-    results.camerasFound = cameras.length;
-    results.cameraLabels = cameras.map(c => c.label || 'Unnamed');
-  } catch (err) {
-    results.errors.push(`Enumerate devices failed: ${err.message}`);
-  }
-
-  console.log('[QR] Diagnostic results:', results);
-
-  // Show diagnostic modal
-  const modal = document.createElement('div');
-  modal.className = 'qr-modal-overlay';
-  modal.innerHTML = `
-    <div class="qr-modal-container" style="max-width: 500px;">
-      <div class="qr-modal-header">
-        <h2>📷 Camera Diagnostic</h2>
-        <button class="btn-close" onclick="this.closest('.qr-modal-overlay').remove()">×</button>
-      </div>
-      <div class="qr-modal-body">
-        <div style="margin-bottom: 15px;">
-          <strong>Status:</strong>
-          <span style="color: ${results.permission === 'granted' ? '#10b981' : '#ef4444'}">
-            ${results.permission === 'granted' ? '✅ Camera Access Granted' : '❌ Camera Access ' + results.permission}
-          </span>
-        </div>
-        <div style="margin-bottom: 15px;">
-          <strong>Cameras Found:</strong> ${results.camerasFound}
-        </div>
-        ${results.cameraLabels.length ? `
-          <div style="margin-bottom: 15px;">
-            <strong>Available Cameras:</strong>
-            <ul style="margin-top: 5px;">
-              ${results.cameraLabels.map(label => `<li>${label || 'Unnamed Camera'}</li>`).join('')}
-            </ul>
-          </div>
-        ` : ''}
-        ${results.errors.length ? `
-          <div style="margin-bottom: 15px;">
-            <strong>Errors:</strong>
-            <ul style="margin-top: 5px; color: #ef4444;">
-              ${results.errors.map(err => `<li>${err}</li>`).join('')}
-            </ul>
-          </div>
-        ` : ''}
-        <div>
-          <strong>Browser Support:</strong>
-          <ul style="margin-top: 5px;">
-            <li>MediaDevices API: ${results.mediaDevices ? '✅' : '❌'}</li>
-            <li>getUserMedia: ${results.getUserMedia ? '✅' : '❌'}</li>
-            <li>Secure Context (HTTPS): ${results.secureContext ? '✅' : '❌'}</li>
-          </ul>
-        </div>
-        <button class="btn btn-primary" onclick="location.reload()" style="margin-top: 20px; width: 100%;">
-          Refresh Page
-        </button>
-      </div>
-    </div>
-  `;
-  document.body.appendChild(modal);
-
-  return results;
-}
-
-// Enhanced camera error handling with diagnostic
-function showCameraErrorWithDiagnostic(onScan) {
-  const scannerContainer = qs('qrScannerContainer');
-  if (!scannerContainer) return;
-
-  scannerContainer.innerHTML = `
-    <div class="qr-scanner-overlay">
-      <div class="qr-scanner-header">
-        <h3>📱 Camera Unavailable</h3>
-        <button class="btn-close-scanner" onclick="stopQRScanner()" aria-label="Close">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <line x1="18" y1="6" x2="6" y2="18"></line>
-            <line x1="6" y1="6" x2="18" y2="18"></line>
-          </svg>
-        </button>
-      </div>
-
-      <div class="qr-camera-error">
-        <div class="error-icon">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <circle cx="12" cy="12" r="10"></circle>
-            <line x1="15" y1="9" x2="9" y2="15"></line>
-            <line x1="9" y1="9" x2="15" y2="15"></line>
-          </svg>
-        </div>
-        <h4>Camera Access Failed</h4>
-        <p>Unable to access your camera for QR scanning.</p>
-        <div class="error-actions">
-          <button class="btn btn-outline" onclick="diagnoseCamera()">🔍 Run Diagnostic</button>
-          <button class="btn btn-outline" onclick="location.reload()" style="margin-left: 10px;">🔄 Refresh Page</button>
-        </div>
-        <div class="manual-fallback" style="margin-top: 20px;">
-          <p style="font-size: 14px; color: var(--text-secondary);">Or enter QR code manually:</p>
-          <textarea id="manualQRInput" placeholder="Paste QR code text here..." rows="3" style="width: 100%; margin-top: 10px;"></textarea>
-          <button class="btn btn-primary" onclick="submitManualQR()" style="margin-top: 10px; width: 100%;">Submit Manual Entry</button>
-        </div>
-      </div>
-    </div>
-  `;
-
-  // Make submitManualQR available globally
-  window.submitManualQR = function() {
-    const input = qs('manualQRInput');
-    const qrText = input?.value?.trim();
-    if (qrText) {
-      stopQRScanner();
-      onScan(qrText);
-    } else {
-      showToast('❌ Please enter a QR code', 'error');
-    }
-  };
-
-  // Focus the textarea
-  setTimeout(() => {
-    const input = qs('manualQRInput');
-    if (input) input.focus();
-  }, 100);
-}
-
-// Show manual entry from controls
-window.showManualEntry = function() {
-  showManualEntryFallback(processQRScan);
-};
-
-// Scanner reset function to prevent freezing
-async function resetScanner() {
-  console.log('[QR] Resetting scanner...');
-
-  // Complete cleanup
-  await stopQRScanner();
-
-  // Clear all references
-  currentScanner = null;
-  currentQRAction = null;
-  window.qrScannerState.isScanning = false;
-
-  // Clear DOM
-  const reader = qs('qr-reader');
-  if (reader) {
-    reader.innerHTML = '';
-  }
-
-  const container = qs('qrScannerContainer');
-  if (container) {
-    container.classList.add('hidden');
-    container.style.display = 'none';
-  }
-
-  // Clear all intervals
-  if (window.scanTimerInterval) {
-    clearInterval(window.scanTimerInterval);
-    window.scanTimerInterval = null;
-  }
-  if (window.scanTimeout) {
-    clearTimeout(window.scanTimeout);
-    window.scanTimeout = null;
-  }
-  if (window.animationFrameId) {
-    cancelAnimationFrame(window.animationFrameId);
-    window.animationFrameId = null;
-  }
-
-  // Force garbage collection hint
-  if (window.gc) {
-    window.gc();
-  }
-
-  // Wait for cleanup
-  await new Promise(resolve => setTimeout(resolve, 500));
-
-  console.log('[QR] Scanner reset complete');
-}
-
-function startScanProgress() {
-  let progress = 0;
-  const progressFill = document.querySelector('.progress-fill');
-  const progressText = document.querySelector('.progress-text');
-
-  if (progressInterval) clearInterval(progressInterval);
-
-  progressInterval = setInterval(() => {
-    if (progress >= 100) {
-      // Reset and continue
-      progress = 0;
-    }
-    progress += 2;
-    if (progressFill) progressFill.style.width = `${progress}%`;
-    if (progressText) {
-      if (progress < 30) progressText.textContent = '📷 Initializing camera...';
-      else if (progress < 60) progressText.textContent = '🔍 Looking for QR code...';
-      else if (progress < 90) progressText.textContent = '⚡ Almost there...';
-      else progressText.textContent = '🎯 Position QR code in frame';
-    }
-  }, 100);
-}
-
-function stopScanProgress() {
-  if (progressInterval) {
-    clearInterval(progressInterval);
-    progressInterval = null;
-  }
-  const progressFill = document.querySelector('.progress-fill');
-  const progressText = document.querySelector('.progress-text');
-  if (progressFill) progressFill.style.width = '100%';
-  if (progressText) progressText.textContent = '✅ QR detected! Processing...';
-
-  setTimeout(() => {
-    if (progressFill) progressFill.style.width = '0%';
-  }, 500);
-}
-
-// Enhanced QR scan processing with universal parser and parallel parsing
-window.processQRScan = async function(scanData, decodedResult = null) {
-  const startParseTime = Date.now();
-  console.log('📱 Processing QR scan:', scanData ? scanData.substring(0, 100) : 'null');
-
-  if (!scanData) {
-    showToast('❌ No QR code data received', 'error');
-    return;
-  }
-
-  try {
     showLoading();
 
-    // PARALLEL PARSING - Try all strategies simultaneously for speed
-    const parseStrategies = [
-      () => { try { const obj = JSON.parse(scanData); return obj.token || obj.qrToken || obj.qr_token; } catch(e) { return null; } },
-      () => { const m = scanData.match(/[?&]token=([^&]+)/); return m ? m[1] : null; },
-      () => { const m = scanData.match(/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i); return m ? m[0] : null; },
-      () => scanData
-    ];
-
-    // Execute strategies in parallel (Promise.race for speed)
-    const parsePromises = parseStrategies.map(strategy =>
-      Promise.resolve().then(() => strategy())
-    );
-
-    const results = await Promise.all(parsePromises);
-    let qrToken = results.find(r => r && typeof r === 'string' && r.length > 10);
-
-    // Fallback to universal parser if parallel parsing failed
-    if (!qrToken) {
-      qrToken = universalQRParser(scanData);
-    }
-
-    const parseTime = Date.now() - startParseTime;
-    console.log(`[QR] Parse completed in ${parseTime}ms`);
-
-    if (!qrToken) {
-      console.error('Could not extract token from QR data');
-      showToast('❌ Invalid QR code format', 'error');
-      return;
-    }
-
-    // Send to backend with timeout
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 5000);
-
-    const response = await api('/api/qr/scan', 'POST', {
-      qrToken: qrToken,
-      action: currentQRAction || 'login',
-      timestamp: new Date().toISOString(),
-      detectionTime: parseTime,
-      rawData: scanData.substring(0, 500) // Send for debugging
-    });
-
-    clearTimeout(timeoutId);
-
-    if (!response || !response.ok) {
-      console.error('QR scan API error:', response);
-      showToast('❌ QR code verification failed', 'error');
-      return;
-    }
-
-    const data = response;
-
-    // Enhanced scan options based on action
-    if (currentQRAction === 'login') {
-      await handleQRLogin(data.user?.id || data.userId, qrToken);
-    } else if (['clock_in', 'clock_out', 'break_start', 'break_end'].includes(currentQRAction)) {
-      await handleQRAttendance(data.user?.id || data.userId, qrToken, currentQRAction);
-    } else {
-      // Show scan options modal
-      showScanOptions(data.user?.id || data.userId, qrToken, decodedResult);
-    }
-
-  } catch (err) {
-    console.error('❌ QR processing error:', err);
-    if (err.name === 'AbortError') {
-      showToast('❌ Request timeout. Please try again.', 'error');
-    } else {
-      showToast('❌ Failed to process QR code. Please try again.', 'error');
-    }
-  } finally {
-    hideLoading();
-  }
-};
-
-// Enhanced scan options modal
-window.showScanOptions = function(userId, qrToken, scanResult = null) {
-  // Remove existing modal if any
-  const existingModal = qs('scanOptionsModal');
-  if (existingModal) existingModal.remove();
-
-  const modal = document.createElement('div');
-  modal.className = 'qr-modal-overlay';
-  modal.id = 'scanOptionsModal';
-  modal.innerHTML = `
-    <div class="qr-modal-container" style="max-width: 450px;">
-      <div class="qr-modal-header">
-        <h2>📱 QR Code Scanned Successfully</h2>
-        <button class="btn-close" onclick="this.closest('.qr-modal-overlay').remove()">×</button>
-      </div>
-      <div class="qr-modal-body">
-        <div class="scan-result-info">
-          <div class="scan-success-icon">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path>
-              <polyline points="22,4 12,14.01 9,11.01"></polyline>
-            </svg>
-          </div>
-          <p style="margin-bottom: 20px; text-align: center; color: var(--text-primary);">
-            QR code detected! What would you like to do?
-          </p>
-        </div>
-        <div style="display: flex; flex-direction: column; gap: 12px;">
-          <button class="btn btn-primary" onclick="handleQRLogin('${userId}', '${qrToken}')">
-            <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"></path>
-              <polyline points="10 17 15 12 10 7"></polyline>
-              <line x1="15" y1="12" x2="3" y2="12"></line>
-            </svg>
-            Login to Dashboard
-          </button>
-          <button class="btn btn-success" onclick="handleQRAttendance('${userId}', '${qrToken}', 'clock_in')">
-            <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <circle cx="12" cy="12" r="10"></circle>
-              <polyline points="12,6 12,12 16,14"></polyline>
-            </svg>
-            Clock In
-          </button>
-          <button class="btn btn-warning" onclick="handleQRAttendance('${userId}', '${qrToken}', 'break_start')">
-            <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <path d="M10 2v2M14 2v2M16 8l-2-2-2 2M12 14l-2 2 2 2M8 8l2-2 2 2"></path>
-              <circle cx="12" cy="12" r="3"></circle>
-            </svg>
-            Start Break
-          </button>
-          <button class="btn btn-info" onclick="handleQRAttendance('${userId}', '${qrToken}', 'break_end')">
-            <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <path d="M14 2v2M10 2v2M8 8l2-2 2 2M12 14l2 2-2 2M16 8l-2-2-2 2"></path>
-              <circle cx="12" cy="12" r="3"></circle>
-            </svg>
-            End Break
-          </button>
-          <button class="btn btn-danger" onclick="handleQRAttendance('${userId}', '${qrToken}', 'clock_out')">
-            <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path>
-              <polyline points="16 17 21 12 16 7"></polyline>
-              <line x1="21" y1="12" x2="9" y2="12"></line>
-            </svg>
-            Clock Out
-          </button>
-        </div>
-      </div>
-    </div>
-  `;
-  document.body.appendChild(modal);
-};
-
-// Handle QR-based login with enhanced security
-window.handleQRLogin = async function(userId, qrToken) {
-  const modal = qs('scanOptionsModal');
-  if (modal) modal.remove();
-
-  try {
-    console.log('🔐 Processing QR login for user:', userId);
-
-    // First verify QR token with enhanced validation
-    const verifyResponse = await api('/api/qr/validate/' + qrToken, 'GET');
-
-    if (!verifyResponse || !verifyResponse.ok) {
-      notify('❌ Invalid or expired QR code. Please generate a new one.');
-      return;
-    }
-
-    // Perform QR login
-    const loginResponse = await api('/api/qr/scan', 'POST', {
-      userId: userId,
-      qrToken: qrToken,
-      action: 'login',
-      deviceFingerprint: getDeviceFingerprint(),
-      location: await getCurrentLocation()
-    });
-
-    if (!loginResponse || !loginResponse.ok) {
-      notify('❌ Login failed. Please check your QR code and try again.');
-      return;
-    }
-
-    const user = {
-      id: loginResponse.user.id,
-      name: loginResponse.user.name,
-      email: loginResponse.user.email,
-      role: loginResponse.user.role
-    };
-
-    // Save session with enhanced security
-    save(CURRENT_KEY, user);
-    saveToken(loginResponse.token, loginResponse.refreshToken, loginResponse.expiresIn);
-
-    console.log('✅ QR Login successful for:', user.name);
-    notify(`🎉 Welcome back, ${user.name}!`);
-
-    // Enter dashboard
-    setTimeout(() => enterDashboard(user), 500);
-
-  } catch (err) {
-    console.error('❌ QR login error:', err);
-    notify('❌ Login failed. Please try again or use manual login.');
-  }
-};
-
-// Handle QR-based attendance with enhanced tracking
-window.handleQRAttendance = async function(userId, qrToken, action) {
-  const modal = qs('scanOptionsModal');
-  if (modal) modal.remove();
-
-  try {
-    console.log(`📊 Processing QR attendance: ${action} for user:`, userId);
-
-    // Verify QR token
-    const verifyResponse = await api('/api/qr/validate/' + qrToken, 'GET');
-
-    if (!verifyResponse || !verifyResponse.ok) {
-      notify('❌ Invalid QR code. Please scan a valid code.');
-      return;
-    }
-
-    // Record attendance with enhanced data
-    const attendanceResponse = await api('/api/qr/scan', 'POST', {
-      userId: userId,
-      qrToken: qrToken,
-      action: action,
-      deviceFingerprint: getDeviceFingerprint(),
-      location: await getCurrentLocation(),
-      timestamp: new Date().toISOString()
-    });
-
-    if (attendanceResponse && attendanceResponse.ok) {
-      // Get action display name with emojis
-      const actionNames = {
-        'clock_in': '🕐 Clocked In',
-        'clock_out': '🕒 Clocked Out',
-        'break_start': '☕ Break Started',
-        'break_end': '🔄 Break Ended'
-      };
-
-      notify(`✅ ${actionNames[action] || action} successfully!`);
-
-      // If user is already logged in, refresh their dashboard
-      const currentUser = load(CURRENT_KEY);
-      if (currentUser && currentUser.id === userId) {
-        loadWorkerAttendance(currentUser);
-        loadWorkerTimeLogs(currentUser);
-      }
-    } else {
-      notify('❌ Failed to record attendance. Please try again.');
-    }
-
-  } catch (err) {
-    console.error('❌ QR attendance error:', err);
-    notify('❌ Attendance recording failed. Please try again.');
-  }
-};
-
-// Get device fingerprint for security
-function getDeviceFingerprint() {
-  const canvas = document.createElement('canvas');
-  const ctx = canvas.getContext('2d');
-  ctx.font = '14px Arial';
-  ctx.fillText(navigator.userAgent, 0, 20);
-
-  return {
-    userAgent: navigator.userAgent,
-    language: navigator.language,
-    platform: navigator.platform,
-    cookieEnabled: navigator.cookieEnabled,
-    screenResolution: `${screen.width}x${screen.height}`,
-    timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
-    canvasFingerprint: canvas.toDataURL()
-  };
-}
-
-// Get current location for attendance tracking
-async function getCurrentLocation() {
-  return new Promise((resolve) => {
-    if (!navigator.geolocation) {
-      resolve(null);
-      return;
-    }
-
-    navigator.geolocation.getCurrentPosition(
-      (position) => {
-        resolve({
-          latitude: position.coords.latitude,
-          longitude: position.coords.longitude,
-          accuracy: position.coords.accuracy,
-          timestamp: position.timestamp
-        });
-      },
-      (error) => {
-        console.warn('Geolocation error:', error);
-        resolve(null);
-      },
-      {
-        enableHighAccuracy: true,
-        timeout: 5000,
-        maximumAge: 300000 // 5 minutes
-      }
-    );
-  });
-}
-
-// Add QR logout button to dashboard with enhanced styling
-function addQRLogoutButton(user) {
-  const headerRight = document.querySelector('.header-right');
-  if (!headerRight) return;
-
-  // Check if button already exists
-  if (document.getElementById('qrLogoutBtn')) return;
-
-  const qrLogoutBtn = document.createElement('button');
-  qrLogoutBtn.id = 'qrLogoutBtn';
-  qrLogoutBtn.className = 'btn-icon-circle qr-logout-btn';
-  qrLogoutBtn.title = 'QR Code Logout';
-  qrLogoutBtn.innerHTML = `
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-        <path d="M3 7V5a2 2 0 0 1 2-2h2M17 3h2a2 2 0 0 1 2 2v2M21 17v2a2 2 0 0 1-2 2h-2M7 21H5a2 2 0 0 1-2-2v-2M7 7h10v10H7z" />
-        <path d="M12 12v5M15 15l-3 3-3-3" />
-    </svg>
-  `;
-  qrLogoutBtn.onclick = () => showQRLogoutOptions(user);
-
-  // Insert before the regular logout button
-  const logoutBtn = document.querySelector('.btn-outline-danger');
-  if (logoutBtn) {
-    headerRight.insertBefore(qrLogoutBtn, logoutBtn);
-  } else {
-    headerRight.appendChild(qrLogoutBtn);
-  }
-}
-
-// Enhanced QR logout options modal - FIXED POSITIONING
-window.showQRLogoutOptions = function(user) {
-  // Remove any existing modals first
-  const existingModal = qs('qrLogoutModal');
-  if (existingModal) existingModal.remove();
-
-  const modal = document.createElement('div');
-  modal.className = 'qr-modal-overlay';
-  modal.id = 'qrLogoutModal';
-  modal.setAttribute('role', 'dialog');
-  modal.setAttribute('aria-modal', 'true');
-
-  modal.innerHTML = `
-    <div class="qr-modal-container qr-modal-center">
-      <div class="qr-modal-header">
-        <h2>👋 Logout Options</h2>
-        <button class="btn-close" onclick="this.closest('.qr-modal-overlay').remove()" aria-label="Close">×</button>
-      </div>
-      <div class="qr-modal-body">
-        <p style="margin-bottom: 20px; color: var(--text-primary);">Choose how you want to logout:</p>
-        <div style="display: flex; flex-direction: column; gap: 12px;">
-          <button class="btn btn-primary" onclick="showQRLogoutScanner('${user.id}')">
-            <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="margin-right: 8px;">
-                <path d="M3 7V5a2 2 0 0 1 2-2h2M17 3h2a2 2 0 0 1 2 2v2M21 17v2a2 2 0 0 1-2 2h-2M7 21H5a2 2 0 0 1-2-2v-2M7 7h10v10H7z" />
-            </svg>
-            📱 Scan QR Code to Logout
-          </button>
-          <button class="btn btn-danger" onclick="performLogout()">
-            <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="margin-right: 8px;">
-                <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
-                <polyline points="16 17 21 12 16 7" />
-                <line x1="21" y1="12" x2="9" y2="12" />
-            </svg>
-            🔒 Manual Logout
-          </button>
-        </div>
-      </div>
-    </div>
-  `;
-
-  document.body.appendChild(modal);
-
-  // Ensure modal is centered
-  modal.style.display = 'flex';
-};
-
-// Enhanced QR logout scanner
-window.showQRLogoutScanner = async function(userId) {
-  closeModal('qrLogoutModal');
-
-  // Initialize scanner specifically for logout
-  const success = await initQRScanner({
-    onScan: (scanData) => processQRLogout(userId, scanData),
-    showControls: false, // Simplified controls for logout
-    enableGallery: false,
-    enableSound: true,
-    enableVibration: true
-  });
-
-  if (!success) {
-    notify('❌ Camera not available. Please use manual logout.');
-  }
-};
-
-// Enhanced QR logout processing
-window.processQRLogout = async function(userId, scanData) {
-  try {
-    console.log('🔓 Processing QR logout for user:', userId);
-
-    let qrInfo;
     try {
-      qrInfo = JSON.parse(scanData);
-    } catch (e) {
-      qrInfo = { token: scanData };
+        // Create user and get returned QR data (signup endpoint returns qrData)
+        const data = await api('/api/signup', 'POST', { name, email, password, role });
+
+        if (!data.ok) {
+            showToast(data.error || 'Registration failed', 'error');
+            return;
+        }
+
+        showToast('Registration successful! Logging you in...', 'success');
+
+        // Sign in the user so we can show dashboard and user QR
+        const signIn = await api('/api/login', 'POST', { email, password });
+        if (signIn.ok) {
+            localStorage.setItem(TOKEN_KEY, signIn.token);
+            if (signIn.refreshToken) localStorage.setItem(REFRESH_TOKEN_KEY, signIn.refreshToken);
+            save(CURRENT_KEY, signIn.user);
+            // Show dashboard first
+            window.enterDashboard(signIn.user);
+
+            // Show the QR code returned by signup (or fetch /api/qr/my-qr as fallback)
+            try {
+                const qrData = data.qrData || (await api('/api/qr/my-qr', 'GET')).qrData;
+                const qrToken = data.qrToken || (await api('/api/qr/my-qr', 'GET')).qrToken;
+                showQRCodeModal({ qrData, qrToken, name: signIn.user.name });
+            } catch (e) {
+                console.warn('Could not display QR immediately:', e);
+            }
+
+            return;
+        }
+
+        window.backToLogin();
+    } catch (err) {
+        showToast('Registration error: ' + err.message, 'error');
+    } finally {
+        hideLoading();
     }
-
-    const qrToken = qrInfo.token || qrInfo;
-
-    // Verify it's the user's own QR code
-    const verifyResponse = await api('/api/qr/validate/' + qrToken, 'GET');
-
-    if (!verifyResponse || !verifyResponse.ok) {
-      notify('❌ Invalid QR code. Cannot logout with this code.');
-      return;
-    }
-
-    // Check if the QR belongs to the current user
-    if (verifyResponse.userId !== userId) {
-      notify('❌ This QR code belongs to a different user. Please use your own QR code.');
-      return;
-    }
-
-    notify('✅ Logged out successfully via QR!');
-    await stopQRScanner();
-
-    // Perform actual logout
-    if (typeof performLogout === 'function') {
-      performLogout();
-    }
-
-  } catch (err) {
-    console.error('❌ QR logout error:', err);
-    notify('❌ Logout failed. Please try manual logout.');
-  }
 };
 
-// Helper to close modal
-function closeModal(modalId) {
-  const modal = qs(modalId);
-  if (modal) modal.remove();
-}
+// Show QR Code modal with download/print instructions
+window.showQRCodeModal = function({ qrData, qrToken, name, expiresAt } = {}) {
+    if (!qrData) {
+        showToast('QR not available', 'error');
+        return;
+    }
 
-// Manual logout function
-window.manualLogout = function() {
-  // Directly perform full logout without showing QR modal
-  if (typeof performLogout === 'function') return performLogout();
-  // fallback
-  logout();
-};
+    // Remove existing modal if present
+    const existing = document.getElementById('qrModal');
+    if (existing) existing.remove();
 
-// Manual QR code entry fallback
-window.manualQREntry = function() {
-  const qrText = prompt('📱 Please enter or paste your QR code text:');
-  if (qrText && qrText.trim()) {
-    processQRScan(qrText.trim());
-  }
-};
-
-// Override logout function to show QR options
-const existingLogout = (typeof logout === 'function') ? logout : null;
-window.logout = function() {
-  const user = load(CURRENT_KEY);
-  if (user) {
-    showQRLogoutOptions(user);
-  } else {
-    if (existingLogout) return existingLogout();
-    return performLogout();
-  }
-};
-
-// Enhanced QR modal display
-window.showQrModal = function(qrData, title = 'QR Code') {
-  if (!qrData) {
-    notify('❌ No QR code data available.');
-    return;
-  }
-
-  // Remove any existing modals
-  const existingModal = qs('qrDisplayModal');
-  if (existingModal) existingModal.remove();
-
-  const modal = document.createElement('div');
-  modal.className = 'qr-modal-overlay';
-  modal.id = 'qrDisplayModal';
-  modal.setAttribute('role', 'dialog');
-  modal.setAttribute('aria-modal', 'true');
-
-  modal.innerHTML = `
-    <div class="qr-modal-container qr-modal-center">
-      <div class="qr-modal-header">
-        <h2>${title}</h2>
-        <button class="btn-close" onclick="this.closest('.qr-modal-overlay').remove()" aria-label="Close">×</button>
-      </div>
-      <div class="qr-modal-body">
-        <div style="text-align: center;">
-          <div class="qr-code-container" style="display: inline-block; padding: 15px; background: var(--bg-primary); border-radius: 8px; border: 2px solid var(--border-color);">
-            <img src="${qrData}" alt="${title}" style="max-width: 250px; max-height: 250px;" />
+    const modal = document.createElement('div');
+    modal.id = 'qrModal';
+    modal.className = 'modal active';
+    modal.innerHTML = `
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5>Your QR Code</h5>
+          <button class="btn-close" onclick="document.getElementById('qrModal')?.remove()">×</button>
+        </div>
+        <div class="modal-body" style="text-align:center;">
+          <p style="color:var(--text-secondary);">Hello ${sanitizeHTML(name || '')}, below is your personal QR code. Save or print it and present it when scanning.</p>
+          <div style="margin: 12px auto; max-width:340px;">
+            <img id="qrImagePreview" src="${qrData}" alt="QR Code" style="width:100%; height:auto; border-radius:8px; border:1px solid var(--border-color); background:#fff; padding:8px;" />
+          </div>
+          <div style="margin-top:12px; color:var(--text-secondary); text-align:left; font-size:13px;">
+            <ul>
+              <li>Save the image to your device for offline use.</li>
+              <li>Print the QR and keep it accessible for quick scanning.</li>
+              <li>When scanned with the WFMS scanner it will auto-login and record time, date and your attendance.</li>
+            </ul>
           </div>
         </div>
-        <div style="display: flex; flex-direction: column; gap: 12px; margin-top: 20px;">
-          <button class="btn btn-primary" onclick="downloadQRCode('${qrData}', '${title.replace(/[^a-zA-Z0-9]/g, '_')}.png')">
-            <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="margin-right: 8px;">
-                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
-                <polyline points="7 10 12 15 17 10" />
-                <line x1="12" y1="15" x2="12" y2="3" />
-            </svg>
-            💾 Download
-          </button>
-          <button class="btn btn-secondary" onclick="copyQRToClipboard('${qrData}')">
-            <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="margin-right: 8px;">
-                <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
-                <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
-            </svg>
-            📋 Copy Image
-          </button>
+        <div class="modal-footer">
+          <button class="btn btn-outline" onclick="document.getElementById('qrModal')?.remove()">Close</button>
+          <button class="btn btn-outline" onclick="downloadQRCode()">Download</button>
+          <button class="btn btn-primary" onclick="printQRCode()">Print</button>
         </div>
       </div>
-    </div>
-  `;
-
-  document.body.appendChild(modal);
-  modal.style.display = 'flex';
-};
-
-window.closeQrModal = function() {
-  const modal = qs('qrModal');
-  if (modal) {
-    modal.style.animation = 'fadeOut 0.2s ease-out';
-    setTimeout(() => modal.remove(), 200);
-  }
-};
-
-window.downloadQrCode = function(qrDataUrl, userName) {
-  const link = document.createElement('a');
-  link.href = qrDataUrl;
-  link.download = `QR-Code-${userName}-${new Date().getTime()}.png`;
-  document.body.appendChild(link);
-  link.click();
-  document.body.removeChild(link);
-  console.log('✓ QR code downloaded');
-};
-
-window.goToLoginAfterQr = function() {
-  closeQrModal();
-  backToLogin();
-};
-
-window.handleQrScan = async function(qrData) {
-  try {
-    console.log('📱 Processing QR scan...');
-    
-    let qrInfo;
-    if (typeof qrData === 'string') {
-      try {
-        qrInfo = JSON.parse(qrData);
-      } catch (e) {
-        console.warn('Could not parse QR as JSON, treating as token');
-        qrInfo = { token: qrData };
-      }
-    } else {
-      qrInfo = qrData;
-    }
-    
-    const userId = qrInfo.userId || qrInfo.id;
-    const qrToken = qrInfo.token;
-    
-    if (!userId || !qrToken) {
-      notify('❌ Invalid QR code. Please scan a valid QR code.');
-      return;
-    }
-    
-    console.log('🔄 Recording QR scan with date/time...');
-    
-    const scanResponse = await api('/api/scan-qr', 'POST', {
-      userId: userId,
-      qrToken: qrToken
-    });
-    
-    if (!scanResponse.ok) {
-      notify('❌ QR code verification failed. Please scan again or sign in manually.');
-      return;
-    }
-    
-    console.log('✓ QR scan recorded:', scanResponse.scanTime);
-    console.log('✓ Scan count:', scanResponse.scanCount);
-    
-    const userResponse = await api('/api/users?id=' + userId);
-    if (userResponse && userResponse.length > 0) {
-      const user = userResponse[0];
-      
-      save(CURRENT_KEY, user);
-      
-      console.log('✓ User authenticated via QR scan:', user.name);
-      notify(`✓ Check-in successful!\nTime: ${new Date(scanResponse.scanTime).toLocaleString()}`);
-      
-      setTimeout(() => enterDashboard(user), 500);
-      return;
-    }
-    
-    notify('❌ User not found. Please sign in manually.');
-  } catch (err) {
-    console.error('QR scan error:', err);
-    notify('❌ QR scan failed. Please sign in manually.');
-  }
-};
-
-window.viewQrScanRecords = async function() {
-  try {
-    const user = load(CURRENT_KEY);
-    if (!user || user.role !== 'admin') {
-      notify('❌ Admin access required');
-      return;
-    }
-    
-    console.log('📊 Fetching QR scan records...');
-    const records = await api('/api/admin/qr-scan-records');
-    
-    if (!records.ok) {
-      notify('Error fetching records: ' + records.error);
-      return;
-    }
-    
-    showQrScanRecordsModal(records.records);
-  } catch (err) {
-    console.error('Error viewing scan records:', err);
-    notify('Failed to load scan records');
-  }
-};
-
-window.showQrScanRecordsModal = function(records) {
-  if (!document.querySelector('#qrRecordsModalStyles')) {
-    const style = document.createElement('style');
-    style.id = 'qrRecordsModalStyles';
-    style.textContent = `
-      .qr-records-modal-overlay {
-        position: fixed;
-        top: 0;
-        left: 0;
-        right: 0;
-        bottom: 0;
-        background: rgba(0, 0, 0, 0.7);
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        z-index: 9999;
-      }
-      .qr-records-modal-container {
-        background: white;
-        border-radius: 12px;
-        box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
-        max-width: 900px;
-        width: 95%;
-        max-height: 85vh;
-        overflow-y: auto;
-      }
-      .scan-records-summary {
-        display: grid;
-        grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
-        gap: 12px;
-        margin-bottom: 20px;
-      }
-      .summary-card {
-        background: #f3f4f6;
-        padding: 16px;
-        border-radius: 8px;
-        text-align: center;
-      }
-      .summary-label {
-        display: block;
-        font-size: 12px;
-        color: #6b7280;
-        margin-bottom: 8px;
-      }
-      .summary-value {
-        display: block;
-        font-size: 24px;
-        font-weight: 700;
-        color: #0d6efd;
-      }
-      .scan-records-table {
-        overflow-x: auto;
-      }
-      .scan-records-table table {
-        width: 100%;
-        border-collapse: collapse;
-        font-size: 13px;
-      }
-      .scan-records-table thead {
-        background: #f3f4f6;
-        border-bottom: 2px solid #e5e7eb;
-      }
-      .scan-records-table th {
-        padding: 12px;
-        text-align: left;
-        font-weight: 600;
-        color: #374151;
-      }
-      .scan-records-table td {
-        padding: 12px;
-        border-bottom: 1px solid #e5e7eb;
-        color: #1f2937;
-      }
-      .scan-records-table tbody tr:hover {
-        background: #f9fafb;
-      }
-      .qr-modal-footer {
-        padding: 16px 24px;
-        border-top: 1px solid #e5e7eb;
-        display: flex;
-        gap: 12px;
-        justify-content: flex-end;
-      }
     `;
-    document.head.appendChild(style);
-  }
 
-  const modalHTML = `
-    <div class="qr-records-modal-overlay" id="qrRecordsModal" onclick="closeQrScanRecordsModal()">
-      <div class="qr-records-modal-container" onclick="event.stopPropagation()">
-        <div class="qr-modal-header">
-          <h2>🔐 QR Code Scan Records</h2>
-          <button class="btn-close" onclick="closeQrScanRecordsModal()" aria-label="Close"></button>
-        </div>
-        
-        <div class="qr-records-modal-body">
-          <div class="scan-records-summary">
-            <div class="summary-card">
-              <span class="summary-label">Total Scans</span>
-              <span class="summary-value">${records.length}</span>
+    document.body.appendChild(modal);
+};
+
+window.downloadQRCode = function() {
+    const img = document.getElementById('qrImagePreview');
+    if (!img) return showToast('QR image not found', 'error');
+    const url = img.src;
+    const a = document.createElement('a');
+    a.href = url;
+    const filename = `WFMS-QR-${(load(CURRENT_KEY)?.name || 'user').replace(/\s+/g,'_')}.png`;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    showToast('QR downloaded', 'success');
+};
+
+window.printQRCode = function() {
+    const img = document.getElementById('qrImagePreview');
+    if (!img) return showToast('QR image not found', 'error');
+    const w = window.open('');
+    w.document.write(`<img src="${img.src}" style="width:100%;height:auto;">`);
+    w.document.close();
+    w.focus();
+    setTimeout(() => { try { w.print(); w.close(); } catch(e) { console.warn(e); } }, 300);
+};
+
+// Show current user's QR (worker dashboard)
+window.showMyQRCode = async function() {
+    try {
+        showLoading();
+        const response = await api('/api/qr/my-qr', 'GET');
+        if (!response.ok) return showToast(response.error || 'Could not fetch QR', 'error');
+        showQRCodeModal({ qrData: response.qrData, qrToken: response.qrToken, name: load(CURRENT_KEY)?.name });
+    } catch (err) {
+        console.error('Error fetching my QR:', err);
+        showToast('Error fetching QR: ' + err.message, 'error');
+    } finally { hideLoading(); }
+};
+
+// Worker: download their own performance report (simple CSV)
+window.downloadMyReport = async function() {
+    try {
+        const user = load(CURRENT_KEY);
+        if (!user) return showToast('Not authenticated', 'error');
+        showLoading();
+        const resp = await api(`/api/employee/performance/${user.id}`);
+        if (!resp.ok) return showToast(resp.error || 'Failed to fetch performance', 'error');
+        const perf = resp.performance || {};
+        let csv = 'Metric,Value\n';
+        csv += `Tasks Assigned,${perf.tasks_assigned || 0}\n`;
+        csv += `Tasks Completed,${perf.tasks_completed || 0}\n`;
+        csv += `Tasks In Progress,${perf.tasks_in_progress || 0}\n`;
+        csv += `Tasks Pending,${perf.tasks_submitted_pending || 0}\n`;
+        csv += `Hours Worked,${perf.total_hours_worked || 0}\n`;
+        csv += `Completion Rate,${perf.completion_rate || 0}%\n`;
+
+        const blob = new Blob([csv], { type: 'text/csv' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `WFMS-My-Report-${new Date().toISOString().split('T')[0]}.csv`;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        URL.revokeObjectURL(url);
+        showToast('Report downloaded', 'success');
+    } catch (err) {
+        console.error('Error downloading my report:', err);
+        showToast('Failed to download report', 'error');
+    } finally { hideLoading(); }
+};
+
+window.toggleRegPassword = function() {
+    const pwd = document.getElementById('regPassword');
+    if (pwd) {
+        pwd.type = pwd.type === 'password' ? 'text' : 'password';
+    }
+};
+
+window.isValidEmail = function(email) {
+    return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+};
+
+window.showFormError = function(input, msg) {
+    if (!input) return;
+    input.style.borderColor = '#ef4444';
+    const error = document.createElement('div');
+    error.className = 'form-error';
+    error.textContent = msg;
+    error.style.cssText = 'color:#ef4444;font-size:12px;margin-top:4px;';
+    input.parentNode?.appendChild(error);
+    setTimeout(() => {
+        input.style.borderColor = '';
+        error.remove();
+    }, 4000);
+};
+
+window.showFormSuccess = function(input) {
+    if (!input) return;
+    input.style.borderColor = '#10b981';
+    setTimeout(() => { input.style.borderColor = ''; }, 2000);
+};
+
+// ============================================
+// QR SCANNER FUNCTIONS
+// ============================================
+window.ensureQRContainer = function() {
+    if (document.getElementById('qrScannerContainer')) return true;
+    const container = document.createElement('div');
+    container.id = 'qrScannerContainer';
+    container.className = 'qr-scanner-overlay hidden';
+    container.innerHTML = `
+        <div class="qr-scanner-box">
+            <div class="qr-scanner-header">
+                <h5>Scan QR Code</h5>
+                <button onclick="window.stopQRScanner()">×</button>
             </div>
-            <div class="summary-card">
-              <span class="summary-label">Unique Users</span>
-              <span class="summary-value">${new Set(records.map(r => r.userId)).size}</span>
-            </div>
-          </div>
-          
-          <div class="scan-records-table">
-            <table>
-              <thead>
-                <tr>
-                  <th>User Name</th>
-                  <th>Email</th>
-                  <th>Scan Time</th>
-                  <th>Scanner IP</th>
-                  <th>QR Status</th>
-                  <th>Total Scans</th>
-                </tr>
-              </thead>
-              <tbody>
-                ${records.map(r => `
-                  <tr>
-                    <td>${r.userName}</td>
-                    <td>${r.userEmail}</td>
-                    <td>${r.scanTime}</td>
-                    <td>${r.scannerIp}</td>
-                    <td>
-                      <span class="badge ${ r.qrActivated ? 'bg-success' : 'bg-warning' }">
-                        ${r.qrActivated ? 'Activated' : 'Pending'}
-                      </span>
-                    </td>
-                    <td>${r.totalScans}</td>
-                  </tr>
-                `).join('')}
-              </tbody>
-            </table>
-          </div>
+            <div id="qr-reader"></div>
+            <div id="qr-scanner-status"></div>
         </div>
-        
-        <div class="qr-modal-footer">
-          <button class="btn btn-secondary" onclick="closeQrScanRecordsModal()">
-            <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <polyline points="3 6 5 4 21 4 23 6 23 20a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V6"></polyline>
-            </svg>
-            Close
-          </button>
-          <button class="btn btn-primary" onclick="exportQrScanRecords()">
-            <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
-              <polyline points="7 10 12 15 17 10"></polyline>
-            </svg>
-            Export as CSV
-          </button>
-        </div>
-      </div>
-    </div>
-  `;
-  
-  let modalContainer = qs('qrRecordsModal');
-  if (modalContainer) {
-    modalContainer.remove();
-  }
-  
-  const modal = document.createElement('div');
-  modal.innerHTML = modalHTML;
-  document.body.appendChild(modal.firstElementChild);
+    `;
+    document.body.appendChild(container);
+    return true;
 };
 
-window.closeQrScanRecordsModal = function() {
-  const modal = qs('qrRecordsModal');
-  if (modal) {
-    modal.remove();
-  }
-};
-
-window.exportQrScanRecords = async function() {
-  try {
-    const records = await api('/api/admin/qr-scan-records');
-    if (!records.ok) return notify('Error exporting records');
-    
-    let csv = 'User Name,Email,Scan Time,Scanner IP,QR Status,Total Scans\n';
-    records.records.forEach(r => {
-      csv += `"${r.userName}","${r.userEmail}","${r.scanTime}","${r.scannerIp}","${r.qrActivated ? 'Activated' : 'Pending'}",${r.totalScans}\n`;
-    });
-    
-    const blob = new Blob([csv], { type: 'text/csv' });
-    const url = window.URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = `QR-Scan-Records-${new Date().toISOString().split('T')[0]}.csv`;
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    window.URL.revokeObjectURL(url);
-    
-    console.log('✓ Records exported as CSV');
-  } catch (err) {
-    console.error('Export error:', err);
-    notify('Failed to export records');
-  }
-};
-// Stop QR scanner - ENHANCED CLEANUP
-// Enhanced stop scanner with complete cleanup and memory leak prevention
 window.stopQRScanner = async function() {
-  console.log('[QR] Stopping QR scanner and cleaning up...');
-  window.qrScannerState.isScanning = false;
+    console.log('[QR] Stopping scanner...');
+    
+    if (window.currentScanner) {
+        try {
+            await window.currentScanner.stop();
+        } catch(e) {}
+        window.currentScanner = null;
+    }
+    
+    const videos = document.querySelectorAll('video');
+    videos.forEach(video => {
+        if (video.srcObject) {
+            video.srcObject.getTracks().forEach(track => track.stop());
+            video.srcObject = null;
+        }
+    });
+    
+    const container = document.getElementById('qrScannerContainer');
+    if (container) {
+        container.classList.add('hidden');
+    }
+};
 
-  // Stop all scanner instances
-  if (window.qrScannerState.scanner) {
+window.initQRScanner = async function(action = 'login') {
+    console.log('[QR] initQRScanner called with action:', action);
+    
+    window.ensureQRContainer();
+    
+    if (typeof Html5Qrcode === 'undefined') {
+        showToast('Loading QR scanner...', 'info');
+        await new Promise((resolve) => {
+            const script = document.createElement('script');
+            script.src = 'https://cdn.jsdelivr.net/npm/html5-qrcode@2.3.8/html5-qrcode.min.js';
+            script.onload = resolve;
+            script.onerror = () => {
+                showToast('Failed to load QR library', 'error');
+                resolve();
+            };
+            document.head.appendChild(script);
+        });
+        await new Promise(r => setTimeout(r, 200));
+    }
+    
+    if (typeof Html5Qrcode === 'undefined') {
+        showToast('QR library not available', 'error');
+        return false;
+    }
+    
+    const container = document.getElementById('qrScannerContainer');
+    const reader = document.getElementById('qr-reader');
+    if (!container || !reader) return false;
+    
+    await window.stopQRScanner();
+    reader.innerHTML = '';
+    container.classList.remove('hidden');
+    
+    const status = document.getElementById('qr-scanner-status');
+    if (status) status.textContent = 'Starting camera...';
+    
     try {
-      await window.qrScannerState.scanner.stop();
-      console.log('[QR] Html5Qrcode scanner stopped');
-    } catch (err) {
-      console.warn('[QR] Error stopping Html5Qrcode scanner:', err);
-    }
-    window.qrScannerState.scanner = null;
-  }
+        const scanner = new Html5Qrcode('qr-reader');
+        window.currentScanner = scanner;
+        let scanned = false;
+        
+        await scanner.start(
+            { facingMode: 'environment' },
+            { fps: 15, qrbox: { width: 250, height: 250 } },
+            async (text) => {
+                if (scanned) return;
+                scanned = true;
+                if (status) status.textContent = 'QR detected!';
+                await window.stopQRScanner();
+                
+                // Parse scanned text: QR payload may be a JSON string containing the token
+                let qrTokenToSend = text;
+                try {
+                    const parsed = JSON.parse(text);
+                    qrTokenToSend = parsed.token || parsed.qr_token || parsed.qrToken || text;
+                } catch (e) {
+                    // not JSON, use raw text
+                    qrTokenToSend = text;
+                }
 
-  // Stop legacy scanner reference
-  if (window.currentQrScanner) {
+                const response = await api('/api/qr/scan', 'POST', {
+                    qrToken: qrTokenToSend,
+                    action: action
+                });
+                
+                if (response.ok && response.token) {
+                    // **ENHANCED AUTO-LOGIN: Always handle token response**
+                    localStorage.setItem(TOKEN_KEY, response.token);
+                    if (response.refreshToken) localStorage.setItem(REFRESH_TOKEN_KEY, response.refreshToken);
+                    
+                    const userData = {
+                        id: response.user?.id || response.userId,
+                        name: response.user?.name || response.userName,
+                        email: response.user?.email || response.userEmail,
+                        role: response.user?.role || response.userRole
+                    };
+                    
+                    save(CURRENT_KEY, userData);
+                    showToast(`✅ QR Auto-Login: Welcome ${userData.name}!`, 'success');
+                    
+                    // Auto-enter dashboard for seamless phone experience
+                    window.enterDashboard(userData);
+                } else {
+                    showToast(response.message || response.error || 'QR processed', response.ok ? 'success' : 'warning');
+                }
+            },
+            (errorMessage) => {
+                if (errorMessage && !errorMessage.includes('No MultiFormat')) {
+                    console.debug('[QR] Scan error:', errorMessage);
+                }
+            }
+        );
+        
+        if (status) status.textContent = 'Position QR code in frame';
+        return true;
+    } catch(e) {
+        console.error('[QR] Scanner error:', e);
+        showToast('Camera error: ' + (e.message || 'Unknown'), 'error');
+        setTimeout(() => window.stopQRScanner(), 2000);
+        return false;
+    }
+};
+
+// Manual QR entry fallback (used by Manual QR Entry button)
+window.manualQREntry = async function(action = 'login') {
     try {
-      await window.currentQrScanner.stop();
-      console.log('[QR] Legacy scanner stopped');
+        const input = prompt('Enter QR token or QR payload (paste token or JSON):');
+        if (!input) return;
+
+        let qrTokenToSend = input;
+        try {
+            const parsed = JSON.parse(input);
+            qrTokenToSend = parsed.token || parsed.qr_token || parsed.qrToken || input;
+        } catch (e) {
+            // use raw input if not JSON
+            qrTokenToSend = input;
+        }
+
+        showLoading();
+        const response = await api('/api/qr/scan', 'POST', { qrToken: qrTokenToSend, action });
+        if (response && response.ok && response.token) {
+            localStorage.setItem(TOKEN_KEY, response.token);
+            if (response.refreshToken) localStorage.setItem(REFRESH_TOKEN_KEY, response.refreshToken);
+
+            const userData = {
+                id: response.user?.id || response.userId,
+                name: response.user?.name || response.userName,
+                email: response.user?.email || response.userEmail,
+                role: response.user?.role || response.userRole
+            };
+            save(CURRENT_KEY, userData);
+            showToast(`✅ QR Auto-Login: Welcome ${userData.name || 'user'}!`, 'success');
+            window.enterDashboard(userData);
+        } else {
+            showToast(response?.message || response?.error || 'QR processed', response?.ok ? 'success' : 'warning');
+        }
     } catch (err) {
-      console.warn('[QR] Error stopping legacy scanner:', err);
+        console.error('manualQREntry error', err);
+        showToast('Manual QR failed: ' + (err.message || 'Unknown'), 'error');
+    } finally {
+        hideLoading();
     }
-    window.currentQrScanner = null;
-  }
-
-  // Stop all video tracks and streams
-  const videos = document.querySelectorAll('video');
-  videos.forEach(video => {
-    if (video.srcObject) {
-      const tracks = video.srcObject.getTracks();
-      tracks.forEach(track => {
-        track.stop();
-        console.log('[QR] Stopped video track:', track.label);
-      });
-      video.srcObject = null;
-    }
-  });
-
-  // Clear scanner container
-  const scannerContainer = qs('qrScannerContainer');
-  if (scannerContainer) {
-    scannerContainer.classList.add('hidden');
-    scannerContainer.style.display = 'none';
-    scannerContainer.innerHTML = ''; // Clear all content
-  }
-
-  // Clear QR reader element
-  const readerElement = qs('qr-reader');
-  if (readerElement) {
-    readerElement.innerHTML = '';
-  }
-
-  // Clear status indicator
-  const statusDiv = qs('qr-scanner-status');
-  if (statusDiv) {
-    statusDiv.remove();
-  }
-
-  // Clear all intervals and timeouts
-  if (window.scanTimerInterval) {
-    clearInterval(window.scanTimerInterval);
-    window.scanTimerInterval = null;
-  }
-  if (window.scanTimeout) {
-    clearTimeout(window.scanTimeout);
-    window.scanTimeout = null;
-  }
-  if (window.animationFrameId) {
-    cancelAnimationFrame(window.animationFrameId);
-    window.animationFrameId = null;
-  }
-
-  // Reset global variables
-  currentQRAction = null;
-  currentScanner = null;
-
-  // Force garbage collection hint
-  if (window.gc) {
-    window.gc();
-  }
-
-  console.log('[QR] Scanner cleanup complete');
-};
-function performLogout() {
-  console.log('🔴 performLogout() - clearing session and redirecting');
-
-  // Clear current user keys
-  localStorage.removeItem(CURRENT_KEY);
-  localStorage.removeItem(TOKEN_KEY);
-  localStorage.removeItem(REFRESH_TOKEN_KEY);
-  localStorage.removeItem(TOKEN_EXPIRES_KEY);
-  localStorage.removeItem(THEME_KEY);
-
-  // Clear any QR-related items
-  Object.keys(localStorage).forEach(key => {
-    if (key && key.startsWith('qr_token_')) localStorage.removeItem(key);
-  });
-
-  // Stop any running QR scanner
-  if (window.currentQrScanner && typeof window.currentQrScanner.stop === 'function') {
-    try { window.currentQrScanner.stop(); } catch (e) { } // ignore
-    window.currentQrScanner = null;
-  }
-
-  console.log('✓ LocalStorage and scanner cleared');
-
-  // Redirect to login/home
-  window.location.replace('/');
-}
-window.forceHardLogout = function() {
-  console.log('🔥 Force logout - nuking everything');
-  
-  // Clear EVERYTHING
-  localStorage.clear();
-  sessionStorage.clear();
-  
-  // Delete all cookies
-  document.cookie.split(";").forEach(function(c) {
-    const cookieName = c.split("=")[0].trim();
-    document.cookie = cookieName + "=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;";
-  });
-  
-  // Redirect with cache busting
-  window.location.href = '/?logout=' + Date.now();
-};
-function showHome() {
-  console.log('🔵 showHome() called');
-  
-  const authOverlay = qs('auth-overlay');
-  const dashboard = qs('dashboard');
-  
-  // Log if elements exist
-  console.log('Elements found:', {
-    authOverlay: !!authOverlay,
-    dashboard: !!dashboard
-  });
-  
-  if (!authOverlay) {
-    console.error('❌ auth-overlay element not found!');
-    return;
-  }
-  
-  if (!dashboard) {
-    console.error('❌ dashboard element not found!');
-    return;
-  }
-  
-  // Log current classes
-  console.log('Current classes:', {
-    authOverlay: authOverlay.className,
-    dashboard: dashboard.className,
-    authHidden: authOverlay.classList.contains('hidden'),
-    dashboardHidden: dashboard.classList.contains('hidden')
-  });
-  
-  // Remove hidden from auth overlay (make it visible)
-  authOverlay.classList.remove('hidden');
-  console.log('✓ Removed hidden from auth overlay');
-  
-  // Add hidden to dashboard (hide it)
-  dashboard.classList.add('hidden');
-  console.log('✓ Added hidden to dashboard');
-  
-  // Log new classes
-  console.log('New classes:', {
-    authOverlay: authOverlay.className,
-    dashboard: dashboard.className,
-    authHidden: authOverlay.classList.contains('hidden'),
-    dashboardHidden: dashboard.classList.contains('hidden')
-  });
-  
-  // Double-check after a tiny delay
-  setTimeout(() => {
-    console.log('Verification (after 100ms):', {
-      authHidden: qs('auth-overlay')?.classList.contains('hidden'),
-      dashboardHidden: qs('dashboard')?.classList.contains('hidden')
-    });
-  }, 100);
-
-// Performance testing function
-window.testQRPerformance = async function() {
-  console.log('🧪 Testing QR Scanner Performance...');
-  const start = performance.now();
-
-  await initQRScanner('login');
-
-  const end = performance.now();
-  console.log(`Scanner initialized in ${(end - start).toFixed(0)}ms`);
-
-  // Monitor detection time
-  window.addEventListener('qr-detected', (e) => {
-    console.log(`✅ QR detected in ${e.detail.time}ms`);
-  });
 };
 
-/* ========= DASHBOARD ========= */
-// enterDashboard defined at top of file - using correct comprehensive version
-
-/* ========= TASKS ========= */
-async function fetchTasks() {
-  return await api('/api/tasks');
-}
-
-async function renderTasks() {
-  const list = qs('taskList');
-  list.innerHTML = '';
-
-  const tasks = await fetchTasks();
-  const user = load(CURRENT_KEY);
-
-  tasks
-    .filter(t => user.role === 'admin' || t.assigned_to === user.id)
-    .forEach(t => {
-      const div = document.createElement('div');
-      div.className = 'task-item';
-      div.innerHTML = `
-        <strong>${t.title}</strong>
-        <p>${t.description || ''}</p>
-        <span class="badge bg-${t.status === 'done' ? 'success' : 'secondary'}">
-          ${t.status || 'pending'}
-        </span>
-      `;
-      list.appendChild(div);
-    });
-
-  qs('totalTasks').innerText = tasks.length;
-}
-
-window.addTask = async function () {
-  const title = qs('taskTitle').value.trim();
-  const description = qs('taskDesc').value.trim();
-  const assigned_to = qs('taskAssign').value;
-
-  if (!title || !assigned_to) return notify('Missing fields');
-
-  const data = await api('/api/tasks', 'POST', {
-    title,
-    description,
-    assigned_to
-  });
-
-  if (!data.ok) return notify(data.error);
-
-  qs('taskTitle').value = '';
-  qs('taskDesc').value = '';
-  qs('taskAssign').value = '';
-
-  renderTasks();
-  notify('✓ Task assigned successfully!');
-};
-
-/* ========= SIMPLE REPORT FUNCTIONS ========= */
-window.downloadSimpleReport = async function() {
-  const user = load(CURRENT_KEY);
-  if (!user || user.role !== 'admin') {
-    notify('❌ Only admins can download reports');
-    return;
-  }
-
-  try {
-    const tasks = await api('/api/tasks') || [];
-    const users = await api('/api/users') || [];
+// ============================================
+// DASHBOARD FUNCTIONS
+// ============================================
+window.enterDashboard = function(user) {
+    console.log('📊 Entering dashboard for:', user.name);
     
-    let csv = 'WFMS Report\n';
-    csv += `Generated,${new Date().toLocaleString()}\n`;
-    csv += `Generated by,${user.name}\n\n`;
-    csv += `Total Employees,${users.length}\n`;
-    csv += `Total Tasks,${tasks.length}\n`;
-    csv += `Completed,${tasks.filter(t => t.status === 'completed').length}\n`;
-    csv += `Pending,${tasks.filter(t => t.status === 'pending').length}\n\n`;
+    const auth = document.getElementById('auth-overlay');
+    const dash = document.getElementById('dashboard');
     
-    csv += 'Employee List\n';
-    csv += 'Name,Email,Role\n';
-    users.forEach(u => {
-      csv += `"${u.name}","${u.email}",${u.role}\n`;
-    });
-
-    const blob = new Blob([csv], { type: 'text/csv' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = `WFMS-Report-${new Date().toISOString().split('T')[0]}.csv`;
-    link.click();
-    URL.revokeObjectURL(url);
+    if (auth) auth.classList.add('hidden');
+    if (dash) dash.classList.remove('hidden');
     
-    notify('✓ Simple report downloaded!');
-  } catch (err) {
-    console.error('Report error:', err);
-    notify('Failed: ' + err.message);
-  }
-};
-/* ========= TEAM MANAGEMENT FUNCTIONS ========= */
-
-// Load teams for admin
-async function loadTeams() {
-  try {
-    const teams = await api('/api/teams', 'GET');
-    const teamsList = qs('teamsList');
-    if (!teamsList) return;
+    const welcome = document.getElementById('welcome');
+    if (welcome) welcome.innerText = `Welcome, ${user.name}`;
     
-    if (!teams || teams.length === 0) {
-      teamsList.innerHTML = '<div class="text-center text-muted">No teams created yet. Create your first team above.</div>';
-      return;
-    }
+    const adminPanel = document.getElementById('admin-panel');
+    const workerPanel = document.getElementById('worker-panel');
     
-    teamsList.innerHTML = '';
-    teams.forEach(team => {
-      const teamCard = document.createElement('div');
-      teamCard.className = 'team-card';
-      teamCard.style.cssText = `
-        background: var(--bg-secondary);
-        border: 1px solid var(--border-color);
-        border-radius: 8px;
-        padding: 15px;
-        margin-bottom: 10px;
-      `;
-      
-      const memberCount = team.members?.length || 0;
-      const leadName = team.team_lead?.name || 'Not assigned';
-      
-      teamCard.innerHTML = `
-        <div style="display: flex; justify-content: space-between; align-items: start;">
-          <div>
-            <h6 style="margin: 0 0 5px 0; font-weight: bold;">${team.name}</h6>
-            <p style="margin: 0 0 10px 0; font-size: 12px; color: var(--text-secondary);">${team.description || 'No description'}</p>
-            <div style="display: flex; gap: 10px; font-size: 12px;">
-              <span><strong>Lead:</strong> ${leadName}</span>
-              <span><strong>Members:</strong> ${memberCount}</span>
-            </div>
-          </div>
-          <div style="display: flex; gap: 8px;">
-            <button class="btn btn-sm btn-outline-primary" onclick="viewTeam('${team._id}')">
-              <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/>
-              </svg>
-              View
-            </button>
-            <button class="btn btn-sm btn-outline-success" onclick="addMembersToTeam('${team._id}')">
-              <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <polyline points="12 5 12 19" /><polyline points="5 12 19 12" />
-              </svg>
-              Add
-            </button>
-          </div>
-        </div>
-      `;
-      teamsList.appendChild(teamCard);
-    });
-  } catch (err) {
-    console.error('Error loading teams:', err);
-  }
-}
-
-// Create new team
-window.createTeam = async function() {
-  const name = qs('teamName')?.value.trim();
-  const description = qs('teamDescription')?.value.trim();
-  const teamLead = qs('teamLead')?.value;
-  const memberSelect = qs('teamMembers');
-  const members = memberSelect ? Array.from(memberSelect.selectedOptions).map(opt => opt.value) : [];
-  
-  if (!name) {
-    notify('Please enter a team name');
-    return;
-  }
-  
-  const data = await api('/api/teams', 'POST', {
-    name,
-    description,
-    team_lead: teamLead || null,
-    members
-  });
-  
-  if (data && data.ok) {
-    notify(`✅ Team "${name}" created successfully! Members have been notified.`);
-    qs('teamName').value = '';
-    qs('teamDescription').value = '';
-    loadTeams();
-    loadTeamDropdowns();
-  } else {
-    notify('Error creating team: ' + (data?.error || 'Unknown error'));
-  }
-};
-
-// Load team dropdowns with employees
-async function loadTeamDropdowns() {
-  const users = await api('/api/users') || [];
-  const employees = users.filter(u => u.role === 'worker' || u.role === 'employee');
-  
-  const teamLeadSelect = qs('teamLead');
-  const teamMembersSelect = qs('teamMembers');
-  
-  if (teamLeadSelect) {
-    teamLeadSelect.innerHTML = '<option value="">Select Team Lead</option>';
-    employees.forEach(emp => {
-      const opt = document.createElement('option');
-      opt.value = emp.id || emp._id;
-      opt.textContent = `${emp.name} (${emp.email})`;
-      teamLeadSelect.appendChild(opt);
-    });
-  }
-  
-  if (teamMembersSelect) {
-    teamMembersSelect.innerHTML = '';
-    employees.forEach(emp => {
-      const opt = document.createElement('option');
-      opt.value = emp.id || emp._id;
-      opt.textContent = `${emp.name} (${emp.email})`;
-      teamMembersSelect.appendChild(opt);
-    });
-  }
-}
-
-// View team details
-window.viewTeam = async function(teamId) {
-  const team = await api(`/api/teams/${teamId}`, 'GET');
-  
-  if (!team) {
-    notify('Team not found');
-    return;
-  }
-  
-  const membersList = team.members?.map(m => `
-    <div style="padding: 8px; border-bottom: 1px solid var(--border-color);">
-      <strong>${m.name}</strong> - ${m.email}
-      <span class="badge ${m.role === 'admin' ? 'bg-danger' : 'bg-primary'}">${m.role}</span>
-    </div>
-  `).join('') || '<div class="text-muted">No members</div>';
-  
-  const modal = document.createElement('div');
-  modal.className = 'qr-modal-overlay';
-  modal.innerHTML = `
-    <div class="qr-modal-container" style="max-width: 500px;">
-      <div class="qr-modal-header">
-        <h2>👥 ${team.name}</h2>
-        <button class="btn-close" onclick="this.closest('.qr-modal-overlay').remove()">×</button>
-      </div>
-      <div class="qr-modal-body">
-        <p><strong>Description:</strong> ${team.description || 'No description'}</p>
-        <p><strong>Team Lead:</strong> ${team.team_lead?.name || 'Not assigned'}</p>
-        <p><strong>Created:</strong> ${new Date(team.created_at).toLocaleDateString()}</p>
-        
-        <h4 style="margin: 20px 0 10px;">Team Members (${team.members?.length || 0})</h4>
-        <div style="max-height: 300px; overflow-y: auto; border: 1px solid var(--border-color); border-radius: 8px; padding: 10px;">
-          ${membersList}
-        </div>
-        
-        <div style="margin-top: 20px; display: flex; gap: 10px;">
-          <button class="btn btn-primary" onclick="assignTeamTask('${team._id}')">Assign Task to Team</button>
-          <button class="btn btn-danger" onclick="deleteTeam('${team._id}')">Delete Team</button>
-        </div>
-      </div>
-    </div>
-  `;
-  document.body.appendChild(modal);
-};
-
-// Add members to existing team
-window.addMembersToTeam = async function(teamId) {
-  const users = await api('/api/users') || [];
-  const employees = users.filter(u => u.role === 'worker' || u.role === 'employee');
-  
-  const modal = document.createElement('div');
-  modal.className = 'qr-modal-overlay';
-  modal.innerHTML = `
-    <div class="qr-modal-container" style="max-width: 400px;">
-      <div class="qr-modal-header">
-        <h2>➕ Add Team Members</h2>
-        <button class="btn-close" onclick="this.closest('.qr-modal-overlay').remove()">×</button>
-      </div>
-      <div class="qr-modal-body">
-        <div class="form-group">
-          <label class="form-label">Select Members</label>
-          <select id="addMembersSelect" class="form-control" multiple size="5">
-            ${employees.map(emp => `<option value="${emp.id || emp._id}">${emp.name} (${emp.email})</option>`).join('')}
-          </select>
-          <small>Hold Ctrl/Cmd to select multiple</small>
-        </div>
-        <button class="btn btn-primary w-100" onclick="submitAddMembers('${teamId}')">Add Selected Members</button>
-      </div>
-    </div>
-  `;
-  document.body.appendChild(modal);
-};
-
-window.submitAddMembers = async function(teamId) {
-  const select = qs('addMembersSelect');
-  const memberIds = select ? Array.from(select.selectedOptions).map(opt => opt.value) : [];
-  
-  if (memberIds.length === 0) {
-    notify('Please select at least one member');
-    return;
-  }
-  
-  const data = await api(`/api/teams/${teamId}/members`, 'POST', { memberIds });
-  
-  if (data && data.ok) {
-    notify(`✅ ${memberIds.length} member(s) added to team!`);
-    closeModal();
-    loadTeams();
-  } else {
-    notify('Error adding members: ' + (data?.error || 'Unknown error'));
-  }
-};
-
-// Assign task to entire team
-window.assignTeamTask = async function(teamId) {
-  const team = await api(`/api/teams/${teamId}`, 'GET');
-  
-  if (!team || !team.members || team.members.length === 0) {
-    notify('This team has no members to assign tasks to');
-    return;
-  }
-  
-  const modal = document.createElement('div');
-  modal.className = 'qr-modal-overlay';
-  modal.innerHTML = `
-    <div class="qr-modal-container" style="max-width: 450px;">
-      <div class="qr-modal-header">
-        <h2>📋 Assign Task to ${team.name}</h2>
-        <button class="btn-close" onclick="this.closest('.qr-modal-overlay').remove()">×</button>
-      </div>
-      <div class="qr-modal-body">
-        <div class="form-group">
-          <label class="form-label">Task Title</label>
-          <input type="text" id="teamTaskTitle" class="form-control" placeholder="Enter task title" />
-        </div>
-        <div class="form-group">
-          <label class="form-label">Description</label>
-          <textarea id="teamTaskDesc" class="form-control" placeholder="Task description" rows="3"></textarea>
-        </div>
-        <div class="form-group">
-          <label class="form-label">Assign to Team Members (${team.members.length})</label>
-          <div style="max-height: 150px; overflow-y: auto; border: 1px solid var(--border-color); border-radius: 4px; padding: 8px;">
-            ${team.members.map(m => `
-              <div style="padding: 4px;">
-                <input type="checkbox" class="team-member-checkbox" value="${m._id}" checked> ${m.name}
-              </div>
-            `).join('')}
-          </div>
-        </div>
-        <button class="btn btn-primary w-100" onclick="submitTeamTask('${teamId}')">Assign to Selected Members</button>
-      </div>
-    </div>
-  `;
-  document.body.appendChild(modal);
-};
-
-window.submitTeamTask = async function(teamId) {
-  const title = qs('teamTaskTitle')?.value.trim();
-  const description = qs('teamTaskDesc')?.value.trim();
-  
-  const checkboxes = document.querySelectorAll('.team-member-checkbox:checked');
-  const memberIds = Array.from(checkboxes).map(cb => cb.value);
-  
-  if (!title) {
-    notify('Please enter a task title');
-    return;
-  }
-  
-  if (memberIds.length === 0) {
-    notify('Please select at least one team member');
-    return;
-  }
-  
-  let successCount = 0;
-  let failCount = 0;
-  
-  for (const memberId of memberIds) {
-    const data = await api('/api/tasks', 'POST', {
-      title: `${title} (Team Task)`,
-      description: description || 'Team assignment',
-      assigned_to: memberId
-    });
-    
-    if (data && data.ok) {
-      successCount++;
+    if (user.role === 'admin') {
+        if (adminPanel) adminPanel.classList.remove('hidden');
+        if (workerPanel) workerPanel.classList.add('hidden');
+        populateTaskFormOptions();
+        loadAdminDashboard();
+        loadEmployees();
+        loadTeams();
+        initializeAdminApprovalPanel();
     } else {
-      failCount++;
-    }
-  }
-  
-  notify(`✅ ${successCount} tasks assigned successfully!\n${failCount > 0 ? `❌ ${failCount} failed` : ''}`);
-  closeModal();
-  renderTasks();
-};
-
-// Delete team
-window.deleteTeam = async function(teamId) {
-  if (!confirm('Are you sure you want to delete this team? Members will be removed.')) return;
-  
-  const data = await api(`/api/teams/${teamId}`, 'DELETE');
-  
-  if (data && data.ok) {
-    notify('Team deleted successfully');
-    closeModal();
-    loadTeams();
-  } else {
-    notify('Error deleting team: ' + (data?.error || 'Unknown error'));
-  }
-};
-
-// Add to admin dashboard load function
-function loadAdminDashboard() {
-  // ... existing code ...
-  
-  // Load teams
-  loadTeams();
-  loadTeamDropdowns();
-}
-/* ========= MAIN REPORT FUNCTION ========= */
-window.downloadReport = async function(format = 'pdf') {
-  try {
-    const user = load(CURRENT_KEY);
-    if (!user || user.role !== 'admin') {
-      notify('❌ Only admins can download reports');
-      return;
-    }
-
-    const reportBtn = document.querySelector('button[onclick="downloadReport()"]');
-    if (!reportBtn) {
-      console.error('Report button not found');
-      return;
-    }
-    
-    const originalText = reportBtn.innerHTML;
-    reportBtn.classList.add('loading');
-    reportBtn.innerHTML = `<svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>Generating ${format.toUpperCase()}...`;
-
-    console.log(`📊 Generating ${format} performance report...`);
-
-    const [tasks, users, performance] = await Promise.all([
-      api('/api/tasks'),
-      api('/api/users'),
-      api('/api/admin/performance-metrics')
-    ]);
-
-    if (format === 'csv') {
-      await downloadCSVReport(tasks, users, performance, user);
-    } else if (format === 'excel') {
-      await downloadExcelReport(tasks, users, performance, user);
-    } else {
-      await downloadPDFReport(tasks, users, performance, user);
-    }
-
-  } catch (err) {
-    console.error('❌ Error generating report:', err);
-    notify('Failed to generate report. Please try again.');
-  } finally {
-    const reportBtn = document.querySelector('button[onclick="downloadReport()"]');
-    if (reportBtn) {
-      reportBtn.classList.remove('loading');
-      reportBtn.innerHTML = '<svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><path d="M12 17v-6"/><path d="M9 14h6"/></svg> Download Report (PDF)';
-    }
-  }
-};
-
-// ... (keep all your existing PDF, CSV, Excel report functions) ...
-// [Your existing PDF, CSV, and Excel functions remain unchanged from your original file]
-
-/* ========= TASK MANAGEMENT ========= */
-window.startTask = async function (taskId, taskTitle) {
-  const confirmed = confirm(`Start working on "${taskTitle}"?`);
-  if (!confirmed) return;
-
-  const user = load(CURRENT_KEY);
-  if (!user) {
-    notify('Please log in first');
-    return;
-  }
-
-  try {
-    console.log('📝 Starting task:', taskId, taskTitle);
-    
-    // Update task status to 'in-progress'
-    const response = await api(`/api/tasks/${taskId}`, 'PUT', {
-      status: 'in-progress'
-    });
-    
-    if (response && response.ok) {
-      notify(`✓ Started working on: ${taskTitle}\n\nWhen you're done, click "Submit Report" to send your work to the admin.`);
-      
-      // Refresh the dashboard
-      if (user.role === 'worker' || user.role === 'employee') {
+        if (adminPanel) adminPanel.classList.add('hidden');
+        if (workerPanel) workerPanel.classList.remove('hidden');
         loadWorkerDashboard(user);
-      } else {
-        renderTasks();
-      }
-      
-      // Open the report modal automatically
-      setTimeout(() => {
-        openTaskReport(taskId, taskTitle);
-      }, 500);
-    } else {
-      notify('Failed to start task: ' + (response?.error || 'Unknown error'));
-    }
-  } catch (err) {
-    console.error('Error starting task:', err);
-    notify('Failed to start task. Please try again.');
-  }
-};
-
-window.openTaskReport = function (taskId, taskTitle) {
-  let modal = qs('taskReportModal');
-  if (!modal) {
-    console.error('Task report modal not found');
-    return;
-  }
-  
-  // Set values
-  const titleInput = qs('reportTaskTitle');
-  const taskIdInput = qs('reportTaskId');
-  const contentInput = qs('reportContent');
-  const statusInput = qs('reportStatus');
-  const hoursInput = qs('reportHours');
-  
-  if (titleInput) titleInput.value = taskTitle || '';
-  if (contentInput) contentInput.value = '';
-  if (statusInput) statusInput.value = 'in-progress';
-  if (hoursInput) hoursInput.value = '';
-  
-  // Create hidden task ID field if it doesn't exist
-  if (!taskIdInput) {
-    const hiddenId = document.createElement('input');
-    hiddenId.type = 'hidden';
-    hiddenId.id = 'reportTaskId';
-    hiddenId.value = taskId;
-    modal.querySelector('.modal-body').appendChild(hiddenId);
-  } else {
-    taskIdInput.value = taskId;
-  }
-  
-  modal.style.display = 'flex';
-};
-
-window.closeTaskReport = function () {
-  const modal = qs('taskReportModal');
-  if (modal) modal.style.display = 'none';
-};
-
-window.submitTaskReport = async function () {
-  // Get the task ID from the modal's data attribute or from the hidden field
-  const taskId = qs('reportTaskId')?.value;
-  const content = qs('reportContent')?.value.trim();
-  const status = qs('reportStatus')?.value;
-  const hours = parseFloat(qs('reportHours')?.value) || 0;
-
-  if (!taskId) {
-    notify('Error: Task ID missing');
-    closeTaskReport();
-    return;
-  }
-
-  if (!content) {
-    notify('Please describe your work completed');
-    return;
-  }
-
-  if (hours <= 0) {
-    notify('Please enter hours spent (minimum 0.5 hours)');
-    return;
-  }
-
-  const user = load(CURRENT_KEY);
-  if (!user) {
-    notify('You must be logged in');
-    return;
-  }
-  
-  try {
-    console.log('📤 Submitting report for task:', taskId);
-    
-    const data = await api(`/api/tasks/${taskId}/submit-report`, 'POST', {
-      daily_report: content,
-      status: status,
-      hours_spent: hours,
-      submitted_by: user.id || user._id
-    });
-
-    if (!data || !data.ok) {
-      notify('Error: ' + (data?.error || 'Submission failed'));
-      return;
-    }
-
-    console.log('✓ Report submitted for approval');
-    notify('✅ Daily report submitted to admin for review!\n\nYou will be notified when the admin responds.');
-    
-    closeTaskReport();
-    
-    // Refresh the dashboard
-    if (user.role === 'worker' || user.role === 'employee') {
-      loadWorkerDashboard(user);
-    } else {
-      renderTasks();
     }
     
-  } catch (err) {
-    console.error('❌ Error submitting report:', err);
-    notify('Failed to submit report. Please try again.');
-  }
+    updateDashboardStats();
+    loadTasks();
+    
+    // Initialize realtime socket and UI
+    try { window.initSocket(); } catch(e) { console.warn('Socket init failed', e); }
+    setTimeout(() => addQRLogoutButton(user), 500);
+};
+
+// Initialize Socket.IO client and notification handlers
+window.initSocket = function() {
+    if (window.socket) return;
+    try {
+        window.socket = io();
+        const currentUser = load(CURRENT_KEY) || null;
+        window.socket.on('connect', () => {
+            if (currentUser && currentUser.id) {
+                window.socket.emit('register-user', currentUser.id);
+            }
+        });
+
+        window.socket.on('notification', (data) => {
+            try {
+                showToast(data.message || 'Notification', 'info');
+                // Refresh views on task events
+                if (data.type === 'task_assigned' || data.type === 'task_created' || data.type === 'task_updated') {
+                    loadTasks();
+                }
+                if (data.type === 'approval_status') {
+                    // Admins should refresh approval panel
+                    const u = load(CURRENT_KEY);
+                    if (u && u.role === 'admin') initializeAdminApprovalPanel();
+                    else loadWorkerPerformance(u);
+                    updateDashboardStats();
+                }
+            } catch (e) { console.error('Notification handler error', e); }
+        });
+
+        window.socket.on('force-logout', () => {
+            showToast('You were logged out by admin', 'error');
+            window.logout();
+        });
+    } catch (err) {
+        console.error('Socket init error:', err);
+    }
+};
+
+// Impersonate a user (admin only)
+window.impersonateUser = async function(userId) {
+    if (!confirm('Impersonate this user? You will act as them until you logout.')) return;
+    try {
+        showLoading();
+        const response = await api('/api/admin/impersonate', 'POST', { userId });
+        if (!response.ok) {
+            showToast(response.error || 'Failed to impersonate', 'error');
+            return;
+        }
+        // Response contains token and user info
+        if (response.token && response.user) {
+            localStorage.setItem(TOKEN_KEY, response.token);
+            if (response.refreshToken) localStorage.setItem(REFRESH_TOKEN_KEY, response.refreshToken);
+            save(CURRENT_KEY, response.user);
+            showToast(`Now impersonating ${response.user.name}`, 'success');
+            // Re-register socket for new user
+            if (window.socket && window.socket.connected) {
+                window.socket.emit('register-user', response.user.id);
+            }
+            setTimeout(() => window.enterDashboard(response.user), 400);
+        }
+    } catch (err) {
+        console.error('Impersonation error:', err);
+        showToast('Impersonation failed', 'error');
+    } finally {
+        hideLoading();
+    }
 };
 
 async function loadAdminDashboard() {
-  const tasks = await api('/api/tasks');
-  const completed = tasks.filter(t => t.status === 'completed').length;
-  const pending = tasks.filter(t => t.status === 'pending').length;
-  const inProgress = tasks.filter(t => t.status === 'in-progress').length;
-  
-  const adminStats = document.querySelector('.admin-stats');
-  if (adminStats) {
-    adminStats.innerHTML = `
-      <div class="stat-box">
-        <div class="stat-label">Total Tasks</div>
-        <div class="stat-number">${tasks.length}</div>
-      </div>
-      <div class="stat-box">
-        <div class="stat-label">In Progress</div>
-        <div class="stat-number" style="color: #fbbf24;">${inProgress}</div>
-      </div>
-      <div class="stat-box">
-        <div class="stat-label">Pending</div>
-        <div class="stat-number" style="color: #ef4444;">${pending}</div>
-      </div>
-      <div class="stat-box">
-        <div class="stat-label">Completed</div>
-        <div class="stat-number" style="color: #10b981;">${completed}</div>
-      </div>
-    `;
-  }
-  
-  initializePerformanceChart();
-}
+    try {
+        // Load tasks for basic stats
+        const tasksResponse = await api('/api/tasks');
+        const tasks = normalizeTasksResponse(tasksResponse);
+        const totalTasks = document.getElementById('totalTasks');
+        if (totalTasks) totalTasks.innerText = tasks?.length || 0;
 
-/* ========= PERFORMANCE CHART ========= */
-let performanceChart = null;
+        // Load performance metrics for chart
+        const perfResponse = await api('/api/admin/performance-metrics');
+        const performanceData = perfResponse || [];
+        
+        const canvas = document.getElementById('performanceChart');
+        if (canvas && typeof Chart !== 'undefined') {
+            const ctx = canvas.getContext('2d');
 
-async function initializePerformanceChart() {
-  try {
-    if (typeof Chart === 'undefined') {
-      console.warn('Chart.js not loaded, performance chart disabled');
-      return;
-    }
+            // enforce fixed canvas size to prevent vertical elongation
+            canvas.style.width = '100%';
+            canvas.style.maxWidth = '1200px';
+            canvas.style.height = '420px';
+            canvas.style.maxHeight = '420px';
 
-    console.log('📊 Initializing performance chart...');
-
-    const chartCanvas = qs('performanceChart');
-    if (!chartCanvas) {
-      console.log('⚠ Performance chart element not found');
-      return;
-    }
-
-    chartCanvas.width = chartCanvas.parentElement.clientWidth || 800;
-    chartCanvas.height = 400;
-
-    const performanceData = await api('/api/admin/performance-metrics', 'GET');
-    console.log('Performance data:', performanceData);
-    
-    if (!Array.isArray(performanceData) || performanceData.length === 0) {
-      console.log('⚠ No performance data available');
-      const ctx = chartCanvas.getContext('2d');
-      ctx.clearRect(0, 0, chartCanvas.width, chartCanvas.height);
-      ctx.font = '16px Arial';
-      ctx.fillStyle = getComputedStyle(document.body).getPropertyValue('--text-dark-muted') || '#94a3b8';
-      ctx.textAlign = 'center';
-      ctx.fillText('No performance data available', chartCanvas.width/2, chartCanvas.height/2);
-      return;
-    }
-
-    if (performanceChart) {
-      performanceChart.destroy();
-    }
-
-    const isDarkTheme = !document.body.classList.contains('light-theme');
-    const textColor = isDarkTheme ? '#e2e8f0' : '#1e293b';
-    const gridColor = isDarkTheme ? 'rgba(255, 255, 255, 0.1)' : 'rgba(0, 0, 0, 0.1)';
-
-    const sortedData = [...performanceData].sort((a, b) => (b.completion_rate || 0) - (a.completion_rate || 0));
-    const ctx = chartCanvas.getContext('2d');
-
-    performanceChart = new Chart(ctx, {
-      type: 'bar',
-      data: {
-        labels: sortedData.map(p => p.name || 'Unknown'),
-        datasets: [
-          {
-            label: 'Completion Rate (%)',
-            data: sortedData.map(p => p.completion_rate || 0),
-            borderColor: '#10b981',
-            backgroundColor: 'rgba(16, 185, 129, 0.7)',
-            borderWidth: 2,
-            borderRadius: 4,
-            yAxisID: 'y'
-          },
-          {
-            label: 'Tasks Completed',
-            data: sortedData.map(p => p.tasks_completed || 0),
-            borderColor: '#3b82f6',
-            backgroundColor: 'rgba(59, 130, 246, 0.7)',
-            borderWidth: 2,
-            borderRadius: 4,
-            yAxisID: 'y1'
-          },
-          {
-            label: 'Hours Worked',
-            data: sortedData.map(p => p.total_hours_worked || 0),
-            borderColor: '#f59e0b',
-            backgroundColor: 'rgba(245, 158, 11, 0.7)',
-            borderWidth: 2,
-            borderRadius: 4,
-            yAxisID: 'y2'
-          }
-        ]
-      },
-      options: {
-        responsive: true,
-        maintainAspectRatio: false,
-        interaction: {
-          mode: 'index',
-          intersect: false,
-        },
-        plugins: {
-          legend: {
-            position: 'top',
-            labels: {
-              color: textColor,
-              font: {
-                size: 12,
-                weight: 'bold'
-              },
-              padding: 15
+            // Destroy existing chart if present to avoid stacking/updating issues
+            if (window.performanceChart && typeof window.performanceChart.destroy === 'function') {
+                try { window.performanceChart.destroy(); } catch (e) { console.warn('Error destroying previous chart', e); }
+                window.performanceChart = null;
             }
-          },
-          title: {
-            display: true,
-            text: 'Employee Performance Metrics',
-            color: textColor,
-            font: {
-              size: 16,
-              weight: 'bold'
-            },
-            padding: {
-              top: 10,
-              bottom: 20
-            }
-          },
-          tooltip: {
-            backgroundColor: isDarkTheme ? '#1e293b' : '#ffffff',
-            titleColor: textColor,
-            bodyColor: isDarkTheme ? '#cbd5e1' : '#475569',
-            borderColor: isDarkTheme ? '#334155' : '#e2e8f0',
-            borderWidth: 1,
-            padding: 10,
-            displayColors: true,
-            callbacks: {
-              label: function(context) {
-                let label = context.dataset.label || '';
-                if (label) {
-                  label += ': ';
+
+            // normalize performance data to an array
+            const perfArray = Array.isArray(performanceData) ? performanceData : (performanceData.performance || performanceData.data || []);
+            const MAX_BARS = 20; // fixed number of bars to display
+            const trimmed = perfArray.slice(0, MAX_BARS);
+
+            window.performanceChart = new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: trimmed.map(emp => emp.name?.substring(0, 15) || 'Unknown'),
+                    datasets: [{
+                        label: 'Tasks Completed',
+                        data: trimmed.map(emp => emp.tasks_completed || 0),
+                        backgroundColor: 'rgba(16, 185, 129, 0.8)',
+                        borderColor: 'rgba(16, 185, 129, 1)',
+                        borderWidth: 2
+                    }, {
+                        label: 'Tasks Assigned', 
+                        data: trimmed.map(emp => emp.tasks_assigned || 0),
+                        backgroundColor: 'rgba(245, 158, 11, 0.6)',
+                        borderColor: 'rgba(245, 158, 11, 1)',
+                        borderWidth: 2
+                    }, {
+                        label: 'Hours Worked',
+                        data: trimmed.map(emp => emp.total_hours_worked || 0),
+                        backgroundColor: 'rgba(59, 130, 246, 0.7)',
+                        borderColor: 'rgba(59, 130, 246, 1)',
+                        borderWidth: 2,
+                        yAxisID: 'y1'
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            title: { display: true, text: 'Task Count' }
+                        },
+                        y1: {
+                            type: 'linear',
+                            display: true,
+                            position: 'right',
+                            title: { display: true, text: 'Hours' },
+                            grid: { drawOnChartArea: false }
+                        }
+                    },
+                    plugins: {
+                        legend: { position: 'top' },
+                        tooltip: {
+                            callbacks: {
+                                label: function(context) {
+                                    const emp = trimmed[context.dataIndex];
+                                    const rate = emp && emp.completion_rate ? ` (${emp.completion_rate}%)` : '';
+                                    return `${context.dataset.label}: ${context.parsed.y}${context.datasetIndex === 2 ? 'h' : ''}${rate}`;
+                                }
+                            }
+                        }
+                    }
                 }
-                if (context.parsed.y !== null) {
-                  if (context.dataset.label.includes('Rate')) {
-                    label += context.parsed.y.toFixed(1) + '%';
-                  } else if (context.dataset.label.includes('Hours')) {
-                    label += context.parsed.y.toFixed(1);
-                  } else {
-                    label += context.parsed.y;
-                  }
-                }
-                return label;
-              }
-            }
-          }
-        },
-        scales: {
-          y: {
-            type: 'linear',
-            display: true,
-            position: 'left',
-            title: {
-              display: true,
-              text: 'Completion Rate (%)',
-              color: '#10b981'
-            },
-            min: 0,
-            max: 100,
-            grid: {
-              color: gridColor,
-              drawBorder: true
-            },
-            ticks: {
-              color: textColor,
-              callback: function(value) {
-                return value + '%';
-              }
-            }
-          },
-          y1: {
-            type: 'linear',
-            display: true,
-            position: 'right',
-            title: {
-              display: true,
-              text: 'Tasks Completed',
-              color: '#3b82f6'
-            },
-            grid: {
-              drawOnChartArea: false,
-              color: gridColor
-            },
-            ticks: {
-              color: textColor
-            }
-          },
-          y2: {
-            type: 'linear',
-            display: true,
-            position: 'right',
-            title: {
-              display: true,
-              text: 'Hours Worked',
-              color: '#f59e0b'
-            },
-            grid: {
-              drawOnChartArea: false,
-              color: gridColor
-            },
-            ticks: {
-              color: textColor
-            }
-          },
-          x: {
-            grid: {
-              color: gridColor,
-              drawBorder: true
-            },
-            ticks: {
-              color: textColor,
-              maxRotation: 45,
-              minRotation: 45,
-              font: {
-                size: 11
-              }
-            }
-          }
-        },
-        backgroundColor: isDarkTheme ? '#1e293b' : '#ffffff'
-      }
-    });
-
-    console.log('✓ Performance chart initialized with', performanceData.length, 'employees');
-  } catch (err) {
-    console.error('Error initializing performance chart:', err);
-  }
-}
-
-function setupChartThemeListener() {
-  const originalToggleTheme = window.toggleTheme;
-  
-  window.toggleTheme = function() {
-    originalToggleTheme();
-    
-    if (performanceChart) {
-      setTimeout(() => {
-        initializePerformanceChart();
-      }, 100);
+            });
+        }
+        
+        // Update basic stats
+        const adminStats = document.querySelector('.admin-stats');
+        if (adminStats && tasks) {
+            const completed = tasks.filter(t => t.status === 'completed').length;
+            const pending = tasks.filter(t => t.status === 'pending').length;
+            const inProgress = tasks.filter(t => t.status === 'in-progress').length;
+            adminStats.innerHTML = `
+                <div class="stat-box"><div class="stat-label">Total Tasks</div><div class="stat-number">${tasks.length}</div></div>
+                <div class="stat-box"><div class="stat-label">In Progress</div><div class="stat-number">${inProgress}</div></div>
+                <div class="stat-box"><div class="stat-label">Pending</div><div class="stat-number">${pending}</div></div>
+                <div class="stat-box"><div class="stat-label">Completed</div><div class="stat-number">${completed}</div></div>
+            `;
+        }
+    } catch (err) {
+        console.error('Error loading admin dashboard:', err);
+        showToast('Dashboard load error: ' + err.message, 'error');
     }
-  };
 }
 
-if (typeof toggleTheme === 'function') {
-  setupChartThemeListener();
-}
 
-/* ========= ATTENDANCE FUNCTIONS ========= */
-async function clockIn() {
-  const user = load(CURRENT_KEY);
-  if (!user || !user.id) {
-    notify('❌ You must be logged in to clock in');
-    return;
-  }
-  
-  try {
-    await api('/api/time', 'POST', {
-      user_id: user.id,
-      action: 'clock_in',
-      time: new Date().toISOString()
-    });
-    logUI('Clock In');
-    notify('✓ Clocked in successfully');
-    
-    // Refresh attendance data if on worker dashboard
-    if (user.role !== 'admin') {
-      loadWorkerAttendance(user);
-      loadWorkerTimeLogs(user);
-    }
-  } catch (err) {
-    console.error('Clock in error:', err);
-    notify('Failed to clock in: ' + err.message);
-  }
-}
-
-window.clockIn = clockIn;
-
-async function breakStart() {
-  const user = load(CURRENT_KEY);
-  if (!user || !user.id) {
-    notify('❌ You must be logged in to start break');
-    return;
-  }
-  
-  try {
-    await api('/api/time', 'POST', {
-      user_id: user.id,
-      action: 'break_start',
-      time: new Date().toISOString()
-    });
-    logUI('Break Start');
-    notify('✓ Break started');
-    
-    // Refresh attendance data if on worker dashboard
-    if (user.role !== 'admin') {
-      loadWorkerAttendance(user);
-      loadWorkerTimeLogs(user);
-    }
-  } catch (err) {
-    console.error('Break start error:', err);
-    notify('Failed to start break: ' + err.message);
-  }
-}
-
-window.breakStart = breakStart;
-
-async function breakEnd() {
-  const user = load(CURRENT_KEY);
-  if (!user || !user.id) {
-    notify('❌ You must be logged in to end break');
-    return;
-  }
-  
-  try {
-    await api('/api/time', 'POST', {
-      user_id: user.id,
-      action: 'break_end',
-      time: new Date().toISOString()
-    });
-    logUI('Break End');
-    notify('✓ Break ended');
-    
-    // Refresh attendance data if on worker dashboard
-    if (user.role !== 'admin') {
-      loadWorkerAttendance(user);
-      loadWorkerTimeLogs(user);
-    }
-  } catch (err) {
-    console.error('Break end error:', err);
-    notify('Failed to end break: ' + err.message);
-  }
-}
-
-window.breakEnd = breakEnd;
-
-async function clockOut() {
-  const user = load(CURRENT_KEY);
-  if (!user || !user.id) {
-    notify('❌ You must be logged in to clock out');
-    return;
-  }
-  
-  try {
-    await api('/api/time', 'POST', {
-      user_id: user.id,
-      action: 'clock_out',
-      time: new Date().toISOString()
-    });
-    logUI('Clock Out');
-    notify('✓ Clocked out successfully');
-    
-    // Refresh attendance data if on worker dashboard
-    if (user.role !== 'admin') {
-      loadWorkerAttendance(user);
-      loadWorkerTimeLogs(user);
-    }
-  } catch (err) {
-    console.error('Clock out error:', err);
-    notify('Failed to clock out: ' + err.message);
-  }
-}
-
-window.clockOut = clockOut;
-
-/* ========= WORKER PERFORMANCE ========= */
-async function loadWorkerPerformance(user) {
-  try {
-    const userId = user.id || user._id;
-    
-    // Fetch performance data from API
-    const response = await api('/api/employee/performance/' + userId);
-    
-    if (response && response.ok) {
-      const perf = response.performance;
-      
-      // Update worker stats display
-      const workerStats = document.querySelector('.worker-stats');
-      if (workerStats) {
-        workerStats.innerHTML = `
-          <div class="stat-box">
-            <div class="stat-label">Tasks Assigned</div>
-            <div class="stat-number">${perf.tasks_assigned || 0}</div>
-          </div>
-          <div class="stat-box">
-            <div class="stat-label">Completed</div>
-            <div class="stat-number" style="color: #10b981;">${perf.tasks_completed || 0}</div>
-          </div>
-          <div class="stat-box">
-            <div class="stat-label">In Progress</div>
-            <div class="stat-number" style="color: #fbbf24;">${perf.tasks_in_progress || 0}</div>
-          </div>
-          <div class="stat-box">
-            <div class="stat-label">Pending Approval</div>
-            <div class="stat-number" style="color: #3b82f6;">${perf.tasks_pending || 0}</div>
-          </div>
-          <div class="stat-box">
-            <div class="stat-label">Hours Worked</div>
-            <div class="stat-number">${perf.total_hours_worked || 0}</div>
-          </div>
-          <div class="stat-box">
-            <div class="stat-label">Completion Rate</div>
-            <div class="stat-number" style="color: #10b981;">${perf.completion_rate || 0}%</div>
-          </div>
-        `;
-      }
-      
-      // Update individual stat elements
-      const completedEl = qs('workerCompletedTasks');
-      if (completedEl) completedEl.innerText = perf.tasks_completed || 0;
-      
-      const inProgressEl = qs('workerInProgressTasks');
-      if (inProgressEl) inProgressEl.innerText = perf.tasks_in_progress || 0;
-      
-      const pendingEl = qs('workerPendingTasks');
-      if (pendingEl) pendingEl.innerText = (perf.tasks_pending || 0);
-      
-      const assignedEl = qs('workerTasksAssigned');
-      if (assignedEl) assignedEl.innerText = perf.tasks_assigned || 0;
-      
-      const hoursEl = qs('workerHoursWorked');
-      if (hoursEl) hoursEl.innerText = perf.total_hours_worked || 0;
-      
-      const rateEl = qs('workerAttendanceRate');
-      if (rateEl) rateEl.innerText = (perf.completion_rate || 0) + '%';
-      
-    } else {
-      console.log('No performance data available yet');
-      showDefaultWorkerStats();
-    }
-  } catch (err) {
-    console.error('Error loading worker performance:', err);
-    showDefaultWorkerStats();
-  }
-}
-
-function showDefaultWorkerStats() {
-  const workerStats = document.querySelector('.worker-stats');
-  if (workerStats) {
-    workerStats.innerHTML = `
-      <div class="stat-box">
-        <div class="stat-label">Tasks Assigned</div>
-        <div class="stat-number">0</div>
-      </div>
-      <div class="stat-box">
-        <div class="stat-label">Completed</div>
-        <div class="stat-number" style="color: #10b981;">0</div>
-      </div>
-      <div class="stat-box">
-        <div class="stat-label">In Progress</div>
-        <div class="stat-number" style="color: #fbbf24;">0</div>
-      </div>
-      <div class="stat-box">
-        <div class="stat-label">Pending Approval</div>
-        <div class="stat-number" style="color: #3b82f6;">0</div>
-      </div>
-      <div class="stat-box">
-        <div class="stat-label">Hours Worked</div>
-        <div class="stat-number">0</div>
-      </div>
-      <div class="stat-box">
-        <div class="stat-label">Completion Rate</div>
-        <div class="stat-number" style="color: #10b981;">0%</div>
-      </div>
-    `;
-  }
-}
-
-/* ========= WORKER ATTENDANCE ========= */
-async function loadWorkerAttendance(user) {
-  try {
-    // Get today's date range
-    const today = new Date();
-    const startOfMonth = new Date(today.getFullYear(), today.getMonth(), 1);
-    const endOfMonth = new Date(today.getFullYear(), today.getMonth() + 1, 0);
-    
-    // Fetch attendance records for this month
-    const attendance = await api('/api/attendance/' + user.id) || [];
-    
-    // Filter for this month
-    const monthlyAttendance = attendance.filter(a => {
-      const date = new Date(a.timestamp);
-      return date >= startOfMonth && date <= endOfMonth;
-    });
-    
-    // Calculate stats
-    const clockIns = monthlyAttendance.filter(a => a.action === 'clock_in').length;
-    const breaks = monthlyAttendance.filter(a => a.action === 'break_start' || a.action === 'break_end').length / 2;
-    
-    // Calculate total hours worked
-    let totalMinutes = 0;
-    let currentClockIn = null;
-    
-    // Sort by timestamp
-    const sorted = [...monthlyAttendance].sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
-    
-    sorted.forEach(record => {
-      if (record.action === 'clock_in') {
-        currentClockIn = new Date(record.timestamp);
-      } else if (record.action === 'clock_out' && currentClockIn) {
-        const clockOut = new Date(record.timestamp);
-        const minutes = (clockOut - currentClockIn) / (1000 * 60);
-        totalMinutes += minutes;
-        currentClockIn = null;
-      }
-    });
-    
-    const totalHours = (totalMinutes / 60).toFixed(1);
-    
-    // Display attendance summary
-    const attendanceEl = qs('myAttendance');
-    if (attendanceEl) {
-      attendanceEl.innerHTML = `
-        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
-          <div style="background: var(--bg-secondary); padding: 10px; border-radius: 6px; text-align: center;">
-            <div style="font-size: 12px; color: var(--text-secondary);">Days Present</div>
-            <div style="font-size: 20px; font-weight: bold; color: var(--text-primary);">${clockIns}</div>
-          </div>
-          <div style="background: var(--bg-secondary); padding: 10px; border-radius: 6px; text-align: center;">
-            <div style="font-size: 12px; color: var(--text-secondary);">Hours Worked</div>
-            <div style="font-size: 20px; font-weight: bold; color: var(--text-primary);">${totalHours}</div>
-          </div>
-        </div>
-        <div style="margin-top: 10px; font-size: 12px; color: var(--text-secondary); text-align: center;">
-          This month: ${clockIns} days, ${breaks} breaks
-        </div>
-      `;
-    }
-  } catch (err) {
-    console.error('Error loading attendance:', err);
-  }
-}
-
-/* ========= WORKER TIME LOGS ========= */
-async function loadWorkerTimeLogs(user) {
-  try {
-    const logs = await api('/api/time/' + user.id) || [];
-    
-    // Get last 10 logs
-    const recentLogs = logs.slice(0, 10);
-    
-    const timeLogsEl = qs('myTimeLogs');
-    if (timeLogsEl) {
-      if (recentLogs.length === 0) {
-        timeLogsEl.innerHTML = '<div style="text-align: center; color: var(--text-secondary); padding: 20px;">No time logs yet</div>';
-      } else {
-        timeLogsEl.innerHTML = '';
-        recentLogs.forEach(log => {
-          const date = new Date(log.time || log.timestamp);
-          const timeStr = date.toLocaleTimeString();
-          const dateStr = date.toLocaleDateString();
-          
-          let actionIcon = '⏱️';
-          if (log.action === 'clock_in') actionIcon = '✅';
-          else if (log.action === 'clock_out') actionIcon = '👋';
-          else if (log.action === 'break_start') actionIcon = '☕';
-          else if (log.action === 'break_end') actionIcon = '🔄';
-          
-          const logEl = document.createElement('div');
-          logEl.className = 'time-log-item';
-          logEl.style.cssText = `
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            padding: 8px;
-            background: var(--bg-secondary);
-            border-radius: 4px;
-            margin-bottom: 5px;
-          `;
-          logEl.innerHTML = `
-            <div>
-              <span style="margin-right: 8px;">${actionIcon}</span>
-              <span style="font-weight: 500;">${log.action.replace('_', ' ').toUpperCase()}</span>
-            </div>
-            <div style="font-size: 12px; color: var(--text-secondary);">
-              ${dateStr} ${timeStr}
-            </div>
-          `;
-          timeLogsEl.appendChild(logEl);
-        });
-      }
-    }
-  } catch (err) {
-    console.error('Error loading time logs:', err);
-  }
-}
-
-/* ========= WORKER DASHBOARD ========= */
-/* ========= WORKER DASHBOARD - COMPLETE FIX ========= */
 async function loadWorkerDashboard(user) {
-  try {
-    console.log('📋 Loading worker dashboard for:', user.name, 'ID:', user.id);
-    
-    // IMPORTANT FIX: Get user ID consistently
-    const userId = user.id || user._id;
-    if (!userId) {
-      console.error('❌ No user ID found');
-      return;
-    }
-    
-    // Fetch tasks assigned to THIS SPECIFIC worker only
-    const allTasks = await api('/api/tasks') || [];
-    console.log(`📊 Total tasks in system: ${allTasks.length}`);
-    
-    // CRITICAL FIX: Filter tasks assigned to this specific user
-    const myTasks = allTasks.filter(task => {
-      // Check all possible ID formats
-      const assignedId = task.assigned_to?._id || task.assigned_to || task.assigned_to_id;
-      const assignedIdStr = assignedId ? assignedId.toString() : '';
-      const userIdStr = userId.toString();
-      
-      const isAssigned = assignedIdStr === userIdStr;
-      if (isAssigned) console.log(`✓ Task "${task.title}" assigned to this user`);
-      return isAssigned;
-    });
-    
-    console.log(`📋 Found ${myTasks.length} tasks assigned to ${user.name}`);
-    
-    const myTaskList = qs('myTaskList');
-    if (!myTaskList) {
-      console.error('❌ myTaskList element not found');
-      return;
-    }
-    
-    myTaskList.innerHTML = '';
-
-    if (!myTasks || myTasks.length === 0) {
-      myTaskList.innerHTML = '<div class="no-tasks-message">📭 No tasks assigned to you yet. Check back later!</div>';
-      const noTasksMsg = qs('noTasksMsg');
-      if (noTasksMsg) noTasksMsg.style.display = 'block';
-    } else {
-      const noTasksMsg = qs('noTasksMsg');
-      if (noTasksMsg) noTasksMsg.style.display = 'none';
-      
-      myTasks.forEach(t => {
-        const taskEl = document.createElement('div');
-        taskEl.className = `task-item status-${t.status || 'pending'}`;
+    console.log('Loading worker dashboard for:', user.name);
+    try {
+        const tasksResponse = await api('/api/tasks');
+        const tasks = normalizeTasksResponse(tasksResponse);
+        const myTasks = tasks.filter(t => {
+            const assignedId = t.assigned_to?._id || t.assigned_to;
+            return String(assignedId) === String(user.id);
+        });
         
-        // Calculate status badge color
-        let statusBadge = '';
-        if (t.status === 'completed' || t.approval_status === 'approved') {
-          statusBadge = '<span class="badge bg-success">✓ Completed</span>';
-        } else if (t.status === 'in-progress') {
-          statusBadge = '<span class="badge bg-primary">🔄 In Progress</span>';
-        } else if (t.status === 'pending' && !t.submitted_by) {
-          statusBadge = '<span class="badge bg-warning">⏳ Pending</span>';
-        } else if (t.status === 'pending' && t.submitted_by) {
-          statusBadge = '<span class="badge bg-info">⏳ Awaiting Approval</span>';
-        } else if (t.approval_status === 'rejected') {
-          statusBadge = '<span class="badge bg-danger">✗ Rejected</span>';
-        } else {
-          statusBadge = '<span class="badge bg-secondary">📋 ' + (t.status || 'pending') + '</span>';
+        const myTaskList = document.getElementById('myTaskList');
+        if (myTaskList) {
+            if (myTasks.length === 0) {
+                myTaskList.innerHTML = '<div class="text-center text-muted">📭 No tasks assigned to you yet</div>';
+            } else {
+                myTaskList.innerHTML = myTasks.map(task => `
+                    <div class="task-item" style="margin-bottom: 15px; padding: 15px; border: 1px solid var(--border-color); border-radius: 8px;">
+                        <div style="display: flex; justify-content: space-between; align-items: flex-start;">
+                            <div>
+                                <strong style="font-size: 16px;">📌 ${sanitizeHTML(task.title)}</strong>
+                                <p style="margin: 8px 0; color: var(--text-secondary);">${sanitizeHTML(task.description || 'No description')}</p>
+                                <span class="badge ${task.status === 'completed' ? 'bg-success' : 'bg-warning'}">${task.status || 'pending'}</span>
+                            </div>
+                            ${task.status === 'pending' ? `<button class="btn btn-sm btn-primary" onclick="startTask('${task._id}', '${task.title.replace(/'/g, "\\'")}')">▶️ Start Task</button>` : ''}
+                            ${task.status === 'in-progress' ? `<button class="btn btn-sm btn-success" onclick="openTaskReport('${task._id}', '${task.title.replace(/'/g, "\\'")}')">📝 Submit Report</button>` : ''}
+                        </div>
+                    </div>
+                `).join('');
+            }
         }
         
-        // Determine which buttons to show
-        let actionButtons = '';
-        const taskId = t._id || t.id;
+        await loadWorkerPerformance(user);
+        await loadWorkerAttendance(user);
+        await loadWorkerTimeLogs(user);
         
-        if (t.status === 'pending' && !t.submitted_by) {
-          actionButtons = `<button class="btn btn-sm btn-primary" onclick="startTask('${taskId}', '${t.title.replace(/'/g, "\\'")}')">
-            <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="5 3 19 12 5 21 5 3"/></svg>
-            Start Task
-          </button>`;
-        } else if (t.status === 'in-progress') {
-          actionButtons = `<button class="btn btn-sm btn-success" onclick="openTaskReport('${taskId}', '${t.title.replace(/'/g, "\\'")}')">
-            <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-            Submit Report
-          </button>`;
-        } else if (t.approval_status === 'rejected') {
-          actionButtons = `<button class="btn btn-sm btn-warning" onclick="openTaskReport('${taskId}', '${t.title.replace(/'/g, "\\'")}')">
-            <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
-            Resubmit
-          </button>`;
-        } else if (t.status === 'completed' || t.approval_status === 'approved') {
-          actionButtons = `<span class="badge bg-success">✓ Approved</span>`;
+    } catch (err) {
+        console.error('Error loading worker dashboard:', err);
+    }
+}
+
+async function loadWorkerPerformance(user) {
+    try {
+        const response = await api(`/api/employee/performance/${user.id}`);
+        if (response.ok && response.performance) {
+            const perf = response.performance;
+            const elements = {
+                workerTasksAssigned: perf.tasks_assigned || 0,
+                workerCompletedTasks: perf.tasks_completed || 0,
+                workerInProgressTasks: perf.tasks_in_progress || 0,
+                workerPendingTasks: perf.tasks_pending || 0,
+                workerHoursWorked: perf.total_hours_worked || 0,
+                workerAttendanceRate: `${perf.completion_rate || 0}%`
+            };
+            for (const [id, value] of Object.entries(elements)) {
+                const el = document.getElementById(id);
+                if (el) el.innerText = value;
+            }
+        }
+    } catch (err) {
+        console.error('Error loading performance:', err);
+    }
+}
+
+async function loadWorkerAttendance(user) {
+    try {
+        const response = await api(`/api/attendance/${user.id}`);
+        const records = response.records || response || [];
+        if (!Array.isArray(records)) return;
+        
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+        const todayRecords = records.filter(r => new Date(r.timestamp) >= today);
+        const clockedIn = todayRecords.some(r => r.action === 'clock_in');
+        const onBreak = todayRecords.some(r => r.action === 'break_start') && !todayRecords.some(r => r.action === 'break_end');
+        
+        const attendanceDiv = document.getElementById('myAttendance');
+        if (attendanceDiv) {
+            attendanceDiv.innerHTML = `
+                <div style="display: flex; gap: 10px;">
+                    <div class="badge ${clockedIn ? 'bg-success' : 'bg-secondary'}">${clockedIn ? '✅ Clocked In' : '⏰ Not Clocked In'}</div>
+                    <div class="badge ${onBreak ? 'bg-warning' : 'bg-secondary'}">${onBreak ? '☕ On Break' : '🔄 Not on Break'}</div>
+                </div>
+            `;
+        }
+    } catch (err) {
+        console.error('Error loading attendance:', err);
+    }
+}
+
+
+
+
+    // 18. loadWorkerTimeLogs - Load time logs
+    async function loadWorkerTimeLogs(user) {
+        try {
+            const logs = await api(`/api/time/${user.id}`);
+            const timeLogsDiv = document.getElementById('myTimeLogs');
+            if (timeLogsDiv && Array.isArray(logs) && logs.length > 0) {
+                timeLogsDiv.innerHTML = logs.slice(0, 5).map(log => `
+                    <div style="padding: 5px; border-bottom: 1px solid var(--border-color);">
+                        ${log.action}: ${new Date(log.time || log.timestamp).toLocaleTimeString()}
+                    </div>
+                `).join('');
+            } else if (timeLogsDiv) {
+                timeLogsDiv.innerHTML = '<div class="text-center text-muted">No time logs yet</div>';
+            }
+        } catch (err) {
+            console.error('Error loading time logs:', err);
+        }
+    }
+
+async function updateDashboardStats() {
+    try {
+        const tasksResponse = await api('/api/tasks');
+        const usersResponse = await api('/api/users');
+        const tasks = normalizeTasksResponse(tasksResponse);
+        const users = usersResponse?.users || [];
+        const totalTasks = document.getElementById('totalTasks');
+        const totalEmployees = document.getElementById('totalEmployees');
+        if (totalTasks) totalTasks.innerText = tasks?.length || 0;
+        if (totalEmployees) totalEmployees.innerText = users?.length || 0;
+    } catch (err) {
+        console.error('Error updating stats:', err);
+    }
+}
+
+async function loadTasks() {
+    const taskList = document.getElementById('taskList');
+    if (!taskList) return;
+    
+    try {
+        const tasksResponse = await api('/api/tasks');
+        const tasks = normalizeTasksResponse(tasksResponse);
+        const user = load(CURRENT_KEY);
+        
+        const filteredTasks = user?.role === 'admin' ? tasks : tasks.filter(t => {
+            const assignedId = t.assigned_to?._id || t.assigned_to;
+            return String(assignedId) === String(user?.id);
+        });
+        
+        if (!filteredTasks || filteredTasks.length === 0) {
+            taskList.innerHTML = '<div class="text-center text-muted">No tasks found</div>';
+            return;
         }
         
-        taskEl.innerHTML = `
-          <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px;">
-            <div style="flex: 1;">
-              <div class="task-title" style="font-weight: bold; font-size: 16px; margin-bottom: 5px;">${t.title}</div>
-              <div class="task-description" style="font-size: 13px; color: var(--text-secondary); margin-bottom: 8px;">${t.description || 'No description'}</div>
-              <div style="display: flex; gap: 10px; align-items: center; flex-wrap: wrap;">
-                ${statusBadge}
-                ${t.hours_spent ? '<span class="badge bg-secondary">⏱️ ' + t.hours_spent + ' hrs</span>' : ''}
-                ${t.admin_feedback ? '<span class="badge bg-info">📝 Feedback: ' + t.admin_feedback + '</span>' : ''}
-              </div>
+        taskList.innerHTML = filteredTasks.map(task => `
+            <div class="task-item">
+                <strong>${sanitizeHTML(task.title)}</strong>
+                <p>${sanitizeHTML(task.description || 'No description')}</p>
+                <span class="badge ${task.status === 'completed' ? 'bg-success' : 'bg-warning'}">${task.status || 'pending'}</span>
             </div>
-            <div style="display: flex; gap: 8px; align-items: center;">
-              ${actionButtons}
-            </div>
-          </div>
-        `;
-        myTaskList.appendChild(taskEl);
-      });
+        `).join('');
+    } catch (err) {
+        console.error('Error loading tasks:', err);
     }
-
-    // Fetch worker performance metrics
-    await loadWorkerPerformance(user);
-    
-    // Fetch worker attendance logs
-    await loadWorkerAttendance(user);
-    
-    // Fetch worker time logs
-    await loadWorkerTimeLogs(user);
-
-    // Additional attendance summary widget
-    await loadWorkerAttendanceSummary(user);
-
-    logUI('✓ Worker Dashboard loaded: ' + myTasks.length + ' tasks');
-  } catch (err) {
-    console.error('❌ Error loading worker dashboard:', err);
-    logUI('❌ Failed to load worker dashboard');
-  }
 }
 
-async function loadWorkerAttendanceSummary(user) {
-  try {
-    const today = new Date();
-    const startOfWeek = new Date(today);
-    startOfWeek.setDate(today.getDate() - today.getDay());
+async function loadEmployees() {
+    try {
+        const response = await api('/api/users');
+        if (!response.ok) {
+            throw new Error(response.error || 'Failed to load users');
+        }
 
-    const response = await api('/api/attendance/' + user.id);
-    
-    // Handle both response formats
-    const records = response.records || response || [];
-    
-    // Check if we have valid records
-    if (!Array.isArray(records) || records.length === 0) {
-      console.log('No attendance records found for summary');
-      const summaryEl = document.getElementById('attendanceSummary');
-      if (summaryEl) {
-        summaryEl.innerHTML = '<div class="text-center text-muted">No attendance records yet</div>';
-      }
-      return;
+        const users = response.users || [];
+        
+        const select = document.getElementById('taskAssign');
+        const list = document.getElementById('employeeList');
+        
+        if (select) {
+            select.innerHTML = '<option value="">Select Employee</option>';
+        }
+        if (list) list.innerHTML = '';
+        
+        let workerCount = 0;
+        const currentUser = load(CURRENT_KEY) || {};
+        users.forEach(u => {
+            if (u.role !== 'admin') {
+                workerCount++;
+                if (select) {
+                    const opt = document.createElement('option');
+                    opt.value = u.id || u._id;
+                    opt.textContent = u.name || u.email;
+                    select.appendChild(opt);
+                }
+                if (list) {
+                    const div = document.createElement('div');
+                    div.className = 'employee-card';
+                    let actionsHtml = '';
+                    // If current user is admin, show impersonate button
+                    if (currentUser.role === 'admin') {
+                        actionsHtml = `<div style="margin-top:8px;"><button class="btn btn-sm btn-outline" onclick="impersonateUser('${u._id || u.id}')">Impersonate</button></div>`;
+                    }
+                    div.innerHTML = `
+                        <div class="employee-avatar">${(u.name || '?').charAt(0).toUpperCase()}</div>
+                        <div>${u.name || 'Unknown'}</div>
+                        <small>${u.email || ''}</small>
+                        ${actionsHtml}
+                    `;
+                    list.appendChild(div);
+                }
+            }
+        });
+        
+        const totalEmployees = document.getElementById('totalEmployees');
+        if (totalEmployees) totalEmployees.innerText = workerCount;
+    } catch (err) {
+        console.error('Error loading employees:', err);
     }
-
-    // Filter for this week
-    const weeklyRecords = records.filter(r => new Date(r.timestamp) >= startOfWeek);
-    
-    if (weeklyRecords.length === 0) {
-      const summaryEl = document.getElementById('attendanceSummary');
-      if (summaryEl) {
-        summaryEl.innerHTML = '<div class="text-center text-muted">No attendance this week</div>';
-      }
-      return;
-    }
-
-    // Count days present (unique days with clock_in)
-    const daysPresent = new Set(
-      weeklyRecords
-        .filter(r => r.action === 'clock_in')
-        .map(r => new Date(r.timestamp).toDateString())
-    ).size;
-
-    // Calculate total hours worked
-    let totalMinutes = 0;
-    let clockInTime = null;
-
-    // Sort by timestamp
-    weeklyRecords.sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
-
-    weeklyRecords.forEach(record => {
-      if (record.action === 'clock_in') {
-        clockInTime = new Date(record.timestamp);
-      } else if (record.action === 'clock_out' && clockInTime) {
-        const minutes = (new Date(record.timestamp) - clockInTime) / (1000 * 60);
-        totalMinutes += minutes;
-        clockInTime = null;
-      }
-    });
-
-    const hoursWorked = (totalMinutes / 60).toFixed(1);
-    const summaryEl = document.getElementById('attendanceSummary');
-
-    if (summaryEl) {
-      summaryEl.innerHTML = `
-        <div class="stats-grid">
-          <div class="stat-card">
-            <div class="stat-icon">📅</div>
-            <div class="stat-content">
-              <div class="stat-label">Days Present (This Week)</div>
-              <div class="stat-value">${daysPresent}</div>
-            </div>
-          </div>
-          <div class="stat-card">
-            <div class="stat-icon">⏱️</div>
-            <div class="stat-content">
-              <div class="stat-label">Hours Worked (This Week)</div>
-              <div class="stat-value">${hoursWorked}</div>
-            </div>
-          </div>
-        </div>
-      `;
-    }
-  } catch (err) {
-    console.error('Error loading attendance summary:', err);
-    const summaryEl = document.getElementById('attendanceSummary');
-    if (summaryEl) {
-      summaryEl.innerHTML = '<div class="text-center text-muted">Error loading attendance data</div>';
-    }
-  }
 }
 
-/* ========= LOGS ========= */
-function logUI(msg) {
-  const log = qs('log');
-  const p = document.createElement('p');
-  p.textContent = `[${new Date().toLocaleTimeString()}] ${msg}`;
-  if (log) log.prepend(p);
-  qs('totalLogs').innerText = log ? log.children.length : 0;
+async function loadTeams() {
+    try {
+        const teams = await api('/api/teams');
+        const teamsList = document.getElementById('teamsList');
+        if (!teamsList) return;
+        
+        if (!teams || teams.length === 0) {
+            teamsList.innerHTML = '<div class="text-center text-muted">No teams created yet</div>';
+            return;
+        }
+        
+        teamsList.innerHTML = teams.map(team => `
+            <div class="team-card">
+                <strong>${team.name}</strong>
+                <p>${team.description || ''}</p>
+                <small>Lead: ${team.team_lead?.name || 'Not assigned'}</small>
+                <small>Members: ${team.members?.length || 0}</small>
+            </div>
+        `).join('');
+    } catch (err) {
+        console.error('Error loading teams:', err);
+    }
 }
 
-/* ========= AUTH UI VALIDATION =========*/
-(function setupFormValidation() {
-  const regEmailField = document.getElementById('regEmail');
-  const regPasswordField = document.getElementById('regPassword');
-  const regUsernameField = document.getElementById('regUsername');
-
-  const setError = (field, message) => {
-    if (!field) return;
-    field.classList.add('error');
-    let err = field.nextElementSibling;
-    if (!err || !err.classList.contains('field-error')) {
-      err = document.createElement('div');
-      err.className = 'field-error';
-      err.style.color = '#ef4444';
-      err.style.fontSize = '12px';
-      field.parentNode.insertBefore(err, field.nextSibling);
-    }
-    err.innerText = message;
-    showToast(message, 'error');
-  };
-
-  const clearError = (field) => {
-    if (!field) return;
-    field.classList.remove('error');
-    const err = field.nextElementSibling;
-    if (err && err.classList.contains('field-error')) {
-      err.remove();
-    }
-  };
-
-  if (regEmailField) {
-    regEmailField.addEventListener('input', (e) => {
-      const email = e.target.value;
-      const isValid = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
-      if (!isValid && email.length > 0) {
-        setError(e.target, 'Invalid email format');
-      } else {
-        clearError(e.target);
-      }
-    });
-  }
-
-  if (regPasswordField) {
-    regPasswordField.addEventListener('input', (e) => {
-      const password = e.target.value;
-      if (password.length < 8 && password.length > 0) {
-        setError(e.target, 'Password must be at least 8 characters');
-      } else {
-        clearError(e.target);
-      }
-    });
-  }
-
-  if (regUsernameField) {
-    regUsernameField.addEventListener('input', (e) => {
-      const name = e.target.value;
-      if (name.length < 2 && name.length > 0) {
-        setError(e.target, 'Name must be at least 2 characters');
-      } else {
-        clearError(e.target);
-      }
-    });
-  }
-})();
-
-window.backToLogin = backToLogin;
-
-/* ========= ADMIN APPROVAL PANEL ========= */
 async function initializeAdminApprovalPanel() {
-  try {
-    const data = await api('/api/admin/pending-approvals', 'GET');
-    if (!Array.isArray(data)) return;
-
-    const approvalPanel = document.querySelector('[data-approval-panel]') || createApprovalPanel();
-    approvalPanel.innerHTML = '';
-
-    if (data.length === 0) {
-      approvalPanel.innerHTML = '<div class="alert alert-info" style="margin: 0;">✓ No pending tasks - All task reports have been reviewed!</div>';
-      return;
+    try {
+        const tasks = await api('/api/admin/pending-approvals');
+        const approvalPanel = document.querySelector('[data-approval-panel]') || createApprovalPanel();
+        if (!approvalPanel) return;
+        
+        if (!tasks || tasks.length === 0) {
+            approvalPanel.innerHTML = '<div class="text-center text-muted">✓ No pending approvals</div>';
+            return;
+        }
+        
+        approvalPanel.innerHTML = `
+            <h6 style="margin-bottom: 15px;">📋 Pending Approvals (${tasks.length})</h6>
+            ${tasks.map(task => `
+                <div class="approval-item" style="background: var(--bg-secondary); padding: 15px; border-radius: 8px; margin-bottom: 10px;">
+                    <div style="display: flex; justify-content: space-between; align-items: start;">
+                        <div>
+                            <strong>${task.title}</strong>
+                            <p style="margin: 5px 0;">Submitted by: ${task.submitted_by_name}</p>
+                            <p style="margin: 5px 0;">Hours: ${task.hours_spent || 0}</p>
+                        </div>
+                        <div style="display: flex; gap: 8px;">
+                            <button class="btn btn-sm btn-success" onclick="approveTask('${task._id}')">Approve</button>
+                            <button class="btn btn-sm btn-danger" onclick="rejectTask('${task._id}')">Reject</button>
+                        </div>
+                    </div>
+                </div>
+            `).join('')}
+        `;
+    } catch (err) {
+        console.error('Error loading approval panel:', err);
     }
-
-    const header = document.createElement('div');
-    header.className = 'alert alert-warning';
-    header.style.cssText = 'margin-bottom: 1rem; margin-top: 0';
-    header.innerHTML = `📋 <strong>${data.length} pending task report(s) awaiting your review</strong>`;
-    approvalPanel.appendChild(header);
-
-    data.forEach((task, index) => {
-      const item = document.createElement('div');
-      item.className = 'approval-item card';
-      item.style.cssText = 'margin-bottom: 1rem; border-left: 4px solid #3b82f6';
-      
-      const submittedDate = new Date(task.submitted_at).toLocaleString();
-      
-      item.innerHTML = `
-        <div class="card-body">
-          <div style="display: flex; justify-content: space-between; align-items: start; margin-bottom: 0.5rem;">
-            <h6 class="card-title" style="margin: 0;">📝 ${task.title}</h6>
-            <span style="background-color: #3b82f6; color: white; padding: 0.25rem 0.5rem; border-radius: 4px; font-size: 0.75rem; font-weight: bold;">
-              ${index + 1} of ${data.length}
-            </span>
-          </div>
-          <p class="text-muted" style="font-size: 0.875rem; margin: 0.5rem 0;"><small>👤 Submitted by: <strong>${task.submitted_by_name}</strong> on ${submittedDate}</small></p>
-          <div style="background-color: #f3f4f6; padding: 0.75rem; border-radius: 4px; margin: 0.75rem 0;">
-            <p class="card-text" style="margin: 0; font-size: 0.925rem; white-space: pre-wrap;"><strong>Report:</strong> ${task.daily_report}</p>
-          </div>
-          <p class="text-muted" style="font-size: 0.875rem; margin: 0.5rem 0;"><small>⏱️ Hours Spent: <strong>${(task.hours_spent || 0).toFixed(1)} hrs</strong></small></p>
-          <div class="btn-group" style="display: flex; gap: 0.5rem; margin-top: 1rem;">
-            <button class="btn btn-sm btn-success" onclick="approveTask(${task.id}, '${task.title.replace(/'/g, "\\'")}')">
-              <svg style="width: 1rem; height: 1rem; display: inline; margin-right: 0.25rem;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <polyline points="20 6 9 17 4 12"></polyline>
-              </svg>
-              Approve
-            </button>
-            <button class="btn btn-sm btn-danger" onclick="rejectTask(${task.id}, '${task.title.replace(/'/g, "\\'")}')">
-              <svg style="width: 1rem; height: 1rem; display: inline; margin-right: 0.25rem;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <line x1="18" y1="6" x2="6" y2="18"></line>
-                <line x1="6" y1="6" x2="18" y2="18"></line>
-              </svg>
-              Reject
-            </button>
-          </div>
-        </div>
-      `;
-      approvalPanel.appendChild(item);
-    });
-  } catch (err) {
-    console.error('Error loading approval panel:', err);
-  }
 }
 
 function createApprovalPanel() {
-  const panel = document.createElement('div');
-  panel.className = 'card section';
-  panel.setAttribute('data-approval-panel', '');
-  
-  const header = document.createElement('div');
-  header.className = 'card-header-custom';
-  header.innerHTML = `
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-      <polyline points="9 11 12 14 22 4" />
-      <path d="M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0z" />
-    </svg>
-    <h5 class="mb-0">Pending Task Approvals</h5>
-  `;
-  
-  panel.appendChild(header);
-  
-  const content = document.createElement('div');
-  content.id = 'approvalPanel';
-  panel.appendChild(content);
-  
-  const adminPanel = qs('admin-panel');
-  if (adminPanel) {
-    adminPanel.appendChild(panel);
-  }
-  
-  return content;
+    const panel = document.createElement('div');
+    panel.setAttribute('data-approval-panel', '');
+    panel.className = 'card';
+    panel.style.marginBottom = '20px';
+    const adminPanel = document.getElementById('admin-panel');
+    if (adminPanel) adminPanel.appendChild(panel);
+    return panel;
 }
 
-window.approveTask = async function (taskId, taskTitle) {
-  const feedback = prompt(`Approve task "${taskTitle}"? Add optional feedback:`);
-  if (feedback === null) return;
-
-  const data = await api(`/api/tasks/${taskId}/approve`, 'POST', { feedback: feedback || 'Approved' });
-  
-  if (!data.ok) {
-    notify('Error: ' + data.error);
-    return;
-  }
-
-  console.log('✓ Task approved:', taskTitle);
-  notify(`✓ Task "${taskTitle}" has been approved. Employee will be notified.`);
-  
-  initializeAdminApprovalPanel();
-  loadAdminDashboard();
+window.approveTask = async function(taskId) {
+    const feedback = prompt('Optional feedback for the employee:');
+    const response = await api(`/api/tasks/${taskId}/approve`, 'POST', { feedback });
+    if (response.ok) {
+        showToast('✅ Task approved!', 'success');
+        initializeAdminApprovalPanel();
+    }
 };
 
-window.rejectTask = async function (taskId, taskTitle) {
-  const feedback = prompt(`Reject task "${taskTitle}"? Please provide feedback for revision:`);
-  if (feedback === null) return;
-  if (!feedback.trim()) {
-    notify('Please provide feedback for rejection');
-    return;
-  }
-
-  const data = await api(`/api/tasks/${taskId}/reject`, 'POST', { feedback });
-  
-  if (!data.ok) {
-    notify('Error: ' + data.error);
-    return;
-  }
-
-  console.log('✓ Task rejected:', taskTitle);
-  notify(`✓ Task "${taskTitle}" has been rejected. Employee will need to revise and resubmit.`);
-  
-  initializeAdminApprovalPanel();
-  loadAdminDashboard();
+window.rejectTask = async function(taskId) {
+    const feedback = prompt('Please provide feedback for rejection:');
+    if (!feedback) return;
+    const response = await api(`/api/tasks/${taskId}/reject`, 'POST', { feedback });
+    if (response.ok) {
+        showToast('⚠️ Task rejected', 'warning');
+        initializeAdminApprovalPanel();
+    }
 };
 
-/* ========= REPORT DIAGNOSTICS ========= */
-window.testReportGeneration = async function() {
-  console.log('🔍 Running report diagnostic...');
-  
-  try {
-    const user = load(CURRENT_KEY);
-    console.log('✓ User check:', user ? `Logged in as ${user.name} (${user.role})` : 'Not logged in');
+// ============================================
+// TASK MANAGEMENT FUNCTIONS
+// ============================================
+window.startTask = async function(taskId, taskTitle) {
+    if (!confirm(`Start working on "${taskTitle}"?`)) return;
     
-    if (!user || user.role !== 'admin') {
-      notify('❌ Not logged in as admin');
-      return;
+    const response = await api(`/api/tasks/${taskId}`, 'PUT', { status: 'in-progress' });
+    if (response.ok) {
+        showToast(`✓ Started working on: ${taskTitle}`, 'success');
+        const user = load(CURRENT_KEY);
+        if (user.role === 'worker') loadWorkerDashboard(user);
+        setTimeout(() => openTaskReport(taskId, taskTitle), 500);
     }
-    
-    console.log('📡 Testing API connections...');
-    
-    const tasks = await api('/api/tasks');
-    console.log(`✓ Tasks API: ${tasks?.length || 0} tasks`);
-    
-    const users = await api('/api/users');
-    console.log(`✓ Users API: ${users?.length || 0} users`);
-    
-    const performance = await api('/api/admin/performance-metrics');
-    console.log(`✓ Performance API: ${performance?.length || 0} records`);
-    
-    console.log('📄 Checking jsPDF...');
-    console.log('window.jspdf exists:', !!window.jspdf);
-    
-    notify(`✅ Diagnostic passed!\n\nTasks: ${tasks?.length || 0}\nUsers: ${users?.length || 0}\njsPDF: ${!!window.jspdf}`);
-    
-  } catch (err) {
-    console.error('❌ Diagnostic failed:', err);
-    notify('Diagnostic failed: ' + err.message);
-  }
 };
 
-window.downloadWorkingReport = async function() {
-  console.log('📊 Generating working report...');
-  
-  const user = load(CURRENT_KEY);
-  if (!user || user.role !== 'admin') {
-    notify('❌ Only admins can download reports');
-    return;
-  }
-
-  const btn = document.querySelector('button[onclick="downloadWorkingReport()"]');
-  if (btn) {
-    btn.innerHTML = '⏳ Generating...';
-    btn.disabled = true;
-  }
-
-  try {
-    const tasks = await api('/api/tasks') || [];
-    const users = await api('/api/users') || [];
+window.openTaskReport = function(taskId, taskTitle) {
+    const modal = document.getElementById('taskReportModal');
+    if (!modal) return;
     
-    let csv = 'WFMS PERFORMANCE REPORT\n';
-    csv += '='.repeat(50) + '\n';
-    csv += `Generated: ${new Date().toLocaleString()}\n`;
-    csv += `Generated by: ${user.name}\n`;
-    csv += `Total Employees: ${users.length}\n`;
-    csv += `Total Tasks: ${tasks.length}\n\n`;
+    const titleInput = document.getElementById('reportTaskTitle');
+    const taskIdInput = document.getElementById('reportTaskId');
+    const contentInput = document.getElementById('reportContent');
+    const hoursInput = document.getElementById('reportHours');
     
-    csv += 'TASK SUMMARY\n';
-    csv += '-'.repeat(30) + '\n';
-    csv += `Completed,${tasks.filter(t => t.status === 'completed' || t.approval_status === 'approved').length}\n`;
-    csv += `Pending,${tasks.filter(t => t.status === 'pending').length}\n`;
-    csv += `In Progress,${tasks.filter(t => t.status === 'in-progress').length}\n`;
-    csv += `Rejected,${tasks.filter(t => t.approval_status === 'rejected').length}\n\n`;
+    if (titleInput) titleInput.value = taskTitle || '';
+    if (contentInput) contentInput.value = '';
+    if (hoursInput) hoursInput.value = '';
     
-    csv += 'EMPLOYEE LIST\n';
-    csv += '-'.repeat(50) + '\n';
-    csv += 'Name,Email,Role\n';
-    
-    users.forEach(u => {
-      csv += `"${u.name || ''}","${u.email || ''}",${u.role || 'worker'}\n`;
-    });
-    
-    const blob = new Blob([csv], { type: 'text/csv' });
-    const url = window.URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = `WFMS-Report-${new Date().toISOString().split('T')[0]}.csv`;
-    link.click();
-    window.URL.revokeObjectURL(url);
-    
-    notify('✓ Report downloaded successfully!');
-    
-  } catch (err) {
-    console.error('❌ Error:', err);
-    notify('Failed: ' + err.message);
-  } finally {
-    if (btn) {
-      btn.innerHTML = 'Download Working Report';
-      btn.disabled = false;
-    }
-  }
-};
-
-// Debug PDF function
-window.debugPDF = async function() {
-  console.log('🔍 Debugging PDF generation...');
-  
-  const user = load(CURRENT_KEY);
-  if (!user || user.role !== 'admin') {
-    notify('❌ Not admin');
-    return;
-  }
-
-  try {
-    // Test 1: Check if jsPDF is accessible
-    console.log('Test 1: jsPDF object:', !!window.jspdf);
-    const { jsPDF } = window.jspdf || jspdf;
-    console.log('Test 2: jsPDF constructor:', typeof jsPDF);
-    
-    // Test 2: Try basic PDF creation
-    console.log('Test 3: Creating basic PDF...');
-    const doc = new jsPDF();
-    doc.text('Test - If you see this, basic PDF works!', 20, 20);
-    doc.save('test-basic.pdf');
-    console.log('✅ Basic PDF created');
-    
-    // Test 3: Fetch data
-    console.log('Test 4: Fetching data...');
-    const tasks = await api('/api/tasks');
-    const users = await api('/api/users');
-    const performance = await api('/api/admin/performance-metrics');
-    console.log('✅ Data fetched:', { tasks: tasks?.length, users: users?.length, performance: performance?.length });
-    
-    // Test 4: Try complex PDF
-    console.log('Test 5: Creating complex PDF...');
-    const doc2 = new jsPDF();
-    doc2.setFillColor(15, 23, 42);
-    doc2.rect(0, 0, 210, 30, 'F');
-    doc2.setTextColor(255, 255, 255);
-    doc2.setFontSize(20);
-    doc2.text('WFMS Test Report', 105, 20, { align: 'center' });
-    doc2.save('test-complex.pdf');
-    console.log('✅ Complex PDF created');
-    
-    notify('✅ All PDF tests passed! Now try the full report.');
-    
-  } catch (err) {
-    console.error('❌ PDF test failed:', err);
-    notify('PDF test failed: ' + err.message);
-  }
-};
-
-// Simple working PDF report
-window.downloadSimplePDF = async function() {
-  console.log('📄 Generating simple PDF...');
-  
-  const user = load(CURRENT_KEY);
-  if (!user || user.role !== 'admin') {
-    notify('❌ Only admins can download reports');
-    return;
-  }
-
-  try {
-    const { jsPDF } = window.jspdf || jspdf;
-    const doc = new jsPDF();
-    
-    // Add content
-    doc.setFontSize(20);
-    doc.text('WFMS Report', 20, 20);
-    
-    doc.setFontSize(12);
-    doc.text(`Generated: ${new Date().toLocaleString()}`, 20, 30);
-    doc.text(`Generated by: ${user.name}`, 20, 40);
-    
-    // Get some data
-    const tasks = await api('/api/tasks') || [];
-    const users = await api('/api/users') || [];
-    
-    doc.text(`Total Employees: ${users.length}`, 20, 50);
-    doc.text(`Total Tasks: ${tasks.length}`, 20, 55);
-    
-    doc.save(`WFMS-Simple-${new Date().toISOString().split('T')[0]}.pdf`);
-    notify('✓ PDF downloaded!');
-    
-  } catch (err) {
-    console.error('PDF error:', err);
-    notify('PDF failed: ' + err.message);
-  }
-};
-
-/* ========= INIT ========= */
-// Init moved to end of file - Deferred to ensure all dependencies are loaded
-
-// ========= DEBUG END =========
-console.log('✅ app.js finished loading');
-console.log('- downloadReport defined?', typeof window.downloadReport !== 'undefined');
-
-/* ========= REPORT DOWNLOAD FUNCTIONS ========= */
-
-// Download report with format selection
-window.downloadReport = async function(format = 'pdf') {
-  try {
-    const user = load(CURRENT_KEY);
-    if (!user || user.role !== 'admin') {
-      notify('❌ Only admins can download reports');
-      return;
-    }
-
-    showLoading();
-    console.log(`📊 Generating ${format.toUpperCase()} report...`);
-
-    const response = await api(`/api/admin/report/${format}`, 'GET');
-
-    if (!response || !response.ok) {
-      throw new Error(response?.error || 'Failed to generate report');
-    }
-
-    // Create download link
-    const blob = new Blob([response.data], {
-      type: format === 'pdf' ? 'application/pdf' :
-           format === 'excel' ? 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' :
-           'text/csv'
-    });
-
-    const url = window.URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = `WFMS-Report-${new Date().toISOString().split('T')[0]}.${format === 'excel' ? 'xlsx' : format}`;
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    window.URL.revokeObjectURL(url);
-
-    notify(`✅ ${format.toUpperCase()} report downloaded successfully!`);
-
-  } catch (err) {
-    console.error('❌ Report download error:', err);
-    notify('❌ Failed to download report. Please try again.');
-  } finally {
-    hideLoading();
-  }
-};
-
-// Generate custom report with date range
-window.generateCustomReport = async function() {
-  try {
-    const user = load(CURRENT_KEY);
-    if (!user || user.role !== 'admin') {
-      notify('❌ Only admins can generate custom reports');
-      return;
-    }
-
-    const startDate = qs('reportStartDate')?.value;
-    const endDate = qs('reportEndDate')?.value;
-    const format = qs('reportFormat')?.value || 'pdf';
-
-    if (!startDate || !endDate) {
-      notify('❌ Please select both start and end dates');
-      return;
-    }
-
-    if (new Date(startDate) > new Date(endDate)) {
-      notify('❌ Start date cannot be after end date');
-      return;
-    }
-
-    showLoading();
-    console.log(`📊 Generating custom ${format.toUpperCase()} report from ${startDate} to ${endDate}...`);
-
-    const response = await api('/api/admin/report/custom', 'POST', {
-      startDate: startDate,
-      endDate: endDate,
-      format: format
-    });
-
-    if (!response || !response.ok) {
-      throw new Error(response?.error || 'Failed to generate custom report');
-    }
-
-    // Create download link
-    const blob = new Blob([response.data], {
-      type: format === 'pdf' ? 'application/pdf' :
-           format === 'excel' ? 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' :
-           'text/csv'
-    });
-
-    const url = window.URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = `WFMS-Custom-Report-${startDate}-to-${endDate}.${format === 'excel' ? 'xlsx' : format}`;
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    window.URL.revokeObjectURL(url);
-
-    notify(`✅ Custom ${format.toUpperCase()} report generated successfully!`);
-
-  } catch (err) {
-    console.error('❌ Custom report generation error:', err);
-    notify('❌ Failed to generate custom report. Please try again.');
-  } finally {
-    hideLoading();
-  }
-};
-
-// Export current table data to CSV
-window.exportTableToCSV = function(tableId = 'dataTable') {
-  try {
-    const table = qs(tableId);
-    if (!table) {
-      notify('❌ Table not found for export');
-      return;
-    }
-
-    let csv = [];
-    const rows = table.querySelectorAll('tr');
-
-    for (let i = 0; i < rows.length; i++) {
-      const row = [];
-      const cols = rows[i].querySelectorAll('td, th');
-
-      for (let j = 0; j < cols.length; j++) {
-        let text = cols[j].textContent || cols[j].innerText || '';
-        // Escape quotes and wrap in quotes if contains comma or quote
-        text = text.replace(/"/g, '""');
-        if (text.includes(',') || text.includes('"') || text.includes('\n')) {
-          text = '"' + text + '"';
-        }
-        row.push(text);
-      }
-      csv.push(row.join(','));
-    }
-
-    const csvContent = csv.join('\n');
-    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-    const url = window.URL.createObjectURL(blob);
-
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = `WFMS-Table-Export-${new Date().toISOString().split('T')[0]}.csv`;
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    window.URL.revokeObjectURL(url);
-
-    notify('✅ Table data exported to CSV successfully!');
-
-  } catch (err) {
-    console.error('❌ CSV export error:', err);
-    notify('❌ Failed to export table data. Please try again.');
-  }
-};
-
-// DUPLICATE window.showFormError and window.showFormSuccess REMOVED
-// Proper definitions are at the top of the file
-// These were conflicting with the correct implementations
-    // successDiv.textContent = message;
-    // successDiv.style.display = 'block';
-    // setTimeout(() => {
-    //   successDiv.style.display = 'none';
-    // }, 3000);
- 
-
-
-// DUPLICATE window.ensureQRContainer REMOVED
-// Proper definition is at the top of the file (line 31)
-
-// Download report function
-window.downloadReport = async function(reportType = 'attendance') {
-  try {
-    const response = await fetch(`/api/reports/${reportType}`, {
-      method: 'GET',
-      headers: {
-        'Authorization': `Bearer ${localStorage.getItem('token')}`,
-        'Content-Type': 'application/json'
-      }
-    });
-
-    if (!response.ok) {
-      throw new Error('Failed to fetch report data');
-    }
-
-    const data = await response.json();
-
-    // Convert to CSV
-    const csvContent = convertToCSV(data);
-    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-    const link = document.createElement('a');
-
-    if (link.download !== undefined) {
-      const url = URL.createObjectURL(blob);
-      link.setAttribute('href', url);
-      link.setAttribute('download', `${reportType}_report_${new Date().toISOString().split('T')[0]}.csv`);
-      link.style.visibility = 'hidden';
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-    }
-
-    notify('✅ Report downloaded successfully');
-  } catch (error) {
-    console.error('Download report error:', error);
-    notify('❌ Failed to download report');
-  }
-};
-
-// Helper function to convert data to CSV
-function convertToCSV(data) {
-  if (!data || !Array.isArray(data) || data.length === 0) {
-    return '';
-  }
-
-  const headers = Object.keys(data[0]);
-  const csvRows = [];
-
-  // Add headers
-  csvRows.push(headers.join(','));
-
-  // Add data rows
-  data.forEach(row => {
-    const values = headers.map(header => {
-      const value = row[header];
-      // Escape commas and quotes
-      if (typeof value === 'string' && (value.includes(',') || value.includes('"'))) {
-        return `"${value.replace(/"/g, '""')}"`;
-      }
-      return value || '';
-    });
-    csvRows.push(values.join(','));
-  });
-
-  return csvRows.join('\n');
-}
-
-// Close QR scanner
-window.closeQRScanner = function() {
-  const container = document.getElementById('qrScannerContainer');
-  if (container) {
-    container.style.display = 'none';
-    // Stop the QR scanner if it's running
-    if (window.qrScanner) {
-      window.qrScanner.stop();
-      window.qrScanner = null;
-    }
-  }
-};
-
-// Additional helper functions
-window.showLoading = function(message = 'Loading...') {
-  let loader = document.getElementById('loading-overlay');
-  if (!loader) {
-    loader = document.createElement('div');
-    loader.id = 'loading-overlay';
-    loader.innerHTML = `
-      <div class="loading-content">
-        <div class="spinner"></div>
-        <p>${message}</p>
-      </div>
-    `;
-    document.body.appendChild(loader);
-  }
-  loader.style.display = 'flex';
-};
-
-window.hideLoading = function() {
-  const loader = document.getElementById('loading-overlay');
-  if (loader) {
-    loader.style.display = 'none';
-  }
-};
-
-// Enhanced error handling
-window.handleApiError = function(error, context = '') {
-  console.error(`API Error${context ? ` (${context})` : ''}:`, error);
-
-  let message = 'An unexpected error occurred';
-
-  if (error.response) {
-    // Server responded with error status
-    const status = error.response.status;
-    if (status === 401) {
-      message = 'Session expired. Please login again.';
-      logout();
-    } else if (status === 403) {
-      message = 'Access denied. Insufficient permissions.';
-    } else if (status === 404) {
-      message = 'Requested resource not found.';
-    } else if (status === 500) {
-      message = 'Server error. Please try again later.';
+    if (!taskIdInput) {
+        const hiddenId = document.createElement('input');
+        hiddenId.type = 'hidden';
+        hiddenId.id = 'reportTaskId';
+        hiddenId.value = taskId;
+        modal.querySelector('.modal-body')?.appendChild(hiddenId);
     } else {
-      message = error.response.data?.message || message;
+        taskIdInput.value = taskId;
     }
-  } else if (error.request) {
-    // Network error
-    message = 'Network error. Please check your connection.';
-  }
-
-  notify(`❌ ${message}`);
-  return message;
+    
+    modal.style.display = 'flex';
 };
 
-// PWA icon handling - generate icons dynamically if manifest fails
-window.generatePWAIcons = function() {
-  // This function can be called if PWA icon errors occur
-  // For now, we'll just log that icons are handled
-  console.log('PWA icons handled dynamically');
+window.closeTaskReport = function() {
+    const modal = document.getElementById('taskReportModal');
+    if (modal) modal.style.display = 'none';
 };
 
-// Initialize PWA if supported
-if ('serviceWorker' in navigator) {
-  window.addEventListener('load', () => {
-    navigator.serviceWorker.register('/sw.js')
-      .then(registration => {
-        console.log('SW registered: ', registration);
-      })
-      .catch(registrationError => {
-        console.log('SW registration failed: ', registrationError);
-      });
-  });
-}
-
-// ============================================
-// DASHBOARD FUNCTIONS - Add to app.js
-// ============================================
-
-
-//// ============================================
-// EMPLOYEES (ADMIN) - SINGLE CORRECT VERSION
-// ============================================
-
-async function loadEmployees() {
-  try {
-    console.log('🔄 Loading employees...');
-    const response = await api('/api/users');
+window.submitTaskReport = async function() {
+    const taskId = document.getElementById('reportTaskId')?.value;
+    const content = document.getElementById('reportContent')?.value.trim();
+    const hours = parseFloat(document.getElementById('reportHours')?.value) || 0;
+    const status = document.getElementById('reportStatus')?.value;
     
-    // CRITICAL FIX: Extract users array from response.users
-    let users = [];
-    
-    if (response && response.users && Array.isArray(response.users)) {
-      users = response.users;
-      console.log('✓ Extracted users array from response.users, length:', users.length);
-    } else if (response && Array.isArray(response)) {
-      users = response;
-      console.log('✓ Response is direct array, length:', users.length);
-    } else if (response && response.data && Array.isArray(response.data)) {
-      users = response.data;
-      console.log('✓ Response has data array, length:', users.length);
-    } else {
-      console.error('❌ Unexpected response format:', response);
-      users = [];
+    if (!taskId || !content || hours <= 0) {
+        showToast('Please fill all fields', 'warning');
+        return;
     }
     
-    const select = document.getElementById('taskAssign');
-    const list = document.getElementById('employeeList');
-
-    if (!select) {
-      console.error('❌ taskAssign select element not found!');
-      return;
-    }
-    
-    if (!list) {
-      console.error('❌ employeeList element not found!');
-      return;
-    }
-
-    // Clear existing options
-    select.innerHTML = '<option value="">Select Employee</option>';
-    list.innerHTML = '';
-
-    let workerCount = 0;
-    
-    users.forEach(u => {
-      // Accept any user that is not admin
-      const role = (u.role || '').toLowerCase();
-      if (role !== 'admin' && role !== '') {
-        workerCount++;
-        
-        const userId = u.id || u._id;
-        if (!userId) {
-          console.warn('⚠️ User has no ID:', u);
-          return;
-        }
-        
-        const userName = u.name || u.email || 'Unknown';
-        const userEmail = u.email || '';
-        
-        // Add to select dropdown
-        const opt = document.createElement('option');
-        opt.value = userId;
-        opt.textContent = userName;
-        select.appendChild(opt);
-        
-        console.log(`✅ Added to dropdown: ${userName} (${userId}, role: ${role})`);
-
-        // Add to employee grid
-        const div = document.createElement('div');
-        div.className = 'employee-card';
-        div.innerHTML = `
-          <div class="employee-avatar" style="width: 40px; height: 40px; background: linear-gradient(135deg, #00F0FF, #4EC9B0); border-radius: 50%; display: flex; align-items: center; justify-content: center; color: #0B0B0B; font-weight: bold; margin: 0 auto 8px;">
-            ${userName.charAt(0).toUpperCase()}
-          </div>
-          <div>${userName}</div>
-          <div style="font-size: 11px; color: var(--text-secondary);">${userEmail}</div>
-          <div style="font-size: 10px; margin-top: 4px;"><span class="badge bg-primary">${role}</span></div>
-        `;
-        list.appendChild(div);
-      }
-    });
-
-    // Update total employees count
-    const totalEmployeesEl = document.getElementById('totalEmployees');
-    if (totalEmployeesEl) {
-      totalEmployeesEl.innerText = workerCount;
-    }
-    
-    console.log(`📊 Final: Added ${workerCount} workers to dropdown`);
-    console.log(`📊 Select now has ${select.options.length} options`);
-    
-    if (workerCount === 0) {
-      const placeholderOpt = document.createElement('option');
-      placeholderOpt.value = '';
-      placeholderOpt.textContent = '⚠️ No employees found - register workers first';
-      placeholderOpt.disabled = true;
-      placeholderOpt.style.color = '#ef4444';
-      select.appendChild(placeholderOpt);
-    }
-    
-  } catch (err) {
-    console.error('❌ Error loading employees:', err);
-    const select = document.getElementById('taskAssign');
-    if (select) {
-      select.innerHTML = '<option value="">❌ Error loading employees</option>';
-    }
-  }
-}
-// Load admin dashboard
-
-
-// Initialize admin approval panel
-async function initializeAdminApprovalPanel() {
-  try {
-    const tasks = await api('/api/admin/pending-approvals');
-    const approvalPanel = document.querySelector('[data-approval-panel]') || createApprovalPanel();
-    
-    if (!approvalPanel) return;
-    
-    if (!tasks || tasks.length === 0) {
-      approvalPanel.innerHTML = '<div class="text-center text-muted">✓ No pending approvals</div>';
-      return;
-    }
-    
-    approvalPanel.innerHTML = `
-      <h6 style="margin-bottom: 15px;">📋 Pending Approvals (${tasks.length})</h6>
-      ${tasks.map(task => `
-        <div class="approval-item" style="background: var(--bg-secondary); padding: 15px; border-radius: 8px; margin-bottom: 10px; border-left: 4px solid #f59e0b;">
-          <div style="display: flex; justify-content: space-between; align-items: start;">
-            <div>
-              <strong>${task.title}</strong>
-              <p style="margin: 5px 0; font-size: 12px;">Submitted by: ${task.submitted_by_name}</p>
-              <p style="margin: 5px 0; font-size: 12px;">Hours: ${task.hours_spent || 0}</p>
-              <p style="margin: 5px 0; font-size: 12px;">Report: ${task.daily_report?.substring(0, 100)}...</p>
-            </div>
-            <div style="display: flex; gap: 8px;">
-              <button class="btn btn-sm btn-success" onclick="approveTask('${task._id}')">Approve</button>
-              <button class="btn btn-sm btn-danger" onclick="rejectTask('${task._id}')">Reject</button>
-            </div>
-          </div>
-        </div>
-      `).join('')}
-    `;
-    
-  } catch (err) {
-    console.error('Error loading approval panel:', err);
-  }
-}
-
-
-
-// Load worker dashboard
-async function loadWorkerDashboard(user) {
-  console.log('Loading worker dashboard for:', user.name);
-  
-  try {
-    // Load assigned tasks
-    const tasks = await api('/api/tasks');
-    const myTasks = tasks.filter(t => {
-      const assignedId = t.assigned_to?._id || t.assigned_to;
-      return assignedId === user.id;
-    });
-    
-    const myTaskList = document.getElementById('myTaskList');
-    if (myTaskList) {
-      if (myTasks.length === 0) {
-        myTaskList.innerHTML = '<div class="text-center text-muted">No tasks assigned yet</div>';
-      } else {
-        myTaskList.innerHTML = myTasks.map(task => `
-          <div class="task-item">
-            <strong>${task.title}</strong>
-            <p>${task.description || 'No description'}</p>
-            <span class="badge ${task.status === 'completed' ? 'bg-success' : 'bg-warning'}">
-              ${task.status || 'pending'}
-            </span>
-            ${task.status === 'pending' ? `<button class="btn btn-sm btn-primary" onclick="startTask('${task._id}')">Start Task</button>` : ''}
-          </div>
-        `).join('');
-      }
-    }
-    
-    // Load performance stats
-    if (typeof loadWorkerPerformance === 'function') {
-      await loadWorkerPerformance(user);
-    }
-    
-    // Load attendance
-    if (typeof loadWorkerAttendance === 'function') {
-      await loadWorkerAttendance(user);
-    }
-    
-  } catch (err) {
-    console.error('Error loading worker dashboard:', err);
-  }
-}
-
-// Load worker performance
-async function loadWorkerPerformance(user) {
-  try {
-    const response = await api(`/api/employee/performance/${user.id}`);
-    if (response.ok && response.performance) {
-      const perf = response.performance;
-      
-      const elements = {
-        workerTasksAssigned: perf.tasks_assigned || 0,
-        workerCompletedTasks: perf.tasks_completed || 0,
-        workerInProgressTasks: perf.tasks_in_progress || 0,
-        workerPendingTasks: perf.tasks_pending || 0,
-        workerHoursWorked: perf.total_hours_worked || 0,
-        workerAttendanceRate: `${perf.completion_rate || 0}%`
-      };
-      
-      for (const [id, value] of Object.entries(elements)) {
-        const el = document.getElementById(id);
-        if (el) el.innerText = value;
-      }
-    }
-  } catch (err) {
-    console.error('Error loading performance:', err);
-  }
-}
-
-// Load worker attendance
-async function loadWorkerAttendance(user) {
-  try {
-    const records = await api(`/api/attendance/${user.id}`);
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    
-    const todayRecords = records.filter(r => new Date(r.timestamp) >= today);
-    const clockedIn = todayRecords.some(r => r.action === 'clock_in');
-    const onBreak = todayRecords.some(r => r.action === 'break_start') && 
-                    !todayRecords.some(r => r.action === 'break_end');
-    
-    const attendanceDiv = document.getElementById('myAttendance');
-    if (attendanceDiv) {
-      attendanceDiv.innerHTML = `
-        <div style="display: flex; gap: 10px;">
-          <div class="badge ${clockedIn ? 'bg-success' : 'bg-secondary'}">
-            ${clockedIn ? '✅ Clocked In' : '⏰ Not Clocked In'}
-          </div>
-          <div class="badge ${onBreak ? 'bg-warning' : 'bg-secondary'}">
-            ${onBreak ? '☕ On Break' : '🔄 Not on Break'}
-          </div>
-        </div>
-      `;
-    }
-  } catch (err) {
-    console.error('Error loading attendance:', err);
-  }
-}
-
-// Load worker time logs
-async function loadWorkerTimeLogs(user) {
-  try {
-    const logs = await api(`/api/time/${user.id}`);
-    const timeLogsDiv = document.getElementById('myTimeLogs');
-    if (timeLogsDiv && logs.length > 0) {
-      timeLogsDiv.innerHTML = logs.slice(0, 5).map(log => `
-        <div style="padding: 5px; border-bottom: 1px solid var(--border-color);">
-          ${log.action}: ${new Date(log.time).toLocaleTimeString()}
-        </div>
-      `).join('');
-    }
-  } catch (err) {
-    console.error('Error loading time logs:', err);
-  }
-}
-
-// Render tasks
-async function renderTasks() {
-  const taskList = document.getElementById('taskList');
-  if (!taskList) return;
-  
-  try {
-    const tasks = await api('/api/tasks');
     const user = load(CURRENT_KEY);
-    
-    const filteredTasks = user?.role === 'admin' ? tasks : tasks.filter(t => {
-      const assignedId = t.assigned_to?._id || t.assigned_to;
-      return assignedId === user?.id;
+    const response = await api(`/api/tasks/${taskId}/submit-report`, 'POST', {
+        daily_report: content,
+        status: status,
+        hours_spent: hours,
+        submitted_by: user.id
     });
     
-    if (filteredTasks.length === 0) {
-      taskList.innerHTML = '<div class="text-center text-muted">No tasks found</div>';
-      return;
+    if (response.ok) {
+        showToast('✅ Report submitted for review!', 'success');
+        window.closeTaskReport();
+        if (user.role === 'worker') loadWorkerDashboard(user);
     }
-    
-    taskList.innerHTML = filteredTasks.map(task => `
-      <div class="task-item">
-        <strong>${task.title}</strong>
-        <p>${task.description || 'No description'}</p>
-        <span class="badge ${task.status === 'completed' ? 'bg-success' : 'bg-warning'}">
-          ${task.status || 'pending'}
-        </span>
-        ${task.status === 'pending' && task.assigned_to === user?.id ? 
-          `<button class="btn btn-sm btn-primary" onclick="startTask('${task._id}')">Start Task</button>` : ''}
-      </div>
-    `).join('');
-    
-    const totalTasks = document.getElementById('totalTasks');
-    if (totalTasks) totalTasks.innerText = tasks.length;
-    
-  } catch (err) {
-    console.error('Error rendering tasks:', err);
-  }
-}
-
-// Add QR logout button
-function addQRLogoutButton(user) {
-  const headerRight = document.querySelector('.header-right');
-  if (!headerRight) return;
-  
-  if (document.getElementById('qrLogoutBtn')) return;
-  
-  const btn = document.createElement('button');
-  btn.id = 'qrLogoutBtn';
-  btn.className = 'btn-icon-circle';
-  btn.title = 'QR Logout';
-  btn.innerHTML = `
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="20" height="20">
-      <path d="M3 7V5a2 2 0 0 1 2-2h2M17 3h2a2 2 0 0 1 2 2v2M21 17v2a2 2 0 0 1-2 2h-2M7 21H5a2 2 0 0 1-2-2v-2M7 7h10v10H7z" />
-    </svg>
-  `;
-  btn.onclick = () => showLogoutOptions();
-  
-  const logoutBtn = document.querySelector('.btn-outline-danger');
-  if (logoutBtn) {
-    headerRight.insertBefore(btn, logoutBtn);
-  } else {
-    headerRight.appendChild(btn);
-  }
-}
-
-// Show logout options
-window.showLogoutOptions = function() {
-  const modal = document.createElement('div');
-  modal.className = 'qr-modal-overlay';
-  modal.innerHTML = `
-    <div class="qr-modal-container" style="max-width: 380px;">
-      <div class="qr-modal-header">
-        <h2>👋 Logout Options</h2>
-        <button class="btn-close" onclick="this.closest('.qr-modal-overlay').remove()">×</button>
-      </div>
-      <div class="qr-modal-body">
-        <div style="display: flex; flex-direction: column; gap: 12px;">
-          <button class="btn btn-primary" onclick="initQRScanner('logout')">
-            📱 Scan QR to Logout
-          </button>
-          <button class="btn btn-danger" onclick="performLogout()">
-            🔒 Manual Logout
-          </button>
-        </div>
-      </div>
-    </div>
-  `;
-  document.body.appendChild(modal);
 };
 
-// Export all functions
-window.enterDashboard = enterDashboard;
-window.loadEmployees = loadEmployees;
-window.loadAdminDashboard = loadAdminDashboard;
-window.initializeAdminApprovalPanel = initializeAdminApprovalPanel;
-window.loadWorkerDashboard = loadWorkerDashboard;
-window.loadWorkerPerformance = loadWorkerPerformance;
-window.loadWorkerAttendance = loadWorkerAttendance;
-window.loadWorkerTimeLogs = loadWorkerTimeLogs;
-window.renderTasks = renderTasks;
-window.addQRLogoutButton = addQRLogoutButton;
-window.showLogoutOptions = showLogoutOptions;
-window.performLogout = performLogout;
-
-console.log('✅ All dashboard functions registered');
-
-// ============================================
-// INITIALIZATION - Runs AFTER all functions are defined
-// ============================================
-
-// Ensure DOM is ready before running session recovery and init
-if (document.readyState === 'loading') {
-  document.addEventListener('DOMContentLoaded', initializeApp);
-} else {
-  // DOM is already ready
-  initializeApp();
-}
-
-function initializeApp() {
-  console.log('🔧 Initializing WFMS app...');
-  
-  // Run recover session logic
-  recoverSession();
-  
-  // Run init logic  
-  setTimeout(() => {
-    const user = load(CURRENT_KEY);
-    if (user && typeof window.enterDashboard === 'function') {
-      console.log('📊 Auto-loading dashboard for:', user.name);
-      window.enterDashboard(user);
+window.addTask = async function() {
+    const title = document.getElementById('taskTitle')?.value.trim();
+    const description = document.getElementById('taskDesc')?.value.trim();
+    const assigned_to = document.getElementById('taskAssign')?.value;
+    
+    if (!title || !assigned_to) {
+        showToast('Please fill all fields', 'warning');
+        return;
     }
-  }, 100);
-  
-  console.log('✅ WFMS app initialized');
-}
+    
+    const priority = document.getElementById('taskPriority')?.value || 'medium';
+    const category = document.getElementById('taskCategory')?.value || 'General';
+    const tags = (document.getElementById('taskTags')?.value || '')
+        .split(',')
+        .map(tag => tag.trim())
+        .filter(Boolean);
+    const dueDate = document.getElementById('taskDueDate')?.value || null;
 
-// Session recovery logic (moved from middle of file)
-function recoverSession() {
-  console.log('🔄 Checking for existing session...');
-  const user = load(CURRENT_KEY, null);
-  const token = getToken();
-  
-  if (user && token && !isTokenExpired()) {
-    console.log('✓ Valid session found, restoring user:', user.name);
-    setTimeout(() => {
-      if (typeof window.enterDashboard === 'function') {
-        window.enterDashboard(user);
-      }
-    }, 500);
-  } else if (user && token && getRefreshToken()) {
-    console.log('⏱️ Token expired but refresh token available, attempting refresh...');
-    refreshAccessToken().then(success => {
-      if (success) {
-        setTimeout(() => {
-          if (typeof window.enterDashboard === 'function') {
-            window.enterDashboard(user);
-          }
-        }, 500);
-      } else {
-        console.log('ℹ️ Auto-refresh failed, showing login screen');
-      }
+    const response = await api('/api/tasks', 'POST', {
+        title,
+        description,
+        assigned_to,
+        priority,
+        category,
+        tags,
+        due_date: dueDate
     });
-  } else {
-    console.log('ℹ️ No valid session found');
-  }
+    if (response.ok) {
+        showToast('✅ Task assigned!', 'success');
+        document.getElementById('taskTitle').value = '';
+        document.getElementById('taskDesc').value = '';
+        document.getElementById('taskTags').value = '';
+        document.getElementById('taskDueDate').value = '';
+        document.getElementById('taskCategory').value = '';
+        document.getElementById('taskTemplate').value = '';
+        loadTasks();
+    }
+};
 
-  // Handle OAuth redirect with token
-  const urlParams = new URLSearchParams(window.location.search);
-  const tokenParam = urlParams.get('token');
-  const refreshTokenParam = urlParams.get('refreshToken');
-  
-  if (tokenParam && refreshTokenParam) {
-    // Clean URL
-    window.history.replaceState({}, document.title, window.location.pathname);
-    
-    // Get user info from token or make API call
-    api('/api/auth/me', 'GET').then(data => {
-      if (data.ok && data.user) {
-        const user = {
-          id: data.user.id,
-          name: data.user.name,
-          email: data.user.email,
-          role: data.user.role
-        };
-        
-        save(CURRENT_KEY, user);
-        saveToken(tokenParam, refreshTokenParam, 604800);
-        
-        setTimeout(() => {
-          if (typeof window.enterDashboard === 'function') {
-            window.enterDashboard(user);
-          }
-        }, 500);
-      }
-    });
-  }
-}
+// ============================================
+// ATTENDANCE FUNCTIONS
+// ============================================
+window.clockIn = async function() {
+    const user = load(CURRENT_KEY);
+    if (!user) return;
+    await api('/api/time', 'POST', { user_id: user.id, action: 'clock_in', time: new Date().toISOString() });
+    showToast('✅ Clocked in', 'success');
+    if (user.role !== 'admin') loadWorkerAttendance(user);
+};
 
-// Add a floating button that's always visible
-function addFloatingImpersonationButton() {
-    // Check if button already exists
-    if (document.getElementById('floatingImpersonateBtn')) return;
-    
-    const floatingBtn = document.createElement('div');
-    floatingBtn.id = 'floatingImpersonateBtn';
-    floatingBtn.style.cssText = `
-        position: fixed;
-        bottom: 20px;
-        right: 20px;
-        z-index: 9999;
-        background: linear-gradient(135deg, #8b5cf6, #6d28d9);
-        color: white;
-        padding: 12px 20px;
-        border-radius: 30px;
-        cursor: pointer;
-        font-size: 14px;
-        font-weight: bold;
-        box-shadow: 0 4px 12px rgba(0,0,0,0.3);
-        transition: all 0.3s ease;
-        display: flex;
-        align-items: center;
-        gap: 8px;
-    `;
-    floatingBtn.innerHTML = `🎭 Impersonate User`;
-    
-    floatingBtn.onclick = async () => {
-        const userEmail = prompt('Enter user email to impersonate:', 'junior@gmail.com');
-        if (!userEmail) return;
-        
-        const adminLogin = await fetch('/api/login', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                email: 'junior@gmail.com',
-                password: '12blackSt@*'
-            })
-        });
-        const adminData = await adminLogin.json();
-        
-        if (!adminData.ok) {
-            alert('Admin login failed');
+window.clockOut = async function() {
+    const user = load(CURRENT_KEY);
+    if (!user) return;
+    await api('/api/time', 'POST', { user_id: user.id, action: 'clock_out', time: new Date().toISOString() });
+    showToast('👋 Clocked out', 'success');
+    if (user.role !== 'admin') loadWorkerAttendance(user);
+};
+
+window.breakStart = async function() {
+    const user = load(CURRENT_KEY);
+    if (!user) return;
+    await api('/api/time', 'POST', { user_id: user.id, action: 'break_start', time: new Date().toISOString() });
+    showToast('☕ Break started', 'success');
+    if (user.role !== 'admin') loadWorkerAttendance(user);
+};
+
+window.breakEnd = async function() {
+    const user = load(CURRENT_KEY);
+    if (!user) return;
+    await api('/api/time', 'POST', { user_id: user.id, action: 'break_end', time: new Date().toISOString() });
+    showToast('🔄 Break ended', 'success');
+    if (user.role !== 'admin') loadWorkerAttendance(user);
+};
+
+// ============================================
+// REPORT FUNCTIONS - COMPLETE
+// ============================================
+
+window.downloadPDFReport = async function() {
+    try {
+        const user = load(CURRENT_KEY);
+        if (!user || user.role !== 'admin') {
+            showToast('❌ Only admins can download reports', 'error');
             return;
         }
-        
-        const usersResponse = await fetch('/api/users', {
-            headers: { 'Authorization': 'Bearer ' + adminData.token }
-        });
-        const usersData = await usersResponse.json();
-        
-        const targetUser = usersData.users.find(u => u.email === userEmail || u.name === userEmail);
-        
-        if (!targetUser) {
-            alert('User not found');
-            return;
-        }
-        
-        const impResponse = await fetch('/api/admin/impersonate', {
-            method: 'POST',
+
+        showLoading();
+        console.log('📊 Requesting PDF report from server...');
+
+        const token = localStorage.getItem(TOKEN_KEY);
+        const response = await fetch('/api/admin/report/pdf', {
+            method: 'GET',
             headers: {
-                'Content-Type': 'application/json',
-                'Authorization': 'Bearer ' + adminData.token
-            },
-            body: JSON.stringify({ userId: targetUser.id })
+                'Authorization': token ? `Bearer ${token}` : ''
+            }
         });
-        
-        const impData = await impResponse.json();
-        
-        if (impData.ok) {
-            localStorage.setItem('wfms_current_user', JSON.stringify(impData.user));
-            localStorage.setItem('wfms_token', impData.token);
-            localStorage.setItem('wfms_refresh_token', impData.refreshToken);
-            alert(`Switched to ${impData.user.name}`);
-            window.location.reload();
-        } else {
-            alert(`Failed: ${impData.error}`);
+
+        if (!response.ok) {
+            const errorData = await response.json().catch(() => ({}));
+            throw new Error(errorData.error || `Unable to download PDF report (${response.status})`);
         }
-    };
+
+        const blob = await response.blob();
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        const filename = `WFMS-Report-${new Date().toISOString().split('T')[0]}.pdf`;
+        link.download = filename;
+        document.body.appendChild(link);
+        link.click();
+        link.remove();
+        URL.revokeObjectURL(url);
+
+        showToast(`✅ PDF Report downloaded as "${filename}"`, 'success');
+    } catch (err) {
+        console.error('❌ PDF report download error:', err);
+        showToast('Failed to download PDF report: ' + err.message, 'error');
+    } finally {
+        hideLoading();
+    }
+};
+
+window.downloadCSVReport = async function() {
+    try {
+        const user = load(CURRENT_KEY);
+        if (!user || user.role !== 'admin') {
+            showToast('❌ Only admins can download reports', 'error');
+            return;
+        }
+        showLoading();
+        const token = localStorage.getItem(TOKEN_KEY);
+        const response = await fetch('/api/admin/report/csv', {
+            method: 'GET',
+            headers: { 'Authorization': token ? `Bearer ${token}` : '' }
+        });
+
+        if (!response.ok) {
+            const err = await response.json().catch(() => ({}));
+            throw new Error(err.error || `Unable to download CSV (${response.status})`);
+        }
+
+        const blob = await response.blob();
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = `WFMS-Report-${new Date().toISOString().split('T')[0]}.csv`;
+        document.body.appendChild(link);
+        link.click();
+        link.remove();
+        URL.revokeObjectURL(url);
+        showToast('✅ CSV Report downloaded successfully', 'success');
+    } catch (err) {
+        console.error('❌ CSV generation error:', err);
+        showToast('Failed to generate CSV: ' + err.message, 'error');
+    } finally {
+        hideLoading();
+    }
+};
+
+window.downloadSimpleReport = async function() {
+    try {
+        const user = load(CURRENT_KEY);
+        if (!user || user.role !== 'admin') {
+            showToast('❌ Only admins can download reports', 'error');
+            return;
+        }
+
+        const [tasksResponse, usersResponse] = await Promise.all([
+            api('/api/tasks'),
+            api('/api/users')
+        ]);
+        
+        const tasks = normalizeTasksResponse(tasksResponse);
+        const users = usersResponse?.users || [];
+        
+        const completed = tasks.filter(t => t.status === 'completed' || t.approval_status === 'approved').length;
+        const inProgress = tasks.filter(t => t.status === 'in-progress').length;
+        const pending = tasks.filter(t => t.status === 'pending').length;
+        const totalHours = tasks.reduce((sum, t) => sum + (t.hours_spent || 0), 0);
+        const employees = users.filter(u => u.role !== 'admin').length;
+        
+        let report = 'WFMS QUICK REPORT\n';
+        report += '='.repeat(50) + '\n';
+        report += `Date: ${new Date().toLocaleString()}\n`;
+        report += `Generated by: ${user.name}\n`;
+        report += '='.repeat(50) + '\n\n';
+        report += `📊 STATISTICS\n`;
+        report += `Total Employees: ${employees}\n`;
+        report += `Total Tasks: ${tasks.length}\n`;
+        report += `Completed: ${completed}\n`;
+        report += `In Progress: ${inProgress}\n`;
+        report += `Pending: ${pending}\n`;
+        report += `Completion Rate: ${tasks.length ? Math.round((completed / tasks.length) * 100) : 0}%\n`;
+        report += `Total Hours Worked: ${totalHours.toFixed(1)}\n\n`;
+        
+        const blob = new Blob([report], { type: 'text/plain' });
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = `WFMS-Quick-Report-${new Date().toISOString().split('T')[0]}.txt`;
+        link.click();
+        URL.revokeObjectURL(url);
+        
+        showToast('✅ Quick report downloaded', 'success');
+    } catch (err) {
+        console.error('Error:', err);
+        showToast('Failed to generate report', 'error');
+    }
+};
+
+// Make report functions globally available
+window.downloadReport = async function(format = 'pdf') {
+    if (format === 'pdf') await window.downloadPDFReport();
+    else if (format === 'csv') await window.downloadCSVReport();
+    else await window.downloadSimpleReport();
+};
+
+// ============================================
+// LOGOUT & UI FUNCTIONS
+// ============================================
+function addQRLogoutButton(user) {
+    const headerRight = document.querySelector('.header-right');
+    if (!headerRight || document.getElementById('qrLogoutBtn')) return;
     
-    floatingBtn.onmouseenter = () => {
-        floatingBtn.style.transform = 'scale(1.05)';
-        floatingBtn.style.boxShadow = '0 6px 20px rgba(0,0,0,0.4)';
-    };
-    floatingBtn.onmouseleave = () => {
-        floatingBtn.style.transform = 'scale(1)';
-        floatingBtn.style.boxShadow = '0 4px 12px rgba(0,0,0,0.3)';
-    };
+    const btn = document.createElement('button');
+    btn.id = 'qrLogoutBtn';
+    btn.className = 'btn-icon-circle';
+    btn.title = 'QR Logout';
+    btn.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="20" height="20">
+        <path d="M3 7V5a2 2 0 0 1 2-2h2M17 3h2a2 2 0 0 1 2 2v2M21 17v2a2 2 0 0 1-2 2h-2M7 21H5a2 2 0 0 1-2-2v-2M7 7h10v10H7z" />
+    </svg>`;
+    btn.onclick = () => window.logout();
     
-    document.body.appendChild(floatingBtn);
-    console.log('✅ Floating impersonation button added');
+    const logoutBtn = document.querySelector('.btn-outline-danger');
+    if (logoutBtn) headerRight.insertBefore(btn, logoutBtn);
+    else headerRight.appendChild(btn);
 }
 
-// Add the floating button when the page loads
+window.logout = function() {
+    console.log('Logging out...');
+    localStorage.removeItem(CURRENT_KEY);
+    localStorage.removeItem(TOKEN_KEY);
+    localStorage.removeItem(REFRESH_TOKEN_KEY);
+    
+    const auth = document.getElementById('auth-overlay');
+    const dash = document.getElementById('dashboard');
+    if (auth) auth.classList.remove('hidden');
+    if (dash) dash.classList.add('hidden');
+    
+    const username = document.getElementById('username');
+    const password = document.getElementById('password');
+    if (username) username.value = '';
+    if (password) password.value = '';
+    
+    showToast('Logged out successfully', 'success');
+};
+
+function logUI(msg) {
+    const log = document.getElementById('log');
+    if (!log) return;
+    const p = document.createElement('p');
+    p.textContent = `[${new Date().toLocaleTimeString()}] ${msg}`;
+    log.prepend(p);
+    const totalLogs = document.getElementById('totalLogs');
+    if (totalLogs) totalLogs.innerText = log.children.length;
+}
+
+// ============================================
+// INITIALIZATION
+// ============================================
+function checkSession() {
+    const user = load(CURRENT_KEY);
+    const token = localStorage.getItem(TOKEN_KEY);
+    if (user && token) {
+        window.enterDashboard(user);
+    }
+}
+
 if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', addFloatingImpersonationButton);
+    document.addEventListener('DOMContentLoaded', checkSession);
 } else {
-    addFloatingImpersonationButton();
+    checkSession();
 }
 
-console.log('✅ WFMS app.js fully loaded with initialization handlers');
-console.log('✅ enterDashboard type:', typeof window.enterDashboard);
+console.log('✅ app.js loaded - all functions defined');
+console.log('📊 Report functions:', {
+    pdf: typeof window.downloadPDFReport,
+    csv: typeof window.downloadCSVReport,
+    simple: typeof window.downloadSimpleReport,
+    main: typeof window.downloadReport
+});

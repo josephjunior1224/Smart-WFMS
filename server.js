@@ -24,37 +24,58 @@ for (const envVar of optionalEnvVars) {
   }
 }
 
-const passport = require('passport');
-const GoogleStrategy = require('passport-google-oauth20').Strategy;
-const session = require('express-session');
+// ============================================
+// DEPENDENCY IMPORTS - SINGLE SOURCE OF TRUTH
+// ============================================
+
+// Core Node modules
 const fs = require('fs');
 const path = require('path');
+const http = require('http');
+
+// Third-party packages
 const express = require('express');
-// const helmet = require('helmet');
-const csrf = require('csurf');
+const mongoose = require('mongoose');
+const cors = require('cors');
+const helmet = require('helmet');
 const cookieParser = require('cookie-parser');
+const session = require('express-session');
+const rateLimit = require('express-rate-limit');
+const multer = require('multer');
 const NodeCache = require('node-cache');
-const userCache = new NodeCache({ stdTTL: 300 });
-const QR = require('qrcode');
-const { v4: uuidv4 } = require('uuid');
+
+// Authentication & Security
+const passport = require('passport');
+const GoogleStrategy = require('passport-google-oauth20').Strategy;
+const csrf = require('csurf');
 const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
-const cors = require('cors');
-const multer = require('multer');
-const http = require('http');
-const socketIO = require('socket.io');
-const mongoose = require('mongoose');
-const rateLimit = require('express-rate-limit');
 
-// Report generation libraries
+// QR Code & UUID
+const QR = require('qrcode');
+const { v4: uuidv4 } = require('uuid');
+
+// Real-time
+const socketIo = require('socket.io');
+
+// Report generation
 const PDFDocument = require('pdfkit');
 const ExcelJS = require('exceljs');
 
-// Import MongoDB models and helpers
+// Environment variables (IMPORTANT - add this!)
+require('dotenv').config();
+
+// Cache
+const userCache = new NodeCache({ stdTTL: 300 });
+
+// ============================================
+// IMPORT MONGODB MODELS
+// ============================================
 const { 
   User, 
   Task, 
   Team,
+  TeamReport,
   QRCode, 
   QRScan, 
   Performance, 
@@ -68,32 +89,48 @@ const {
   Session,
   WebhookFailure,
   isConnected,
-  connectionStatus
+  connectionStatus,
+  MONGODB_URI,
+  connectionOptions
 } = require('./db');
-// Add this after your imports
+
+// ============================================
+// VERIFY IMPORTS
+// ============================================
 console.log('\n🔍 === MODEL IMPORT CHECK ===');
 console.log('User:', typeof User);
 console.log('Task:', typeof Task);
 console.log('Team:', typeof Team);
 console.log('QRCode:', typeof QRCode);
+console.log('QRScan:', typeof QRScan);
+console.log('Performance:', typeof Performance);
 console.log('===========================\n');
 // Import email service
 const emailService = require('./models/emailService');
-emailService.initializeEmailService();
+// Initialize email service asynchronously and handle rejections to avoid unhandled promise rejections
+emailService.initializeEmailService().catch(err => {
+  logger.warn('Email service initialization failed (async):', err && err.message ? err.message : err);
+});
 
 // Initialize Express app
 const app = express();
 const server = http.createServer(app);
 
 const corsOptions = {
-  origin: process.env.NODE_ENV === 'production' 
+  origin: process.env.NODE_ENV === 'production'
     ? [process.env.FRONTEND_URL, 'https://your-domain.com']
     : ['http://localhost:3000', 'http://localhost:8000', 'http://127.0.0.1:8000'],
   credentials: true,
   optionsSuccessStatus: 200
 };
 
-const io = socketIO(server, {
+const allowedOrigins = process.env.ALLOWED_ORIGINS
+  ? process.env.ALLOWED_ORIGINS.split(',').map(origin => origin.trim()).filter(Boolean)
+  : Array.isArray(corsOptions.origin)
+    ? corsOptions.origin
+    : [corsOptions.origin].filter(Boolean);
+
+const io = socketIo(server, {
   cors: {
     origin: function(origin, callback) {
       if (!origin || allowedOrigins.includes(origin) || allowedOrigins.includes('*') || (corsOptions.origin && corsOptions.origin.includes(origin))) {
@@ -182,8 +219,7 @@ app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use(cookieParser());
 
-// Security headers (Helmet)
-const helmet = require('helmet');
+// // Security headers (Helmet) - already imported above
 app.use(helmet({
   contentSecurityPolicy: false, // Disable if you need inline scripts
   crossOriginEmbedderPolicy: false
@@ -373,15 +409,9 @@ if (process.env.ENABLE_BASIC_AUTH === 'true') {
   });
 }
 
-// Initialize email service
-try {
-  emailService.initializeEmailService();
-} catch (err) {
-  logger.warn('⚠️ Email service initialization failed:', err.message);
-}
-// Serve index.html for the root route
-app.get('/', (req, res) => {
-  res.sendFile(path.join(__dirname, 'index.html'));
+// Initialize email service (ensure async errors are handled)
+emailService.initializeEmailService().catch(err => {
+  logger.warn('⚠️ Email service initialization failed:', err && err.message ? err.message : err);
 });
 // ===============================================
 // Socket.IO Real-Time Communications (ENHANCED)
@@ -539,40 +569,121 @@ async function broadcastToAdmins(data) {
   }
 }
 
+// Parse scanned QR text to extract the token reliably.
+function parseScannedToken(scannedText) {
+  if (!scannedText) return null;
+  const raw = String(scannedText).trim();
+
+  // Try JSON first
+  try {
+    const parsed = JSON.parse(raw);
+    if (parsed.token) return parsed.token;
+    if (parsed.qr_token) return parsed.qr_token;
+    if (parsed.qrToken) return parsed.qrToken;
+  } catch (e) {
+    // not JSON
+  }
+
+  // If it's a URL, attempt to extract token param or path segment
+  try {
+    if (raw.startsWith('http://') || raw.startsWith('https://')) {
+      const u = new URL(raw);
+      const q = u.searchParams.get('token') || u.searchParams.get('qrToken') || u.searchParams.get('qr_token');
+      if (q) return q;
+      // find uuid-like path segment
+      const parts = u.pathname.split('/').filter(Boolean);
+      for (let i = parts.length - 1; i >= 0; i--) {
+        const p = parts[i];
+        if (/^[0-9a-fA-F\-]{8,36}$/.test(p)) return p;
+      }
+    }
+  } catch (e) {
+    // ignore
+  }
+
+  // If it's a simple token (uuid-like), return it
+  if (/^[0-9a-fA-F\-]{8,36}$/.test(raw)) return raw;
+
+  // Fallback: return raw string
+  return raw;
+}
+
 // QR and Attendance Helper Functions
 async function recordAttendance(userId, action, ip) {
-  // Validate action sequence
-  const lastAttendance = await Attendance.findOne({ user_id: userId })
-    .sort({ timestamp: -1 });
-  
-  // Prevent duplicate actions
-  if (lastAttendance && lastAttendance.action === action) {
-    throw new Error(`Already ${action.replace('_', ' ')}ed`);
+  // New signature: recordAttendance(userId, action, req, { skipValidation })
+  // Backwards-compatible: if `ip` is a request object, treat accordingly
+  let reqObj = null;
+  if (ip && ip.headers) reqObj = ip;
+  const options = arguments[3] || {};
+  const skipValidation = options.skipValidation || false;
+  const remoteIp = (reqObj && (reqObj.ip || reqObj.connection?.remoteAddress)) || ip || '0.0.0.0';
+  const userAgent = reqObj?.headers?.['user-agent'] || '';
+
+  // Allowed actions extendable
+  const allowedActions = ['clock_in', 'clock_out', 'break_start', 'break_end', 'login'];
+  if (!allowedActions.includes(action)) {
+    throw new Error('Invalid attendance action');
   }
-  
+
+  // Validate sequence unless explicitly skipped (QR login should skip strict workflow)
+  if (!skipValidation) {
+    try { await validateBreakDuration(userId); } catch(e) { /* allow validation to surface below */ }
+    await validateScanSequence(userId, action).catch(err => {
+      // don't block hard — surface friendly message
+      throw new Error(err.message || 'Invalid attendance sequence');
+    });
+  }
+
+  // Prevent obvious duplicate spam (same action within 30s)
+  const lastAttendance = await Attendance.findOne({ user_id: userId }).sort({ timestamp: -1 });
+  if (lastAttendance && lastAttendance.action === action && (Date.now() - new Date(lastAttendance.timestamp).getTime() < 30 * 1000)) {
+    return { recorded: false, reason: 'duplicate' };
+  }
+
   // Create attendance record
   const attendance = new Attendance({
     user_id: userId,
     action: action,
     timestamp: new Date(),
-    ip_address: ip
+    ip_address: remoteIp,
+    notes: options.notes || ''
   });
   await attendance.save();
-  
+
   // Create time log
-  const timeLog = new TimeLog({
-    user_id: userId,
-    action: action,
-    time: new Date()
-  });
+  const timeLog = new TimeLog({ user_id: userId, action: action, time: new Date() });
   await timeLog.save();
-  
+
   // Calculate hours if clock out
   if (action === 'clock_out') {
-    await calculateWorkHours(userId);
+    try { await calculateWorkHours(userId); } catch (e) { logger.warn('calculateWorkHours failed', e.message); }
   }
-  
-  return { recorded: true, action: action, timestamp: attendance.timestamp };
+
+  // Create audit log entry
+  try {
+    await AuditLog.create({
+      user_id: userId,
+      action: `attendance_${action}`,
+      resource: 'attendance',
+      resource_id: String(attendance._id),
+      details: { action, notes: attendance.notes },
+      ip_address: remoteIp,
+      user_agent: userAgent
+    });
+  } catch (auditErr) {
+    logger.warn('Failed to create audit log for attendance:', auditErr && auditErr.message ? auditErr.message : auditErr);
+  }
+
+  return { recorded: true, action: action, timestamp: attendance.timestamp, attendanceId: attendance._id };
+}
+
+// Expose helper on the Express app so other modules can reuse the same logic
+try {
+  if (app && typeof app === 'function') {
+    app.recordAttendance = recordAttendance;
+  }
+} catch (e) {
+  logger.warn('Could not attach recordAttendance to app:', e && e.message ? e.message : e);
 }
 
 async function calculateWorkHours(userId) {
@@ -692,6 +803,16 @@ async function sendQRCodeEmail(email, name, qrData) {
 // ===============================================
 
 async function initializeDatabase() {
+  if (!isConnected() && MONGODB_URI) {
+    try {
+      logger.info('🔗 Connecting to MongoDB...');
+      await mongoose.connect(MONGODB_URI, connectionOptions);
+      logger.info('✅ MongoDB connection established');
+    } catch (err) {
+      logger.error('✗ Failed to connect to MongoDB:', err.message);
+    }
+  }
+
   // Wait for connection to be ready
   const maxAttempts = 10;
   let attempts = 0;
@@ -933,10 +1054,43 @@ app.post('/api/signup', async (req, res) => {
     });
     
     await user.save();
+
+    // Generate QR code for the new user as an auto-login URL (more phone-friendly)
+    const qrToken = uuidv4();
+    const baseUrl = req.protocol + '://' + req.get('host');
+    const autoUrl = `${baseUrl}/qr/auto/${qrToken}`;
+    const qrData = await QR.toDataURL(autoUrl, {
+      errorCorrectionLevel: 'H',
+      type: 'image/png',
+      width: 400,
+      margin: 4
+    });
+
+    const qrCode = new QRCode({
+      user_id: user._id,
+      qr_token: qrToken,
+      qr_data: qrData,
+      generated_at: new Date(),
+      expires_at: new Date(Date.now() + 90 * 24 * 60 * 60 * 1000)
+    });
+
+    await qrCode.save();
+
+    user.qr_token = qrToken;
+    user.qr_code_data = qrData;
+    user.qr_created_at = new Date();
+    user.qr_expires_at = qrCode.expires_at;
+    await user.save();
     
     logger.info(`✅ New user registered: ${email} (${role || 'worker'})`);
     
-    res.json({ ok: true, userId: user._id });
+    res.json({
+      ok: true,
+      userId: user._id,
+      qrToken,
+      qrData,
+      expiresAt: qrCode.expires_at
+    });
   } catch (err) {
     logger.error('Signup error:', err);
     res.status(500).json({ ok: false, error: err.message });
@@ -1007,6 +1161,36 @@ app.post('/api/login', async (req, res) => {
     
     logger.info(`✅ Login successful for: ${email} (${user.role})`);
     
+    // Create session record for login
+    try {
+      await Session.create({
+        user_id: user._id,
+        token: token,
+        login_method: 'password',
+        login_time: new Date(),
+        last_activity: new Date(),
+        ip_address: req.ip || req.connection?.remoteAddress,
+        user_agent: req.headers['user-agent']
+      });
+    } catch (sessErr) {
+      logger.warn('Failed to create session record for login:', sessErr && sessErr.message ? sessErr.message : sessErr);
+    }
+
+    // Audit login
+    try {
+      await AuditLog.create({
+        user_id: user._id,
+        action: 'login',
+        resource: 'user',
+        resource_id: String(user._id),
+        details: { method: 'password' },
+        ip_address: req.ip || req.connection?.remoteAddress,
+        user_agent: req.headers['user-agent']
+      });
+    } catch (auditErr) {
+      logger.warn('Failed to create audit log for login:', auditErr && auditErr.message ? auditErr.message : auditErr);
+    }
+
     res.json({ 
       ok: true, 
       user: {
@@ -1409,7 +1593,7 @@ app.get('/api/admin/report/pdf', authenticateToken, requireAdmin, async (req, re
     doc.fontSize(16).font('Helvetica-Bold').text('Executive Summary');
     doc.moveDown();
     doc.fontSize(12).font('Helvetica').text(`Total Users: ${users.length}`);
-    doc.text(`Active Tasks: ${tasks.filter(t => t.status === 'pending' || t.status === 'in_progress').length}`);
+    doc.text(`Active Tasks: ${tasks.filter(t => t.status === 'pending' || t.status === 'in-progress').length}`);
     doc.text(`Completed Tasks: ${tasks.filter(t => t.status === 'completed').length}`);
     doc.text(`Total Attendance Records: ${attendance.length}`);
     doc.text(`QR Scans: ${qrScans.length}`);
@@ -1452,6 +1636,33 @@ app.get('/api/admin/report/pdf', authenticateToken, requireAdmin, async (req, re
         doc.fontSize(12).text(`• ${user}: ${count} records`);
       });
       doc.moveDown(2);
+    }
+
+    // Per-employee detailed breakdown (tasks, completion rate, attendance, performance)
+    try {
+      const perfDocs = await Performance.find({ user_id: { $in: users.map(u => u._id) } }).lean();
+      const perfMap = perfDocs.reduce((m, p) => { m[String(p.user_id)] = p; return m; }, {});
+
+      doc.fontSize(16).font('Helvetica-Bold').text('Per-Employee Details');
+      doc.moveDown();
+
+      for (const u of users) {
+        const uid = String(u._id);
+        const userTasks = tasks.filter(t => String(t.assigned_to?._id || t.assigned_to) === uid);
+        const assignedCount = userTasks.length;
+        const completedCount = userTasks.filter(t => (t.status === 'completed' || t.approval_status === 'approved')).length;
+        const completionRate = assignedCount ? Math.round((completedCount / assignedCount) * 100) : 0;
+        const userAttendance = attendance.filter(a => String(a.user_id?._id || a.user_id) === uid);
+        const attendanceCount = userAttendance.length;
+        const perf = perfMap[uid] || {};
+
+        doc.fontSize(12).font('Helvetica-Bold').text(`${u.name} (${u.email})`);
+        doc.fontSize(11).font('Helvetica').text(` - Role: ${u.role} | Tasks assigned: ${assignedCount} | Completed: ${completedCount} | Completion rate: ${completionRate}% | Attendance records: ${attendanceCount} | Hours worked (perf): ${perf.total_hours_worked || 0}`);
+        doc.moveDown(0.5);
+      }
+      doc.moveDown(1);
+    } catch (e) {
+      logger.warn('Failed to include per-employee details in PDF:', e && e.message ? e.message : e);
     }
 
     // QR Scan Activity
@@ -1633,7 +1844,7 @@ app.get('/api/admin/report/excel', authenticateToken, requireAdmin, async (req, 
       { metric: 'Total Tasks', value: tasks.length },
       { metric: 'Completed Tasks', value: tasks.filter(t => t.status === 'completed').length },
       { metric: 'Pending Tasks', value: tasks.filter(t => t.status === 'pending').length },
-      { metric: 'In Progress Tasks', value: tasks.filter(t => t.status === 'in_progress').length },
+      { metric: 'In Progress Tasks', value: tasks.filter(t => t.status === 'in-progress').length },
       { metric: 'Total Attendance Records', value: attendance.length },
       { metric: 'Total QR Scans', value: qrScans.length }
     ];
@@ -1641,6 +1852,49 @@ app.get('/api/admin/report/excel', authenticateToken, requireAdmin, async (req, 
     summaryData.forEach(item => {
       summarySheet.addRow(item);
     });
+
+    // Per-Employee Details Sheet
+    try {
+      const perUserSheet = workbook.addWorksheet('PerEmployee');
+      perUserSheet.columns = [
+        { header: 'Name', key: 'name', width: 25 },
+        { header: 'Email', key: 'email', width: 30 },
+        { header: 'Role', key: 'role', width: 15 },
+        { header: 'Tasks Assigned', key: 'assigned', width: 15 },
+        { header: 'Tasks Completed', key: 'completed', width: 15 },
+        { header: 'Completion Rate (%)', key: 'rate', width: 18 },
+        { header: 'Attendance Records', key: 'attendance', width: 18 },
+        { header: 'Hours Worked', key: 'hours', width: 15 }
+      ];
+      perUserSheet.getRow(1).font = { bold: true };
+
+      // Map performance docs for fast lookup
+      const perfDocs = await Performance.find({ user_id: { $in: users.map(u => u._id) } }).lean();
+      const perfMap = perfDocs.reduce((m, p) => { m[String(p.user_id)] = p; return m; }, {});
+
+      users.forEach(u => {
+        const uid = String(u._id);
+        const userTasks = tasks.filter(t => String(t.assigned_to?._id || t.assigned_to) === uid);
+        const assignedCount = userTasks.length;
+        const completedCount = userTasks.filter(t => (t.status === 'completed' || t.approval_status === 'approved')).length;
+        const rate = assignedCount ? Math.round((completedCount / assignedCount) * 100) : 0;
+        const attendanceCount = attendance.filter(a => String(a.user_id?._id || a.user_id) === uid).length;
+        const perf = perfMap[uid] || {};
+
+        perUserSheet.addRow({
+          name: u.name,
+          email: u.email,
+          role: u.role,
+          assigned: assignedCount,
+          completed: completedCount,
+          rate: rate,
+          attendance: attendanceCount,
+          hours: perf.total_hours_worked || 0
+        });
+      });
+    } catch (e) {
+      logger.warn('Failed to add per-employee Excel sheet:', e && e.message ? e.message : e);
+    }
 
     // Set response headers
     res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
@@ -1653,6 +1907,51 @@ app.get('/api/admin/report/excel', authenticateToken, requireAdmin, async (req, 
   } catch (err) {
     logger.error('Excel Report generation error:', err);
     res.status(500).json({ ok: false, error: 'Failed to generate Excel report' });
+  }
+});
+
+// Generate CSV Report (per-employee summary)
+app.get('/api/admin/report/csv', authenticateToken, requireAdmin, async (req, res) => {
+  try {
+    const { startDate, endDate } = req.query;
+    let start, end;
+    if (startDate && endDate) {
+      start = new Date(startDate);
+      end = new Date(endDate);
+      end.setHours(23,59,59,999);
+    } else {
+      const r = getWeekRange(); start = r.start; end = r.end;
+    }
+
+    const [users, tasks, attendance] = await Promise.all([
+      User.find({}).select('-password').lean(),
+      Task.find({ created_at: { $gte: start, $lte: end } }).populate('assigned_to', 'name email').lean(),
+      Attendance.find({ timestamp: { $gte: start, $lte: end } }).lean()
+    ]);
+
+    const perfDocs = await Performance.find({ user_id: { $in: users.map(u => u._id) } }).lean();
+    const perfMap = perfDocs.reduce((m, p) => { m[String(p.user_id)] = p; return m; }, {});
+
+    let csv = 'Employee Name,Email,Role,Tasks Assigned,Tasks Completed,Completion Rate (%),Attendance Records,Hours Worked\n';
+
+    users.forEach(u => {
+      const uid = String(u._id);
+      const userTasks = tasks.filter(t => String(t.assigned_to?._id || t.assigned_to) === uid);
+      const assignedCount = userTasks.length;
+      const completedCount = userTasks.filter(t => (t.status === 'completed' || t.approval_status === 'approved')).length;
+      const rate = assignedCount ? Math.round((completedCount / assignedCount) * 100) : 0;
+      const attendanceCount = attendance.filter(a => String(a.user_id) === uid).length;
+      const perf = perfMap[uid] || {};
+
+      csv += `"${u.name}","${u.email}","${u.role}",${assignedCount},${completedCount},${rate},${attendanceCount},${perf.total_hours_worked || 0}\n`;
+    });
+
+    res.setHeader('Content-Type', 'text/csv');
+    res.setHeader('Content-Disposition', `attachment; filename="wfms-report-${new Date().toISOString().split('T')[0]}.csv"`);
+    res.send(csv);
+  } catch (err) {
+    logger.error('CSV report generation error:', err);
+    res.status(500).json({ ok: false, error: 'Failed to generate CSV report' });
   }
 });
 
@@ -1801,63 +2100,78 @@ app.post('/api/verify-qr-token', async (req, res) => {
 // QR-based login
 app.post('/api/qr-login', async (req, res) => {
     try {
+        // Accept either { userId, qrToken } or { token } where token is the qr_token
         const { userId, qrToken } = req.body;
-        
-        // Validate input
-        if (!userId || !qrToken) {
-            return res.status(400).json({ ok: false, error: 'userId and qrToken are required' });
+        const tokenFromBody = req.body.token || qrToken;
+
+        const token = tokenFromBody;
+        if (!token) {
+            return res.status(400).json({ ok: false, error: 'qrToken required' });
         }
-        
-        if (!mongoose.Types.ObjectId.isValid(userId)) {
-            return res.status(400).json({ ok: false, error: 'Invalid userId format' });
-        }
-        
-        const user = await User.findById(userId);
-        if (!user) {
-            return res.status(404).json({ ok: false, error: 'User not found' });
-        }
-        
-        const qrCode = await QRCode.findOne({ 
-            user_id: userId, 
-            qr_token: qrToken 
-        });
-        
+
+        // Find QR record and associated user
+        const qrCode = await QRCode.findOne({ qr_token: token }).populate('user_id');
         if (!qrCode) {
             return res.status(401).json({ ok: false, error: 'Invalid QR code' });
         }
-        
+
+        const user = qrCode.user_id || (userId ? await User.findById(userId) : null);
+        if (!user) return res.status(404).json({ ok: false, error: 'User not found' });
+
         // Log this login
         const scanIp = req.ip || req.connection.remoteAddress || '0.0.0.0';
-        
+
         const scan = new QRScan({
-            user_id: userId,
-            qr_token: qrToken,
+            user_id: user._id,
+            qr_token: token,
             scanned_at: new Date(),
             scanner_ip: scanIp,
-            action: 'qr_login'
+              action: 'login'
         });
         await scan.save();
-        
+
         // Update scan count
         qrCode.scan_count += 1;
         await qrCode.save();
-        
+
+        // Record attendance for QR login (best-effort)
+        try {
+          await recordAttendance(user._id, 'login', req, { skipValidation: true, notes: 'QR auto-login' });
+        } catch (recErr) {
+          logger.warn('Failed to record attendance for qr-login:', recErr && recErr.message ? recErr.message : recErr);
+        }
+
         // Generate JWT token
-        const token = jwt.sign(
+        const jwtToken = jwt.sign(
             { id: user._id, name: user.name, email: user.email, role: user.role },
             JWT_SECRET,
             { expiresIn: '7d' }
         );
-        
+
         const refreshToken = jwt.sign(
             { id: user._id },
             JWT_SECRET,
             { expiresIn: '30d' }
         );
-        
+
+        // Create session record
+        try {
+          await Session.create({
+            user_id: user._id,
+            token: jwtToken,
+            login_method: 'qr',
+            login_time: new Date(),
+            last_activity: new Date(),
+            ip_address: scanIp,
+            user_agent: req.headers['user-agent']
+          });
+        } catch (sessErr) {
+          logger.warn('Failed to create session for qr-login:', sessErr && sessErr.message ? sessErr.message : sessErr);
+        }
+
         res.json({
             ok: true,
-            token,
+            token: jwtToken,
             refreshToken,
             expiresIn: 604800,
             user: {
@@ -1867,11 +2181,60 @@ app.post('/api/qr-login', async (req, res) => {
                 role: user.role
             }
         });
-        
+
     } catch (err) {
         logger.error('QR login error:', err);
         res.status(500).json({ ok: false, error: err.message });
     }
+});
+
+// Public auto-login URL for camera-friendly QR codes.
+// If FRONTEND_URL is set the route redirects there with token as query param.
+app.get('/qr/auto/:token', async (req, res) => {
+  try {
+    const { token } = req.params;
+    if (!token) return res.status(400).send('Token required');
+
+    const qrCode = await QRCode.findOne({ qr_token: token }).populate('user_id');
+
+    // If frontend URL configured, redirect to front-end to handle token exchange
+    const frontend = process.env.FRONTEND_URL;
+    if (frontend) {
+      const url = frontend.replace(/\/$/, '') + '/qr-login?token=' + encodeURIComponent(token);
+      return res.redirect(url);
+    }
+
+    // Otherwise render a minimal page that POSTs token to /api/qr-login
+    const userId = qrCode && qrCode.user_id ? String(qrCode.user_id._id || qrCode.user_id) : '';
+    const html = `<!doctype html><html><head><meta charset="utf-8"><title>WFMS QR</title></head><body>
+      <h3>WFMS QR Auto Login</h3>
+      <p>If your browser doesn't redirect automatically, click the button below.</p>
+      <button id="btn">Login</button>
+      <script>
+        async function doLogin(){
+          try{
+            const resp = await fetch('/api/qr-login', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ token: '${token}' ${userId ? ", userId: '${userId}'" : ''} }) });
+            const j = await resp.json();
+            if (j && j.ok){
+              // Try to store token and redirect to root
+              try{ localStorage.setItem('token', j.token); }catch(e){}
+              window.location.href = '/';
+            } else {
+              document.body.innerHTML += '<p>Login failed: '+(j && j.error ? j.error : 'unknown')+'</p>';
+            }
+          }catch(e){ document.body.innerHTML += '<p>Error: '+e+'</p>'; }
+        }
+        document.getElementById('btn').addEventListener('click', doLogin);
+        // Attempt automatically
+        setTimeout(doLogin, 250);
+      </script>
+    </body></html>`;
+
+    res.send(html);
+  } catch (err) {
+    logger.error('qr auto error', err);
+    res.status(500).send('Server error');
+  }
 });
 
 // QR generation rate limiter
@@ -1882,7 +2245,7 @@ const qrGenerationLimiter = rateLimit({
 });
 
 // Unified QR generation
-app.post('/api/qr/generate', async (req, res) => {
+app.post('/api/qr/generate', qrGenerationLimiter, async (req, res) => {
   try {
     const { userId, email, name } = req.body;
 
@@ -1911,19 +2274,13 @@ app.post('/api/qr/generate', async (req, res) => {
     }
 
     const qrToken = uuidv4();
-    const qrPayload = JSON.stringify({
-      userId,
-      email: email || user.email,
-      name: name || user.name,
-      token: qrToken,
-      timestamp: new Date().toISOString()
-    });
-
-    const qrData = await QR.toDataURL(qrPayload, {
+    const baseUrl = req.protocol + '://' + req.get('host');
+    const autoUrl = `${baseUrl}/qr/auto/${qrToken}`;
+    const qrData = await QR.toDataURL(autoUrl, {
       errorCorrectionLevel: 'H',
       type: 'image/png',
-      width: 300,
-      margin: 2
+      width: 400,
+      margin: 4
     });
 
     const qrCode = new QRCode({
@@ -1952,15 +2309,19 @@ app.post('/api/qr/generate', async (req, res) => {
 app.post('/api/qr/scan', async (req, res) => {
   try {
     const { qrToken, action, timestamp } = req.body;
-    
-    console.log('📱 QR Scan request:', { qrToken, action, timestamp });
-    
-    if (!qrToken) {
+    const scanned = req.body.scanned || req.body.scannedText || req.body.data || req.body.payload;
+    console.log('📱 QR Scan request:', { qrToken, scanned, action, timestamp });
+
+    // Accept either explicit qrToken or a scanned raw payload (URL, JSON, or token)
+    let token = qrToken;
+    if (!token && scanned) token = parseScannedToken(scanned);
+
+    if (!token) {
       return res.status(400).json({ ok: false, error: 'QR token required' });
     }
-    
+
     // Find the QR code in database
-    const qrCode = await QRCode.findOne({ qr_token: qrToken }).populate('user_id');
+    const qrCode = await QRCode.findOne({ qr_token: token }).populate('user_id');
     
     if (!qrCode) {
       return res.status(404).json({ ok: false, error: 'Invalid QR code' });
@@ -1982,10 +2343,10 @@ app.post('/api/qr/scan', async (req, res) => {
     
     const scan = new QRScan({
       user_id: user._id,
-      qr_token: qrToken,
+      qr_token: token,
       scanned_at: new Date(),
       scanner_ip: scanIp,
-      action: action || 'verification'
+      action: action || 'login'  // Default to login for auto-signin
     });
     await scan.save();
     
@@ -1998,85 +2359,60 @@ app.post('/api/qr/scan', async (req, res) => {
     qrCode.last_scan_at = new Date();
     await qrCode.save();
     
-    // Handle different actions
-    if (action === 'login') {
-      // Generate JWT token for login
-      const token = jwt.sign(
-        { 
-          id: user._id, 
-          role: user.role, 
-          name: user.name, 
-          email: user.email 
-        },
-        JWT_SECRET,
-        { expiresIn: '7d' }
-      );
-      
-      const refreshToken = jwt.sign(
-        { id: user._id },
-        JWT_SECRET,
-        { expiresIn: '30d' }
-      );
-      
-      return res.json({
-        ok: true,
-        message: 'QR login successful',
-        token: token,
-        refreshToken: refreshToken,
-        userId: user._id,
-        userName: user.name,
-        userEmail: user.email,
-        userRole: user.role,
-        expiresIn: 604800,
-        scanCount: qrCode.scan_count
-      });
-      
-    } else if (['clock_in', 'clock_out', 'break_start', 'break_end'].includes(action)) {
-      // Handle attendance actions
-      const attendance = new Attendance({
-        user_id: user._id,
-        action: action,
-        timestamp: new Date(),
-        ip_address: scanIp,
-        notes: `QR ${action}`
-      });
-      await attendance.save();
-      
-      // Also create time log
-      const timeLog = new TimeLog({
-        user_id: user._id,
-        action: action,
-        time: new Date()
-      });
-      await timeLog.save();
-      
-      return res.json({
-        ok: true,
-        message: `${action.replace('_', ' ')} recorded successfully`,
-        action: action,
-        timestamp: new Date().toISOString(),
-        scanCount: qrCode.scan_count
-      });
-      
-    } else {
-      // Just verification
-      return res.json({
-        ok: true,
-        message: 'QR code verified',
-        userId: user._id,
-        userName: user.name,
-        userEmail: user.email,
-        userRole: user.role,
-        scanCount: qrCode.scan_count,
-        scanTime: scan.scanned_at
-      });
+    // **ENHANCED: ALWAYS GENERATE JWT FOR AUTO-LOGIN**
+    const jwtToken = jwt.sign({
+      id: user._id, 
+      role: user.role, 
+      name: user.name, 
+      email: user.email 
+    }, JWT_SECRET, { expiresIn: '7d' });
+    
+    const refreshToken = jwt.sign({ id: user._id }, JWT_SECRET, { expiresIn: '30d' });
+    
+    // **ALWAYS RECORD LOGIN ATTENDANCE FOR QR SCAN**
+    try {
+      await recordAttendance(user._id, 'login', req, { skipValidation: true, notes: 'QR auto-login' });
+    } catch (e) {
+      logger.warn('QR login attendance record failed:', e.message);
     }
+
+    // Create session
+    try {
+      await Session.create({
+        user_id: user._id,
+        token: jwtToken,
+        login_method: 'qr_scan',
+        login_time: new Date(),
+        ip_address: scanIp,
+        user_agent: req.headers['user-agent']
+      });
+    } catch (sessErr) {
+      logger.warn('QR session creation failed:', sessErr.message);
+    }
+
+    // **SUCCESS: RETURN TOKEN FOR AUTO-LOGIN**
+    res.json({
+      ok: true,
+      message: `QR login successful for ${user.name}`,
+      token: jwtToken,
+      refreshToken: refreshToken,
+      expiresIn: 604800,
+      user: {
+        id: user._id,
+        name: user.name,
+        email: user.email,
+        role: user.role
+      },
+      scanCount: qrCode.scan_count,
+      actionResult: action || 'login'
+    });
     
   } catch (err) {
     console.error('QR scan error:', err);
     res.status(500).json({ ok: false, error: err.message });
   }
 });
+
 // Unified QR scan/verify
 app.post('/api/qr/verify', async (req, res) => {
   try {
@@ -2202,8 +2538,8 @@ app.get('/api/qr/my-qr', authenticateToken, async (req, res) => {
       
       const qrData = await QR.toDataURL(payload, {
         errorCorrectionLevel: 'H',
-        width: 300,
-        margin: 2
+        width: 400,
+        margin: 4
       });
       
       if (qrCode) {
@@ -2328,8 +2664,8 @@ app.post('/api/admin/qr/bulk-generate', authenticateToken, requireAdmin, async (
         
         const qrData = await QR.toDataURL(JSON.stringify(payload), {
           errorCorrectionLevel: 'H',
-          width: 300,
-          margin: 2
+          width: 400,
+          margin: 4
         });
         
         qrCode = new QRCode({
@@ -2685,20 +3021,27 @@ app.get('/api/tasks', authenticateToken, async (req, res) => {
     const limit = Math.min(parseInt(req.query.limit, 10) || 50, 100);
     const skip = (page - 1) * limit;
 
+    // Non-admin users should only see tasks assigned to them
+    const query = {};
+    if (!req.user || req.user.role !== 'admin') {
+      query.assigned_to = req.user ? req.user.id : null;
+    }
+
     const [tasks, total] = await Promise.all([
-      Task.find()
-        .select('title description status assigned_to approval_status hours_spent created_at')
+      Task.find(query)
+        .select('title description status assigned_to approval_status hours_spent created_at submitted_by')
         .populate('assigned_to', 'name email')
         .populate('submitted_by', 'name email')
         .sort({ created_at: -1 })
         .skip(skip)
         .limit(limit)
         .lean(),
-      Task.countDocuments()
+      Task.countDocuments(query)
     ]);
 
     res.json({
       ok: true,
+      tasks,
       data: tasks,
       pagination: {
         page,
@@ -2715,7 +3058,7 @@ app.get('/api/tasks', authenticateToken, async (req, res) => {
 // Add task with notification
 app.post('/api/tasks', authenticateToken, requireAdmin, validateTask, async (req, res) => {
   try {
-    const { title, description, assigned_to, priority, category, tags } = req.body;
+    const { title, description, assigned_to, priority, category, tags, due_date } = req.body;
 
     const task = new Task({
       title,
@@ -2723,7 +3066,8 @@ app.post('/api/tasks', authenticateToken, requireAdmin, validateTask, async (req
       assigned_to,
       priority: priority || 'medium',
       category: category || 'General',
-      tags: tags || [],
+      tags: Array.isArray(tags) ? tags : String(tags || '').split(',').map(tag => tag.trim()).filter(Boolean),
+      due_date: due_date ? new Date(due_date) : undefined,
       status: 'pending',
       created_at: new Date()
     });
@@ -2763,33 +3107,40 @@ app.post('/api/tasks', authenticateToken, requireAdmin, validateTask, async (req
   }
 });
 
-// Update task status
-app.put('/api/tasks/:id', async (req, res) => {
+// Update task status (admins or assigned user)
+app.put('/api/tasks/:id', authenticateToken, async (req, res) => {
   try {
     const { id } = req.params;
     const { status } = req.body;
-    
+
     if (!mongoose.Types.ObjectId.isValid(id)) {
       return res.status(400).json({ ok: false, error: 'Invalid task ID format' });
     }
-    
-    const task = await Task.findByIdAndUpdate(id, { status }, { new: true })
-      .populate('assigned_to', 'name email');
-    
-    if (!task) {
-      return res.status(404).json({ ok: false, error: 'Task not found' });
+
+    const task = await Task.findById(id).populate('assigned_to', 'name email');
+    if (!task) return res.status(404).json({ ok: false, error: 'Task not found' });
+
+    // Only admin or the assigned user can update the task status
+    const requesterId = req.user && req.user.id ? String(req.user.id) : null;
+    const assignedId = task.assigned_to ? String(task.assigned_to._id || task.assigned_to) : null;
+    if (req.user.role !== 'admin' && assignedId !== requesterId) {
+      return res.status(403).json({ ok: false, error: 'Not authorized to update this task' });
     }
-    
+
+    task.status = status;
+    task.updated_at = new Date();
+    await task.save();
+
     // Notify assigned user about status change
-    if (task && task.assigned_to && connectedUsers[task.assigned_to._id.toString()]) {
-      io.to(connectedUsers[task.assigned_to._id.toString()]).emit('notification', {
+    if (task && task.assigned_to && connectedUsers[String(task.assigned_to._id || task.assigned_to)]) {
+      io.to(connectedUsers[String(task.assigned_to._id || task.assigned_to)]).emit('notification', {
         type: 'task_updated',
         message: `Task "${task.title}" status updated to: ${status}`,
         taskId: task._id,
         timestamp: new Date().toISOString()
       });
     }
-    
+
     res.json({ ok: true, task });
   } catch (err) {
     logger.error(err);
@@ -2961,33 +3312,29 @@ app.get('/api/tasks/:taskId/comments', authenticateToken, async (req, res) => {
   }
 });
 
-// Submit task report
-// Submit task report - FIXED VERSION
-app.post('/api/tasks/:id/submit-report', async (req, res) => {
+// Submit task report - authenticated version
+app.post('/api/tasks/:id/submit-report', authenticateToken, async (req, res) => {
   try {
     const { id } = req.params;
-    const { daily_report, status, hours_spent, submitted_by } = req.body;
-    
+    const { daily_report, status, hours_spent } = req.body;
+    const submitted_by = req.user.id;
+
     logger.info(`📝 Task report submission for task ${id} by user ${submitted_by}`);
-    
+
     if (!mongoose.Types.ObjectId.isValid(id)) {
       return res.status(400).json({ ok: false, error: 'Invalid task ID format' });
-    }
-    
-    if (!mongoose.Types.ObjectId.isValid(submitted_by)) {
-      return res.status(400).json({ ok: false, error: 'Invalid user ID format' });
     }
 
     const task = await Task.findById(id);
     if (!task) {
       return res.status(404).json({ ok: false, error: 'Task not found' });
     }
-    
-    // Verify the user is assigned to this task
-    if (task.assigned_to.toString() !== submitted_by) {
+
+    // Verify the requester is assigned to this task
+    if (String(task.assigned_to) !== String(submitted_by) && req.user.role !== 'admin') {
       return res.status(403).json({ ok: false, error: 'You are not assigned to this task' });
     }
-    
+
     const employee = await User.findById(submitted_by);
     const adminUsers = await User.find({ role: 'admin' });
 
@@ -2998,53 +3345,32 @@ app.post('/api/tasks/:id/submit-report', async (req, res) => {
     task.submitted_by = submitted_by;
     task.submitted_at = new Date();
     task.approval_status = 'pending';
-    
+
     await task.save();
-    
     await task.populate('submitted_by', 'name email');
 
     // Update performance metrics
     let performance = await Performance.findOne({ user_id: submitted_by });
-    
-    const completedTasks = await Task.countDocuments({ 
-      assigned_to: submitted_by, 
-      approval_status: 'approved' 
-    });
-    
-    const assignedTasks = await Task.countDocuments({ 
-      assigned_to: submitted_by 
-    });
-    
-    const pendingTasks = await Task.countDocuments({
-      assigned_to: submitted_by,
-      approval_status: 'pending',
-      submitted_by: { $exists: true }
-    });
-    
-    const inProgressTasks = await Task.countDocuments({
-      assigned_to: submitted_by,
-      status: 'in-progress',
-      submitted_by: { $exists: false }
-    });
-    
-    const completionRate = assignedTasks > 0 
-      ? (completedTasks / assignedTasks) * 100 
-      : 0;
+
+    const completedTasks = await Task.countDocuments({ assigned_to: submitted_by, approval_status: 'approved' });
+    const assignedTasks = await Task.countDocuments({ assigned_to: submitted_by });
+    const pendingTasks = await Task.countDocuments({ assigned_to: submitted_by, approval_status: 'pending', submitted_by: { $exists: true } });
+    const inProgressTasks = await Task.countDocuments({ assigned_to: submitted_by, status: 'in-progress' });
+    const completionRate = assignedTasks > 0 ? (completedTasks / assignedTasks) * 100 : 0;
 
     if (performance) {
       performance.tasks_completed = completedTasks;
       performance.tasks_assigned = assignedTasks;
-      performance.total_hours_worked = (performance.total_hours_worked || 0) + hours_spent;
+      performance.total_hours_worked = (performance.total_hours_worked || 0) + (hours_spent || 0);
       performance.completion_rate = completionRate;
       performance.last_updated = new Date();
-      
       await performance.save();
     } else {
       performance = new Performance({
         user_id: submitted_by,
         tasks_completed: completedTasks,
         tasks_assigned: assignedTasks,
-        total_hours_worked: hours_spent,
+        total_hours_worked: hours_spent || 0,
         completion_rate: completionRate,
         tasks_in_progress: inProgressTasks,
         tasks_pending: pendingTasks
@@ -3113,7 +3439,7 @@ app.post('/api/tasks/:id/upload', upload.single('attachment'), async (req, res) 
 });
 
 // Admin approval endpoint with notification
-app.post('/api/tasks/:id/approve', async (req, res) => {
+app.post('/api/tasks/:id/approve', authenticateToken, requireAdmin, async (req, res) => {
   try {
     const { id } = req.params;
     const { feedback } = req.body;
@@ -3195,7 +3521,7 @@ app.post('/api/tasks/:id/approve', async (req, res) => {
 });
 
 // Admin rejection endpoint with notification
-app.post('/api/tasks/:id/reject', async (req, res) => {
+app.post('/api/tasks/:id/reject', authenticateToken, requireAdmin, async (req, res) => {
   try {
     const { id } = req.params;
     const { feedback } = req.body;
@@ -3605,6 +3931,197 @@ app.get('/api/teams/:teamId/tasks', authenticateToken, async (req, res) => {
   }
 });
 
+// Assign or change team leader
+app.post('/api/teams/:teamId/assign-leader', authenticateToken, requireAdmin, async (req, res) => {
+  try {
+    const { teamId } = req.params;
+    const { leaderId } = req.body;
+
+    if (!mongoose.Types.ObjectId.isValid(teamId) || !mongoose.Types.ObjectId.isValid(leaderId)) {
+      return res.status(400).json({ ok: false, error: 'Invalid ID format' });
+    }
+
+    const team = await Team.findById(teamId);
+    if (!team) return res.status(404).json({ ok: false, error: 'Team not found' });
+
+    // Ensure leader is a member; if not, add them
+    if (!team.members.map(String).includes(String(leaderId))) {
+      team.members.push(leaderId);
+    }
+
+    team.team_lead = leaderId;
+    await team.save();
+
+    // Notify new leader
+    if (connectedUsers[leaderId]) {
+      io.to(connectedUsers[leaderId]).emit('notification', {
+        type: 'team_lead_assigned',
+        message: `You have been assigned team lead for ${team.name}`,
+        teamId: team._id,
+        teamName: team.name,
+        timestamp: new Date().toISOString()
+      });
+    }
+
+    // Notify admins
+    broadcastToAdmins({ type: 'team_leader_assigned', message: `User ${leaderId} assigned as leader for team ${team.name}`, teamId: team._id });
+
+    res.json({ ok: true, team });
+  } catch (err) {
+    logger.error('Error assigning team leader:', err);
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
+// Leader submits a team report (weekly/monthly)
+app.post('/api/teams/:teamId/reports', authenticateToken, async (req, res) => {
+  try {
+    const { teamId } = req.params;
+    const { period_start, period_end, content, attachments } = req.body;
+
+    if (!mongoose.Types.ObjectId.isValid(teamId)) return res.status(400).json({ ok: false, error: 'Invalid team ID' });
+
+    const team = await Team.findById(teamId);
+    if (!team) return res.status(404).json({ ok: false, error: 'Team not found' });
+
+    // Only team lead or admin may submit
+    const userId = req.user?.id;
+    if (String(team.team_lead) !== String(userId) && req.user.role !== 'admin') {
+      return res.status(403).json({ ok: false, error: 'Only the team lead may submit reports' });
+    }
+
+    const report = await TeamReport.create({
+      team_id: team._id,
+      leader_id: userId,
+      period_start: period_start ? new Date(period_start) : undefined,
+      period_end: period_end ? new Date(period_end) : undefined,
+      content: content || '',
+      attachments: attachments || []
+    });
+
+    // Notify admins for review
+    broadcastToAdmins({ type: 'team_report_submitted', message: `Team report submitted for ${team.name}`, teamId: team._id, reportId: report._id });
+
+    // Notify team members about submission
+    team.members.forEach(memberId => {
+      if (connectedUsers[memberId]) {
+        io.to(connectedUsers[memberId]).emit('notification', {
+          type: 'team_report',
+          message: `Team lead submitted a report for ${team.name}`,
+          teamId: team._id,
+          reportId: report._id,
+          timestamp: new Date().toISOString()
+        });
+      }
+    });
+
+    res.json({ ok: true, report });
+  } catch (err) {
+    logger.error('Error submitting team report:', err);
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
+// Get team reports (team lead or admin)
+app.get('/api/teams/:teamId/reports', authenticateToken, async (req, res) => {
+  try {
+    const { teamId } = req.params;
+    if (!mongoose.Types.ObjectId.isValid(teamId)) return res.status(400).json({ ok: false, error: 'Invalid team ID' });
+
+    const team = await Team.findById(teamId);
+    if (!team) return res.status(404).json({ ok: false, error: 'Team not found' });
+
+    if (String(team.team_lead) !== String(req.user?.id) && req.user.role !== 'admin') {
+      return res.status(403).json({ ok: false, error: 'Access denied' });
+    }
+
+    const reports = await TeamReport.find({ team_id: teamId }).sort({ submitted_at: -1 }).populate('leader_id', 'name email');
+    res.json({ ok: true, reports });
+  } catch (err) {
+    logger.error('Error fetching team reports:', err);
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
+// Admin approves/rejects a team report
+app.post('/api/teams/:teamId/reports/:reportId/approve', authenticateToken, requireAdmin, async (req, res) => {
+  try {
+    const { teamId, reportId } = req.params;
+    const { approve, comments } = req.body;
+
+    if (!mongoose.Types.ObjectId.isValid(teamId) || !mongoose.Types.ObjectId.isValid(reportId)) {
+      return res.status(400).json({ ok: false, error: 'Invalid ID format' });
+    }
+
+    const report = await TeamReport.findOne({ _id: reportId, team_id: teamId });
+    if (!report) return res.status(404).json({ ok: false, error: 'Report not found' });
+
+    report.status = approve ? 'approved' : 'rejected';
+    report.approved_at = approve ? new Date() : undefined;
+    report.approved_by = req.user.id;
+    await report.save();
+
+    // Audit entry
+    await AuditLog.create({ user_id: req.user.id, action: approve ? 'team_report_approved' : 'team_report_rejected', resource: 'team_report', resource_id: String(report._id), details: { comments }, ip_address: req.ip, user_agent: req.headers['user-agent'] });
+
+    // Notify leader and team members
+    const team = await Team.findById(teamId);
+    if (team && team.team_lead && connectedUsers[team.team_lead]) {
+      io.to(connectedUsers[team.team_lead]).emit('notification', { type: 'report_approval', message: `Your team report for ${team.name} was ${report.status}`, reportId: report._id, teamId: team._id });
+    }
+
+    team.members.forEach(memberId => {
+      if (connectedUsers[memberId]) {
+        io.to(connectedUsers[memberId]).emit('notification', { type: 'report_update', message: `Report for ${team.name} was ${report.status}`, reportId: report._id, teamId: team._id });
+      }
+    });
+
+    res.json({ ok: true, report });
+  } catch (err) {
+    logger.error('Error approving/rejecting report:', err);
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
+// Team-level performance aggregation (admin)
+app.get('/api/admin/performance/team/:teamId', authenticateToken, requireAdmin, async (req, res) => {
+  try {
+    const { teamId } = req.params;
+    if (!mongoose.Types.ObjectId.isValid(teamId)) return res.status(400).json({ ok: false, error: 'Invalid team ID' });
+
+    const team = await Team.findById(teamId).populate('members', 'name email');
+    if (!team) return res.status(404).json({ ok: false, error: 'Team not found' });
+
+    const members = team.members || [];
+    const aggregated = {
+      teamId: team._id,
+      teamName: team.name,
+      members: []
+    };
+
+    for (const m of members) {
+      const perf = await Performance.findOne({ user_id: m._id });
+      const tasks = await Task.find({ assigned_to: m._id });
+      const completed = tasks.filter(t => t.approval_status === 'approved').length;
+      const pending = tasks.filter(t => t.approval_status === 'pending').length;
+      aggregated.members.push({
+        userId: m._id,
+        name: m.name,
+        email: m.email,
+        tasks_assigned: tasks.length,
+        tasks_completed: completed,
+        tasks_pending: pending,
+        total_hours_worked: perf ? perf.total_hours_worked : 0
+      });
+    }
+
+    res.json({ ok: true, aggregated });
+  } catch (err) {
+    logger.error('Error fetching team performance:', err);
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
 // Get performance metrics for all employees
 app.get('/api/admin/performance-metrics', async (req, res) => {
   try {
@@ -3706,19 +4223,13 @@ app.post('/api/generate-user-qr', async (req, res) => {
     }
 
     const qrToken = uuidv4();
-    const qrPayload = JSON.stringify({
-      userId,
-      email,
-      name,
-      token: qrToken,
-      timestamp: new Date().toISOString()
-    });
-
-    const qrData = await QR.toDataURL(qrPayload, {
+    const baseUrl = req.protocol + '://' + req.get('host');
+    const autoUrl = `${baseUrl}/qr/auto/${qrToken}`;
+    const qrData = await QR.toDataURL(autoUrl, {
       errorCorrectionLevel: 'H',
       type: 'image/png',
-      width: 300,
-      margin: 2
+      width: 400,
+      margin: 4
     });
 
     const qrCode = new QRCode({
@@ -4002,15 +4513,14 @@ app.post('/api/time', async (req, res) => {
       return res.status(400).json({ ok: false, error: 'Invalid user_id format' });
     }
 
-    const timeLog = new TimeLog({
-      user_id,
-      action,
-      time: time || new Date()
-    });
-    
-    await timeLog.save();
-    
-    res.json({ ok: true, id: timeLog._id });
+    // Use centralized attendance recorder which also writes AuditLog and TimeLog
+    try {
+      const result = await recordAttendance(user_id, action, req, { skipValidation: false });
+      return res.json({ ok: true, recorded: result.recorded, action: action, timestamp: result.timestamp, attendanceId: result.attendanceId });
+    } catch (err) {
+      logger.warn('Attendance recording failed:', err && err.message ? err.message : err);
+      return res.status(400).json({ ok: false, error: err.message || 'Failed to record attendance' });
+    }
   } catch (err) {
     logger.error(err);
     res.status(500).json({ ok: false, error: err.message });
@@ -4036,6 +4546,125 @@ app.get('/api/time/:user_id', async (req, res) => {
   }
 });
 
+// Helper: get start/end of current week (Mon-Sun)
+function getWeekRange(date = new Date()) {
+  const now = new Date(date);
+  const day = now.getDay(); // 0 (Sun) - 6 (Sat)
+  const diffToMonday = (day === 0) ? -6 : (1 - day);
+  const monday = new Date(now);
+  monday.setDate(now.getDate() + diffToMonday);
+  monday.setHours(0,0,0,0);
+  const sunday = new Date(monday);
+  sunday.setDate(monday.getDate() + 6);
+  sunday.setHours(23,59,59,999);
+  return { start: monday, end: sunday };
+}
+
+// Current user's attendance summary for this week
+app.get('/api/attendance/summary/my-week', authenticateToken, async (req, res) => {
+  try {
+    const { start, end } = getWeekRange();
+    const userId = req.user.id;
+
+    const records = await Attendance.find({ user_id: userId, timestamp: { $gte: start, $lte: end } }).lean();
+
+    const presentActions = ['clock_in', 'login', 'clock_out'];
+
+    // Build days array
+    const days = [];
+    for (let i = 0; i < 7; i++) {
+      const d = new Date(start);
+      d.setDate(start.getDate() + i);
+      const dayStart = new Date(d); dayStart.setHours(0,0,0,0);
+      const dayEnd = new Date(d); dayEnd.setHours(23,59,59,999);
+      const hasRecord = records.some(r => new Date(r.timestamp) >= dayStart && new Date(r.timestamp) <= dayEnd && presentActions.includes(r.action));
+      days.push({ date: dayStart.toISOString().split('T')[0], present: !!hasRecord });
+    }
+
+    const presentCount = days.filter(d => d.present).length;
+    const absentCount = 7 - presentCount;
+
+    res.json({ ok: true, userId, weekStart: start, weekEnd: end, days, presentCount, absentCount });
+  } catch (err) {
+    logger.error('My-week attendance summary error:', err);
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
+// Admin: attendance summary for date range (defaults to current week)
+app.get('/api/admin/attendance/summary', authenticateToken, requireAdmin, async (req, res) => {
+  try {
+    const { startDate, endDate } = req.query;
+    let start, end;
+    if (startDate && endDate) {
+      start = new Date(startDate);
+      end = new Date(endDate);
+      end.setHours(23,59,59,999);
+    } else {
+      const range = getWeekRange();
+      start = range.start; end = range.end;
+    }
+
+    // Fetch users (exclude admins by default)
+    const users = await User.find({}).select('-password').sort({ name: 1 }).lean();
+    const userIds = users.map(u => String(u._id));
+
+    // Pre-fetch attendance, tasks, performance
+    const [attendanceRecords, tasks, perfDocs] = await Promise.all([
+      Attendance.find({ timestamp: { $gte: start, $lte: end } }).lean(),
+      Task.find({ created_at: { $gte: start, $lte: end } }).populate('assigned_to', 'name email').lean(),
+      Performance.find({ user_id: { $in: userIds } }).lean()
+    ]);
+
+    const perfMap = {};
+    perfDocs.forEach(p => { perfMap[String(p.user_id)] = p; });
+
+    const presentActions = ['clock_in', 'login', 'clock_out'];
+
+    const results = [];
+    for (const u of users) {
+      const uid = String(u._id);
+      const userAttendance = attendanceRecords.filter(r => String(r.user_id) === uid);
+      // Build day-by-day presence
+      const days = [];
+      for (let i = 0; i < 7; i++) {
+        const d = new Date(start);
+        d.setDate(start.getDate() + i);
+        const dayStart = new Date(d); dayStart.setHours(0,0,0,0);
+        const dayEnd = new Date(d); dayEnd.setHours(23,59,59,999);
+        const hasRecord = userAttendance.some(r => new Date(r.timestamp) >= dayStart && new Date(r.timestamp) <= dayEnd && presentActions.includes(r.action));
+        days.push({ date: dayStart.toISOString().split('T')[0], present: !!hasRecord });
+      }
+
+      const assignedTasks = tasks.filter(t => String(t.assigned_to?._id || t.assigned_to) === uid);
+      const assignedCount = assignedTasks.length;
+      const completedCount = assignedTasks.filter(t => (t.status === 'completed' || t.approval_status === 'approved')).length;
+      const completionRate = assignedCount ? Math.round((completedCount / assignedCount) * 100) : 0;
+
+      const perf = perfMap[uid] || {};
+
+      results.push({
+        id: uid,
+        name: u.name,
+        email: u.email,
+        role: u.role,
+        totalAssigned: assignedCount,
+        completed: completedCount,
+        completionRate,
+        days,
+        presentDays: days.filter(d => d.present).length,
+        absentDays: days.filter(d => !d.present).length,
+        performance: perf
+      });
+    }
+
+    res.json({ ok: true, start, end, totalEmployees: users.length, results });
+  } catch (err) {
+    logger.error('Admin attendance summary error:', err);
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
 // ========== LEGACY QR ENDPOINTS ==========
 
 // Generate QR token (legacy)
@@ -4057,7 +4686,7 @@ app.post('/api/generate-qr-token', async (req, res) => {
     };
     
     const qrString = JSON.stringify(qrData);
-    const qrImage = await QR.toDataURL(qrString, { errorCorrectionLevel: 'H' });
+    const qrImage = await QR.toDataURL(qrString, { errorCorrectionLevel: 'H', width: 400, margin: 4 });
     
     res.json({ 
       ok: true, 
@@ -4087,8 +4716,9 @@ app.post('/api/generate-qr', async (req, res) => {
       }
 
       const qrToken = uuidv4();
-      const qrPayload = JSON.stringify({ userId, email, name, token: qrToken, timestamp: new Date().toISOString() });
-      const qrData = await QR.toDataURL(qrPayload, { errorCorrectionLevel: 'H', type: 'image/png', width: 300, margin: 2 });
+      const baseUrl = req.protocol + '://' + req.get('host');
+      const autoUrl = `${baseUrl}/qr/auto/${qrToken}`;
+      const qrData = await QR.toDataURL(autoUrl, { errorCorrectionLevel: 'H', type: 'image/png', width: 400, margin: 4 });
 
       const qrCode = new QRCode({ user_id: userId, qr_token: qrToken, qr_data: qrData });
       await qrCode.save();
@@ -4112,7 +4742,10 @@ app.post('/api/generate-qr', async (req, res) => {
     tokens[token] = { username, role, createdAt: new Date().toISOString() };
     fs.writeFileSync(TOKENS_FILE, JSON.stringify(tokens, null, 2), 'utf8');
 
-    const qrData = await QR.toDataURL(token);
+    // Provide a clickable URL in the QR so phone cameras surface a tappable link
+    const baseUrl = req.protocol + '://' + req.get('host');
+    const autoUrl = `${baseUrl}/qr/auto/${token}`;
+    const qrData = await QR.toDataURL(autoUrl);
     res.json({ ok: true, token, qrData });
   } catch (err) {
     logger.error(err);
@@ -4960,7 +5593,7 @@ app.get('*', (req, res) => {
   res.sendFile(path.join(root, 'index.html'));
 });
 
-
+//
 // ===============================================
 // Start Server
 // ===============================================

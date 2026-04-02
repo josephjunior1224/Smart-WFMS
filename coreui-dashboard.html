@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>WFMS — CoreUI Performance Dashboard</title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@coreui/coreui@4.6.4/dist/css/coreui.min.css" />
+  <link rel="stylesheet" href="https://unpkg.com/@coreui/icons/css/all.min.css" />
+  <style>
+    body { background: #f8f9fa; padding: 20px; }
+    .card { max-width: 1200px; margin: 0 auto; }
+    #last-updated { font-weight: bold; margin-left: 6px; }
+  </style>
+</head>
+<body class="c-app">
+
+  <header class="c-header c-header-light bg-white border-bottom mb-3">
+    <div class="container-fluid d-flex justify-content-between align-items-center">
+      <a class="navbar-brand" href="#">WFMS — Admin</a>
+      <div>CoreUI Chart Demo</div>
+    </div>
+  </header>
+
+  <main class="container">
+    <div class="card">
+      <div class="card-header d-flex justify-content-between align-items-center">
+        <div>
+          <strong>Employee Performance (Real-time)</strong>
+          <div class="small text-muted">Live completion rate and tasks completed</div>
+        </div>
+        <div class="text-muted">Last updated:<span id="last-updated">—</span></div>
+      </div>
+      <div class="card-body">
+        <canvas id="performanceChart" height="160"></canvas>
+      </div>
+      <div class="card-footer text-muted">Data source: /api/admin/performance-metrics (polled and real-time)</div>
+    </div>
+  </main>
+
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+  <script src="https://cdn.socket.io/4.6.0/socket.io.min.js"></script>
+  <script src="coreui-dashboard.js"></script>
+</body>
+</html>
