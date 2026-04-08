@@ -5,355 +5,109 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Your QR Code - BNS WFMS</title>
   <style>
-    * {
-      margin: 0;
-      padding: 0;
-      box-sizing: border-box;
-    }
-    
+    * { margin: 0; padding: 0; box-sizing: border-box; }
     body {
-      background: linear-gradient(135deg, #0B0B0B 0%, #1a1a1a 100%);
-      font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+      background: #0B0B0B;
+      font-family: 'Inter', sans-serif;
       min-height: 100vh;
       display: flex;
       align-items: center;
       justify-content: center;
       padding: 20px;
     }
-    
     .qr-container {
       background: #1a1a1a;
       border: 1px solid #2d2d2d;
       border-radius: 24px;
-      padding: 40px;
+      padding: 30px;
       max-width: 500px;
       width: 100%;
       text-align: center;
-      box-shadow: 0 20px 40px rgba(0, 0, 0, 0.5);
     }
-    
-    .logo {
-      margin-bottom: 20px;
-    }
-    
-    .logo .bns-letters {
-      display: flex;
-      justify-content: center;
-      gap: 5px;
-      font-size: 32px;
-      font-weight: 900;
-    }
-    
-    .logo .bns-letters span {
-      background: linear-gradient(135deg, #00F0FF, #4EC9B0);
-      -webkit-background-clip: text;
-      -webkit-text-fill-color: transparent;
-    }
-    
-    h1 {
-      color: white;
-      font-size: 24px;
-      margin-bottom: 10px;
-    }
-    
-    .subtitle {
-      color: #9ca3af;
-      margin-bottom: 30px;
-    }
-    
-    .qr-code {
-      background: white;
-      padding: 20px;
-      border-radius: 16px;
-      display: inline-block;
-      margin-bottom: 20px;
-      box-shadow: 0 0 30px rgba(0, 240, 255, 0.3);
-    }
-    
-    .qr-code img {
-      width: 250px;
-      height: 250px;
-      display: block;
-    }
-    
-    .info {
+    .bns-letters { display: flex; justify-content: center; gap: 5px; font-size: 28px; font-weight: 900; }
+    .bns-letters span { background: linear-gradient(135deg, #00F0FF, #4EC9B0); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
+    h1 { color: white; font-size: 22px; margin: 15px 0 5px; }
+    .qr-code { background: white; padding: 20px; border-radius: 16px; display: inline-block; margin: 15px 0; }
+    .qr-code img { width: 280px; height: 280px; display: block; }
+    .token-box {
       background: #0B0B0B;
-      border-radius: 12px;
-      padding: 15px;
-      margin: 20px 0;
-      text-align: left;
-    }
-    
-    .info p {
-      color: #9ca3af;
-      margin: 5px 0;
-      font-size: 14px;
-    }
-    
-    .info strong {
-      color: #00F0FF;
-    }
-    
-    .button-group {
-      display: flex;
-      gap: 12px;
-      flex-wrap: wrap;
-      justify-content: center;
-      margin-top: 20px;
-    }
-    
-    .btn {
-      padding: 12px 24px;
+      padding: 12px;
       border-radius: 8px;
-      border: none;
-      font-weight: 600;
-      cursor: pointer;
-      transition: all 0.3s ease;
+      margin: 15px 0;
+      border: 1px solid #00F0FF;
+    }
+    .token-box p { color: #9ca3af; font-size: 12px; margin-bottom: 8px; }
+    .token-value {
+      font-family: monospace;
       font-size: 14px;
-      display: inline-flex;
-      align-items: center;
-      gap: 8px;
-    }
-    
-    .btn-primary {
-      background: linear-gradient(135deg, #00F0FF, #4EC9B0);
-      color: #0B0B0B;
-    }
-    
-    .btn-secondary {
-      background: #2d2d2d;
-      color: white;
-      border: 1px solid #4b5563;
-    }
-    
-    .btn-danger {
-      background: linear-gradient(135deg, #ef4444, #dc2626);
-      color: white;
-    }
-    
-    .btn:hover {
-      transform: translateY(-2px);
-      box-shadow: 0 5px 20px rgba(0, 240, 255, 0.3);
-    }
-    
-    .instruction {
-      background: rgba(0, 240, 255, 0.1);
-      border-left: 3px solid #00F0FF;
-      padding: 15px;
-      margin-top: 20px;
-      text-align: left;
-      border-radius: 8px;
-    }
-    
-    .instruction h4 {
       color: #00F0FF;
-      margin-bottom: 10px;
+      word-break: break-all;
+      background: #0B0B0B;
+      padding: 8px;
+      border-radius: 4px;
     }
-    
-    .instruction ol {
-      padding-left: 20px;
-      color: #d1d5db;
-    }
-    
-    .instruction li {
-      margin: 8px 0;
-    }
-    
-    @media (max-width: 480px) {
-      .qr-container { padding: 20px; }
-      .qr-code img { width: 200px; height: 200px; }
-      .button-group { flex-direction: column; }
-      .btn { justify-content: center; }
-    }
+    .button-group { display: flex; gap: 12px; flex-wrap: wrap; justify-content: center; margin-top: 15px; }
+    .btn { padding: 10px 20px; border-radius: 8px; border: none; font-weight: 600; cursor: pointer; font-size: 14px; }
+    .btn-primary { background: linear-gradient(135deg, #00F0FF, #4EC9B0); color: #0B0B0B; }
+    .btn-secondary { background: #2d2d2d; color: white; border: 1px solid #4b5563; }
+    .instruction { background: rgba(0, 240, 255, 0.1); border-left: 3px solid #00F0FF; padding: 15px; margin-top: 20px; text-align: left; border-radius: 8px; }
+    .instruction h4 { color: #00F0FF; margin-bottom: 10px; }
+    .instruction li { margin: 6px 0; color: #d1d5db; font-size: 13px; }
   </style>
 </head>
 <body>
-  <div class="qr-container" id="qrContainer">
-    <div class="logo">
-      <div class="bns-letters">
-        <span>B</span><span>N</span><span>S</span>
-      </div>
-      <div style="color: #00F0FF; font-size: 12px;">.com</div>
-    </div>
+  <div class="qr-container">
+    <div class="bns-letters"><span>B</span><span>N</span><span>S</span></div>
+    <div style="color: #00F0FF; font-size: 11px;">.com</div>
+    <h1>Your Login QR Code</h1>
+    <p style="color: #9ca3af; font-size: 13px;">Scan with your phone camera</p>
     
-    <h1>Your QR Code</h1>
-    <p class="subtitle">Scan to login instantly</p>
+    <div class="qr-code"><img id="qrImage" src="" alt="QR Code"></div>
     
-    <div class="qr-code" id="qrCodeDisplay">
-      <img id="qrImage" src="" alt="QR Code">
-    </div>
-    
-    <div class="info">
-      <p><strong>📱 How to use:</strong></p>
-      <p>1. Save this QR code to your phone</p>
-      <p>2. Open the WFMS mobile app or camera</p>
-      <p>3. Scan the code to login automatically</p>
-      <p>4. Valid for: <span id="expiryDate">-</span></p>
+    <div class="token-box">
+      <p>📱 Can't scan? Copy this token:</p>
+      <div class="token-value" id="tokenValue">Loading...</div>
     </div>
     
     <div class="button-group">
-      <button class="btn btn-primary" onclick="downloadQR()">
-        💾 Download PNG
-      </button>
-      <button class="btn btn-secondary" onclick="printQR()">
-        🖨️ Print
-      </button>
-      <button class="btn btn-secondary" onclick="copyQR()">
-        📋 Copy Link
-      </button>
-      <button class="btn btn-danger" onclick="regenerateQR()">
-        🔄 Regenerate
-      </button>
+      <button class="btn btn-primary" onclick="downloadQR()">💾 Save QR Code</button>
+      <button class="btn btn-secondary" onclick="copyToken()">📋 Copy Token</button>
     </div>
     
     <div class="instruction">
-      <h4>📖 Instructions</h4>
+      <h4>📖 How to use:</h4>
       <ol>
-        <li><strong>Save to phone:</strong> Click "Download PNG" and save to your gallery</li>
-        <li><strong>Print:</strong> Click "Print" for a physical copy</li>
-        <li><strong>Scan to login:</strong> Open camera app, scan the code, and you'll be automatically logged in</li>
-        <li><strong>One code per user:</strong> Your QR code is unique and secure</li>
-        <li><strong>Regenerate if lost:</strong> Click "Regenerate" to create a new code (old one stops working)</li>
+        <li><strong>Scan QR code</strong> with your phone camera</li>
+        <li>OR <strong>copy the token</strong> and paste in manual entry</li>
+        <li>You'll be automatically logged in</li>
+        <li>Your attendance will be recorded</li>
       </ol>
     </div>
   </div>
-
   <script>
-    // Get QR data from URL parameter or localStorage
     const urlParams = new URLSearchParams(window.location.search);
     let qrData = urlParams.get('qr');
     let qrToken = urlParams.get('token');
     
-    // If QR data not in URL, try to get from localStorage
-    if (!qrData) {
-      const storedQR = localStorage.getItem('tempQRData');
-      if (storedQR) {
-        try {
-          const parsed = JSON.parse(storedQR);
-          qrData = parsed.qrData;
-          qrToken = parsed.qrToken;
-          localStorage.removeItem('tempQRData');
-        } catch(e) {}
-      }
-    }
-    
     if (qrData) {
       document.getElementById('qrImage').src = qrData;
-    } else {
-      document.getElementById('qrImage').src = 'data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" width="200" height="200" viewBox="0 0 200 200"%3E%3Crect width="200" height="200" fill="%23000"/%3E%3Ctext x="50%" y="50%" text-anchor="middle" fill="%2300F0FF" font-size="14"%3ELoading...%3C/text%3E%3C/svg%3E';
-      setTimeout(() => {
-        window.location.href = '/';
-      }, 3000);
-    }
-    
-    // Set expiry date
-    const expiryParam = urlParams.get('expires');
-    if (expiryParam) {
-      const expiryDate = new Date(expiryParam);
-      document.getElementById('expiryDate').textContent = expiryDate.toLocaleDateString();
-    } else {
-      document.getElementById('expiryDate').textContent = '1 year from now';
+      document.getElementById('tokenValue').textContent = qrToken || 'Ready';
     }
     
     function downloadQR() {
-      const img = document.getElementById('qrImage');
       const link = document.createElement('a');
       link.download = 'bns-wfms-qrcode.png';
-      link.href = img.src;
+      link.href = document.getElementById('qrImage').src;
       link.click();
-      showToast('QR code downloaded!', 'success');
+      alert('QR code saved!');
     }
     
-    function printQR() {
-      const printWindow = window.open('', '_blank');
-      const img = document.getElementById('qrImage');
-      printWindow.document.write(`
-        <html>
-          <head>
-            <title>BNS WFMS QR Code</title>
-            <style>
-              body { 
-                display: flex; 
-                justify-content: center; 
-                align-items: center; 
-                height: 100vh; 
-                margin: 0; 
-                background: white;
-                font-family: Arial, sans-serif;
-              }
-              .print-container { text-align: center; }
-              img { width: 300px; height: 300px; }
-              h2 { color: #0B0B0B; }
-              p { color: #666; }
-            </style>
-          </head>
-          <body>
-            <div class="print-container">
-              <h2>BNS Workforce Management</h2>
-              <img src="${img.src}" />
-              <p>Scan this QR code to login to WFMS</p>
-              <p>Valid until: ${document.getElementById('expiryDate').textContent}</p>
-            </div>
-          </body>
-        </html>
-      `);
-      printWindow.document.close();
-      printWindow.print();
-    }
-    
-    function copyQR() {
-      const baseUrl = window.location.origin;
-      const loginUrl = `${baseUrl}/qr-login.html?token=${qrToken || ''}`;
-      navigator.clipboard.writeText(loginUrl);
-      showToast('Login link copied to clipboard!', 'success');
-    }
-    
-    async function regenerateQR() {
-      if (!confirm('Are you sure? Your old QR code will stop working immediately.')) return;
-      
-      try {
-        const token = localStorage.getItem('token');
-        if (!token) {
-          showToast('Please login to regenerate QR code', 'error');
-          window.location.href = '/';
-          return;
-        }
-        
-        const response = await fetch('/api/qr/regenerate', {
-          method: 'POST',
-          headers: {
-            'Authorization': `Bearer ${token}`,
-            'Content-Type': 'application/json'
-          }
-        });
-        
-        const data = await response.json();
-        if (data.ok) {
-          document.getElementById('qrImage').src = data.qrData;
-          showToast('QR code regenerated successfully!', 'success');
-        } else {
-          showToast(data.error, 'error');
-        }
-      } catch (err) {
-        showToast(err.message, 'error');
+    function copyToken() {
+      const token = document.getElementById('tokenValue').textContent;
+      if (token && token !== 'Loading...') {
+        navigator.clipboard.writeText(token);
+        alert('Token copied to clipboard!\n\nYou can now use "Manual QR Entry" on login page.');
       }
-    }
-    
-    function showToast(message, type) {
-      const toast = document.createElement('div');
-      toast.textContent = message;
-      toast.style.position = 'fixed';
-      toast.style.bottom = '20px';
-      toast.style.left = '50%';
-      toast.style.transform = 'translateX(-50%)';
-      toast.style.background = type === 'success' ? '#10b981' : '#ef4444';
-      toast.style.color = 'white';
-      toast.style.padding = '12px 24px';
-      toast.style.borderRadius = '8px';
-      toast.style.zIndex = '10000';
-      toast.style.fontWeight = 'bold';
-      document.body.appendChild(toast);
-      setTimeout(() => toast.remove(), 3000);
     }
   </script>
 </body>

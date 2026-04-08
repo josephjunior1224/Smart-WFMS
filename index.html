@@ -5,6 +5,9 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>BNS · Black Nova Shift · Workforce Management System</title>
   
+  <!-- Instascan QR Scanner - Fast & Reliable -->
+  <script src="https://cdn.jsdelivr.net/npm/instascan@1.0.0/instascan.min.js"></script>
+  
   <!-- INLINE CRITICAL FUNCTIONS -->
   <script>
     window.showRegister = function() { 
@@ -22,10 +25,6 @@
         pwd.type = pwd.type === 'password' ? 'text' : 'password';
         icon.textContent = pwd.type === 'password' ? '👁️' : '🙈';
       }
-    };
-    window.closeQRScanner = function() {
-      const container = document.getElementById('qrScannerContainer');
-      if (container) container.classList.add('hidden');
     };
     window.toggleTheme = function() {
       document.body.classList.toggle('light-theme');
@@ -45,7 +44,6 @@
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=Fira+Code:wght@400;600&display=swap" rel="stylesheet" />
 
   <style>
-    /* ===== RESET & CUSTOM PROPERTIES ===== */
     * {
       margin: 0;
       padding: 0;
@@ -231,6 +229,18 @@
     .tab-content { display: none; }
     .tab-content.active { display: block; }
 
+    .spinner {
+      width: 30px;
+      height: 30px;
+      border: 3px solid #2d2d2d;
+      border-top-color: #00F0FF;
+      border-radius: 50%;
+      animation: spin 1s linear infinite;
+    }
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+
     @media (max-width: 768px) { .dashboard-header { padding: 12px 16px; } .stats-grid { grid-template-columns: 1fr; } .tabs { gap: 5px; } .tab { padding: 8px 12px; font-size: 12px; } }
     @media (max-width: 480px) { .auth-container { padding: 24px; } }
   </style>
@@ -298,14 +308,12 @@
     <div class="container">
       <div id="impersonationBanner" class="impersonation-banner"></div>
 
-      <!-- Stats Grid -->
       <div class="stats-grid">
         <div class="stat-card"><div class="stat-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" /><circle cx="12" cy="7" r="4" /></svg></div><div class="stat-content"><div class="stat-label">Employees</div><div class="stat-value" id="totalEmployees">0</div></div></div>
         <div class="stat-card"><div class="stat-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="8 6 21 6 21 20 3 20 3 6 10 6" /><polyline points="12 3 12 6" /></svg></div><div class="stat-content"><div class="stat-label">Active Tasks</div><div class="stat-value" id="totalTasks">0</div></div></div>
         <div class="stat-card"><div class="stat-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" /><polyline points="14 2 14 8 20 8" /></svg></div><div class="stat-content"><div class="stat-label">System Logs</div><div class="stat-value" id="totalLogs">0</div></div></div>
       </div>
 
-      <!-- Attendance Section -->
       <div class="card">
         <div class="card-header"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10" /><polyline points="12 6 12 12 16 14" /></svg><h5>Attendance</h5></div>
         <div class="attendance-buttons" style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px;">
@@ -316,25 +324,21 @@
         </div>
       </div>
 
-      <!-- QR Code Card -->
       <div class="card">
         <div class="card-header"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><circle cx="8.5" cy="8.5" r="1.5" fill="currentColor"></circle><circle cx="15.5" cy="15.5" r="1.5" fill="currentColor"></circle></svg><h5>My QR Code</h5><button class="btn btn-primary btn-sm" onclick="viewMyQRCode()">View QR Code</button></div>
         <div id="qrPreview" style="text-align: center; padding: 20px;"><p style="color: var(--text-secondary);">Click "View QR Code" to see your personal login QR code</p></div>
       </div>
 
-      <!-- Leave Management Card -->
       <div class="card">
         <div class="card-header"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line></svg><h5>My Leave Requests</h5><button class="btn btn-primary btn-sm" onclick="showLeaveModal()">+ New Request</button></div>
         <div id="myLeaveRequests"></div>
       </div>
 
-      <!-- Pending Leave Requests (Admin only) -->
       <div class="card" id="pendingLeaveCard" style="display: none;">
         <div class="card-header"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 8v4l3 3"></path><circle cx="12" cy="12" r="10"></circle></svg><h5>Pending Leave Requests</h5></div>
         <div id="pendingLeaveRequests"></div>
       </div>
 
-      <!-- Tabs -->
       <div class="tabs">
         <div class="tab active" onclick="switchTab('tasks-tab')">📋 Tasks</div>
         <div class="tab" onclick="switchTab('teams-tab')">👥 Teams</div>
@@ -346,7 +350,6 @@
         <div class="tab" id="impersonationTab" style="display: none;" onclick="switchTab('impersonation-tab')">👤 Impersonate</div>
       </div>
 
-      <!-- Tasks Tab -->
       <div id="tasks-tab" class="tab-content active">
         <div class="card"><div class="card-header"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 11 12 14 22 4" /><path d="M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0z" /></svg><h5>Create New Task</h5></div>
           <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 20px;">
@@ -362,7 +365,6 @@
         <div class="card"><div class="card-header"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 16v2a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-2" /><path d="M7 10l3-3 3 3 4-4" /></svg><h5>Pending Approvals</h5></div><div id="pendingApprovals" class="task-list"></div></div>
       </div>
 
-      <!-- Teams Tab -->
       <div id="teams-tab" class="tab-content">
         <div class="card"><div class="card-header"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" /><circle cx="9" cy="7" r="4" /><path d="M23 21v-2a4 4 0 0 0-3-3.87" /><path d="M16 3.13a4 4 0 0 1 0 7.75" /></svg><h5>Create New Team</h5></div>
           <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 20px;">
@@ -378,18 +380,15 @@
         <div class="card"><div class="card-header"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" /><circle cx="12" cy="7" r="4" /></svg><h5>All Teams</h5><div><input type="text" id="teamSearch" class="form-control" placeholder="Search teams..." style="width: 200px;" onkeyup="loadTeamsList()"></div></div><div id="teamsList"></div></div>
       </div>
 
-      <!-- Attendance Summary Tab -->
       <div id="attendance-summary-tab" class="tab-content">
         <div class="card"><div class="card-header"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2" /><polyline points="16 2 16 6 8 6 8 2" /></svg><h5>Weekly Attendance Summary</h5><button class="btn btn-primary btn-sm" onclick="generateAttendanceSummary()">Generate New</button></div><div id="attendanceSummary"></div></div>
         <div class="card"><div class="card-header"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10" /><polyline points="12 6 12 12 16 14" /></svg><h5>Attendance Records</h5></div><div id="attendanceRecords"></div></div>
       </div>
 
-      <!-- Analytics Tab -->
       <div id="analytics-tab" class="tab-content">
         <div class="card"><div class="card-header"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 16v2a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-2" /><path d="M7 10l3-3 3 3 4-4" /></svg><h5>Performance Dashboard</h5><div><select id="analyticsPeriod" class="form-control" style="width: 120px;" onchange="loadAnalytics()"><option value="week">This Week</option><option value="month">This Month</option></select></div></div><div id="analyticsContent"></div></div>
       </div>
 
-      <!-- Templates Tab -->
       <div id="templates-tab" class="tab-content">
         <div class="card"><div class="card-header"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" /><polyline points="14 2 14 8 20 8" /></svg><h5>Create Template</h5></div>
           <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 20px;">
@@ -402,13 +401,11 @@
         <div class="card"><div class="card-header"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 11 12 14 22 4" /><path d="M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0z" /></svg><h5>Available Templates</h5></div><div id="templatesList"></div></div>
       </div>
 
-      <!-- My Tasks Tab -->
       <div id="my-tasks-tab" class="tab-content">
         <div class="stats-grid" id="myTasksStats"></div>
         <div class="card"><div class="card-header"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 11 12 14 22 4" /><path d="M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0z" /></svg><h5>My Assigned Tasks</h5></div><div id="myTasksList" class="task-list"></div></div>
       </div>
 
-      <!-- My Attendance Tab -->
       <div id="my-attendance-tab" class="tab-content">
         <div class="stats-grid" id="myAttendanceStats"></div>
         <div class="card"><div class="card-header"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2" /><polyline points="16 2 16 6 8 6 8 2" /></svg><h5>My Attendance History</h5></div><div id="myAttendanceRecords"></div></div>
@@ -423,7 +420,6 @@
         </div>
       </div>
 
-      <!-- Impersonation Tab -->
       <div id="impersonation-tab" class="tab-content">
         <div class="card"><div class="card-header"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" /><circle cx="12" cy="7" r="4" /></svg><h5>Start Impersonation</h5></div>
           <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 20px;">
@@ -435,12 +431,10 @@
         <div class="card"><div class="card-header"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10" /><line x1="12" y1="8" x2="12" y2="12" /><line x1="12" y1="16" x2="12.01" y2="16" /></svg><h5>Active Sessions</h5></div><div id="activeSessions"></div></div>
       </div>
 
-      <!-- System Logs -->
       <div class="card"><div class="card-header"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" /><polyline points="14 2 14 8 20 8" /></svg><h5>System Logs</h5></div><div id="log" class="log-box"></div></div>
     </div>
   </div>
 
-  <!-- Task Report Modal -->
   <div id="taskReportModal" class="modal">
     <div class="modal-content">
       <div class="modal-header"><h5>Submit Task Report</h5><button class="btn-close" onclick="closeTaskReportModal()">×</button></div>
@@ -455,7 +449,6 @@
     </div>
   </div>
 
-  <!-- QR Scanner Container -->
   <div id="qrScannerContainer" class="qr-scanner-overlay hidden">
     <div class="qr-scanner-box">
       <div class="qr-scanner-header"><h5 style="color: var(--text-primary); margin: 0;">Scan QR Code</h5><button class="btn-close" onclick="closeQRScanner()" style="font-size: 28px; cursor: pointer;">×</button></div>
@@ -467,42 +460,11 @@
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 
   <script>
-    // QR Code Library Loader
-    (function loadQRLibrary() {
-      const QR_LIBRARIES = [
-        'https://cdn.jsdelivr.net/npm/html5-qrcode@2.3.8/html5-qrcode.min.js',
-        'https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js',
-        'https://cdnjs.cloudflare.com/ajax/libs/html5-qrcode/2.3.8/html5-qrcode.min.js'
-      ];
-      function tryLoadLibrary(index) {
-        if (index >= QR_LIBRARIES.length) {
-          console.error('❌ All QR library CDNs failed');
-          window.Html5Qrcode = function() { return { start() {}, stop() {} }; };
-          window.dispatchEvent(new CustomEvent('qr-library-loaded'));
-          return;
-        }
-        const script = document.createElement('script');
-        script.src = QR_LIBRARIES[index];
-        script.async = false;
-        script.onload = function() {
-          setTimeout(() => {
-            if (typeof window.Html5Qrcode !== 'undefined') {
-              console.log(`✅ QR library loaded`);
-              window.dispatchEvent(new CustomEvent('qr-library-loaded'));
-            } else { tryLoadLibrary(index + 1); }
-          }, 100);
-        };
-        script.onerror = function() { tryLoadLibrary(index + 1); };
-        document.head.appendChild(script);
-      }
-      tryLoadLibrary(0);
-    })();
-
     // ===== CONFIGURATION =====
     const API_BASE = '/api';
     let currentUser = null;
     let socket = null;
-    let qrScanner = null;
+    let activeScanner = null;
 
     // ===== HELPER FUNCTIONS =====
     function showToast(message, type = 'info') {
@@ -644,261 +606,295 @@
     // ===== QR CODE FUNCTIONS =====
     window.viewMyQRCode = async function() {
       try {
-        const response = await fetch(`${API_BASE}/qr/my-code`, { headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` } });
+        const response = await fetch(`${API_BASE}/qr/my-code`, {
+          headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
+        });
         const data = await response.json();
         if (data.ok) {
           const qrPageUrl = `/qr-display.html?qr=${encodeURIComponent(data.qrData)}&token=${data.qrToken}&expires=${data.expiresAt}`;
           window.open(qrPageUrl, '_blank');
-        } else { showToast(data.error, 'error'); }
-      } catch (err) { showToast(err.message, 'error'); }
+        } else { 
+          showToast(data.error, 'error'); 
+        }
+      } catch (err) { 
+        showToast(err.message, 'error'); 
+      }
     };
 
-    // ===== FIXED QR SCANNER FUNCTIONS =====
-// =/// ===== COMPLETE FIXED QR SCANNER FUNCTIONS =====
-window.initQRScanner = async function(mode) {
-  console.log('Starting QR scanner, mode:', mode);
-  
-  const container = document.getElementById('qrScannerContainer');
-  if (!container) {
-    console.error('QR Scanner container not found');
-    showToast('Scanner error', 'error');
-    return;
-  }
-  container.classList.remove('hidden');
+    // ===== QR SCANNER FUNCTIONS =====
+    function loadScript(src) {
+      return new Promise((resolve, reject) => {
+        const script = document.createElement('script');
+        script.src = src;
+        script.onload = resolve;
+        script.onerror = reject;
+        document.head.appendChild(script);
+      });
+    }
 
-  // Wait for Html5Qrcode library to load
-  if (typeof window.Html5Qrcode === 'undefined') {
-    showToast('QR scanner loading, please wait...', 'info');
-    let attempts = 0;
-    const waitForLibrary = setInterval(() => {
-      attempts++;
-      if (typeof window.Html5Qrcode !== 'undefined') {
-        clearInterval(waitForLibrary);
-        showToast('QR scanner ready!', 'success');
-        window.initQRScanner(mode);
-      } else if (attempts > 20) {
-        clearInterval(waitForLibrary);
-        showToast('QR scanner failed to load. Please refresh the page.', 'error');
-        closeQRScanner();
+    window.initQRScanner = async function(mode) {
+      console.log('Starting QR scanner...');
+      
+      const container = document.getElementById('qrScannerContainer');
+      if (!container) {
+        showToast('Scanner error', 'error');
+        return;
       }
-    }, 500);
-    return;
-  }
+      container.classList.remove('hidden');
+      
+      if (activeScanner) {
+        try {
+          if (typeof activeScanner.stop === 'function') {
+            await activeScanner.stop();
+          }
+        } catch(e) {}
+        activeScanner = null;
+      }
+      
+      const readerElement = document.getElementById('qr-reader');
+      if (!readerElement) {
+        showToast('Scanner element not found', 'error');
+        return;
+      }
+      
+      readerElement.innerHTML = '<div id="qr-video-container" style="width: 100%; min-height: 300px; background: #000; border-radius: 12px; display: flex; align-items: center; justify-content: center;"><div class="spinner" style="width: 30px; height: 30px; border: 3px solid #2d2d2d; border-top-color: #00F0FF; border-radius: 50%; animation: spin 1s linear infinite;"></div><p style="color: #9ca3af; margin-left: 10px;">Loading camera...</p></div>';
+      
+      if (typeof Instascan !== 'undefined') {
+        try {
+          await startInstascan(readerElement, mode);
+          return;
+        } catch (err) {
+          console.log('Instascan failed:', err);
+        }
+      }
+      
+      try {
+        await startSimpleCamera(readerElement, mode);
+      } catch (err) {
+        console.error('Camera error:', err);
+        readerElement.innerHTML = '<div style="text-align: center; padding: 20px;"><p style="color: #ef4444;">Camera error. Please use Manual QR Entry instead.</p><button class="btn btn-primary" style="margin-top: 10px;" onclick="manualQREntry()">Manual QR Entry</button><button class="btn btn-outline" style="margin-top: 10px; margin-left: 10px;" onclick="closeQRScanner()">Close</button></div>';
+        showToast('Camera not available. Please use Manual QR Entry.', 'error');
+      }
+    };
 
-  const readerElement = document.getElementById('qr-reader');
-  if (!readerElement) {
-    console.error('QR reader element not found');
-    showToast('Scanner element not found', 'error');
-    closeQRScanner();
-    return;
-  }
-  
-  // Clear previous scanner content
-  readerElement.innerHTML = '';
-  
-  try {
-    // Create new scanner instance
-    qrScanner = new window.Html5Qrcode("qr-reader");
-    
-    const config = { fps: 10, qrbox: { width: 250, height: 250 } };
-    
-    await qrScanner.start(
-      { facingMode: "environment" },
-      config,
-      async (decodedText) => {
-        // Success callback - QR code detected
-        console.log('QR Code detected:', decodedText);
-        await qrScanner.stop();
+    async function startInstascan(readerElement, mode) {
+      return new Promise(async (resolve, reject) => {
+        try {
+          readerElement.innerHTML = '<video id="instascan-preview" style="width: 100%; border-radius: 12px; background: #000;"></video>';
+          
+          const scanner = new Instascan.Scanner({
+            video: document.getElementById('instascan-preview'),
+            mirror: false,
+            backgroundScan: true,
+            continuous: true,
+            refractoryPeriod: 3000
+          });
+          
+          activeScanner = scanner;
+          
+          scanner.addListener('scan', async (content) => {
+            console.log('✅ QR Code detected:', content);
+            try { await scanner.stop(); } catch(e) {}
+            activeScanner = null;
+            closeQRScanner();
+            await processQRLogin(content);
+          });
+          
+          scanner.addListener('error', (err) => {
+            console.debug('Scanner error:', err);
+          });
+          
+          const cameras = await Instascan.Camera.getCameras();
+          if (cameras.length === 0) {
+            reject(new Error('No camera found'));
+            return;
+          }
+          
+          const backCamera = cameras.find(cam => 
+            cam.name.toLowerCase().includes('back') || 
+            cam.name.toLowerCase().includes('environment') ||
+            cam.name.toLowerCase().includes('rear')
+          );
+          const selectedCamera = backCamera || cameras[0];
+          
+          await scanner.start(selectedCamera);
+          showToast('Scanner ready! Point camera at QR code', 'success');
+          resolve();
+        } catch (err) {
+          reject(err);
+        }
+      });
+    }
+
+    async function startSimpleCamera(readerElement, mode) {
+      return new Promise(async (resolve, reject) => {
+        try {
+          readerElement.innerHTML = `
+            <video id="qr-video" autoplay playsinline style="width: 100%; border-radius: 12px; background: #000;"></video>
+            <canvas id="qr-canvas" style="display: none;"></canvas>
+            <div style="text-align: center; margin-top: 15px; display: flex; gap: 10px; justify-content: center;">
+              <button class="btn btn-primary" onclick="captureQRFrame()">📷 Scan QR Code</button>
+              <button class="btn btn-outline" onclick="manualQREntry()">✏️ Manual Entry</button>
+              <button class="btn btn-outline" onclick="closeQRScanner()">❌ Close</button>
+            </div>
+            <p style="text-align: center; color: #9ca3af; margin-top: 10px; font-size: 12px;">Position QR code in frame, then click "Scan QR Code"</p>
+          `;
+          
+          const video = document.getElementById('qr-video');
+          const stream = await navigator.mediaDevices.getUserMedia({ 
+            video: { facingMode: "environment" } 
+          });
+          video.srcObject = stream;
+          await video.play();
+          
+          showToast('Camera ready! Position QR code and click "Scan QR Code"', 'success');
+          resolve();
+        } catch (err) {
+          reject(err);
+        }
+      });
+    }
+
+    window.captureQRFrame = async function() {
+      const video = document.getElementById('qr-video');
+      const canvas = document.getElementById('qr-canvas');
+      
+      if (!video || !canvas) {
+        showToast('Camera not ready', 'error');
+        return;
+      }
+      
+      const ctx = canvas.getContext('2d');
+      canvas.width = video.videoWidth;
+      canvas.height = video.videoHeight;
+      ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+      
+      showToast('Processing image...', 'info');
+      
+      if (typeof jsQR === 'undefined') {
+        try {
+          await loadScript('https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.min.js');
+        } catch(err) {
+          showToast('Failed to load QR scanner', 'error');
+          return;
+        }
+      }
+      
+      const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+      const code = jsQR(imageData.data, canvas.width, canvas.height);
+      
+      if (code) {
+        console.log('✅ QR detected:', code.data);
+        await processQRLogin(code.data);
         closeQRScanner();
+      } else {
+        showToast('No QR code found. Make sure QR is clearly visible.', 'warning');
+      }
+    };
+
+    async function processQRLogin(content) {
+      let token = content;
+      if (content.includes('token=')) {
+        const match = content.match(/token=([^&]+)/);
+        if (match) token = match[1];
+      } else if (content.includes('/qr/auto/')) {
+        const match = content.match(/\/qr\/auto\/([^?]+)/);
+        if (match) token = match[1];
+      } else if (content.includes('/qr-login.html?token=')) {
+        const match = content.match(/token=([^&]+)/);
+        if (match) token = match[1];
+      }
+      
+      if (token.includes('/')) token = token.split('/').pop();
+      if (token.includes('?')) token = token.split('?')[0];
+      
+      showToast('QR detected! Logging in...', 'info');
+      
+      try {
+        const response = await fetch('/api/qr-login', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ token })
+        });
+        const data = await response.json();
         
-        // Extract token from QR code
-        let token = decodedText;
-        if (decodedText.includes('token=')) {
-          const match = decodedText.match(/token=([^&]+)/);
+        if (data.ok) {
+          localStorage.setItem('token', data.token);
+          if (data.refreshToken) localStorage.setItem('refreshToken', data.refreshToken);
+          currentUser = data.user;
+          showToast(`Welcome ${data.user.name}! Attendance recorded.`, 'success');
+          setTimeout(() => location.reload(), 1000);
+        } else {
+          showToast(data.error || 'QR login failed', 'error');
+        }
+      } catch (err) {
+        console.error('QR login error:', err);
+        showToast('Login error: ' + err.message, 'error');
+      }
+    }
+
+    function closeQRScanner() {
+      const video = document.getElementById('qr-video');
+      if (video && video.srcObject) {
+        const tracks = video.srcObject.getTracks();
+        tracks.forEach(track => track.stop());
+        video.srcObject = null;
+      }
+      
+      if (activeScanner) {
+        try {
+          if (typeof activeScanner.stop === 'function') {
+            activeScanner.stop();
+          }
+        } catch(e) {}
+        activeScanner = null;
+      }
+      
+      const container = document.getElementById('qrScannerContainer');
+      if (container) container.classList.add('hidden');
+      
+      const readerElement = document.getElementById('qr-reader');
+      if (readerElement) readerElement.innerHTML = '';
+    }
+
+    window.manualQREntry = function() {
+      const code = prompt('Enter QR code token manually:');
+      if (code) {
+        let token = code;
+        if (code.includes('token=')) {
+          const match = code.match(/token=([^&]+)/);
           if (match) token = match[1];
-        } else if (decodedText.includes('/qr/auto/')) {
-          const match = decodedText.match(/\/qr\/auto\/([^?]+)/);
-          if (match) token = match[1];
-        } else if (decodedText.includes('/qr-login.html?token=')) {
-          const match = decodedText.match(/token=([^&]+)/);
+        } else if (code.includes('/qr/auto/')) {
+          const match = code.match(/\/qr\/auto\/([^?]+)/);
           if (match) token = match[1];
         }
         
-        // Clean the token
         if (token.includes('/')) token = token.split('/').pop();
         if (token.includes('?')) token = token.split('?')[0];
         
-        showToast('QR code detected! Logging in...', 'info');
+        showToast('Processing manual entry...', 'info');
         
-        // Process QR login
-        try {
-          const response = await fetch(`${API_BASE}/qr-login`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ token })
-          });
-          const data = await response.json();
-          
+        fetch('/api/qr-login', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ token })
+        })
+        .then(r => r.json())
+        .then(data => {
           if (data.ok) {
             localStorage.setItem('token', data.token);
-            if (data.refreshToken) localStorage.setItem('refreshToken', data.refreshToken);
             currentUser = data.user;
-            showToast(`Welcome ${data.user.name}!`, 'success');
-            setTimeout(() => location.reload(), 1000);
+            showToast('QR Login successful!', 'success');
+            location.reload();
           } else {
-            showToast(data.error || 'QR login failed', 'error');
+            showToast(data.error, 'error');
           }
-        } catch (err) {
-          console.error('QR login error:', err);
-          showToast('QR login error: ' + err.message, 'error');
-        }
-      },
-      (error) => {
-        // Error callback - continue scanning silently
-        console.debug('QR scan error:', error);
+        })
+        .catch(err => showToast('Error: ' + err.message, 'error'));
       }
-    ).catch(async (err) => {
-      console.error('Camera start error:', err);
-      if (err.message && err.message.includes('NotAllowedError')) {
-        showToast('Camera permission denied. Please allow camera access.', 'error');
-        closeQRScanner();
-      } else if (err.message && err.message.includes('NotFoundError')) {
-        showToast('No camera found on this device.', 'error');
-        closeQRScanner();
-      } else {
-        // Try with user-facing camera as fallback
-        try {
-          if (qrScanner) await qrScanner.stop();
-          readerElement.innerHTML = '';
-          qrScanner = new window.Html5Qrcode("qr-reader");
-          await qrScanner.start(
-            { facingMode: "user" },
-            config,
-            async (decodedText) => {
-              await qrScanner.stop();
-              closeQRScanner();
-              let token = decodedText;
-              if (decodedText.includes('token=')) {
-                const match = decodedText.match(/token=([^&]+)/);
-                if (match) token = match[1];
-              }
-              const response = await fetch(`${API_BASE}/qr-login`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ token })
-              });
-              const data = await response.json();
-              if (data.ok) {
-                localStorage.setItem('token', data.token);
-                currentUser = data.user;
-                showToast(`Welcome ${data.user.name}!`, 'success');
-                location.reload();
-              } else {
-                showToast(data.error, 'error');
-              }
-            },
-            (error) => {}
-          );
-        } catch (fallbackErr) {
-          showToast('Camera error: ' + fallbackErr.message, 'error');
-          closeQRScanner();
-        }
-      }
-    });
-  } catch (err) {
-    console.error('QR scanner error:', err);
-    showToast('Scanner error: ' + (err.message || 'Unknown error'), 'error');
-    closeQRScanner();
-  }
-};
+    };
 
-function closeQRScanner() {
-  const container = document.getElementById('qrScannerContainer');
-  if (container) container.classList.add('hidden');
-  if (qrScanner) {
-    try {
-      qrScanner.stop().catch(() => {});
-    } catch(e) {}
-    qrScanner = null;
-  }
-}
-
-// Manual QR entry fallback
-window.manualQREntry = function() {
-  const code = prompt('Enter QR code manually:');
-  if (code) {
-    let token = code;
-    if (code.includes('token=')) {
-      const match = code.match(/token=([^&]+)/);
-      if (match) token = match[1];
-    } else if (code.includes('/qr/auto/')) {
-      const match = code.match(/\/qr\/auto\/([^?]+)/);
-      if (match) token = match[1];
-    } else if (code.includes('/qr-login.html?token=')) {
-      const match = code.match(/token=([^&]+)/);
-      if (match) token = match[1];
-    }
-    
-    // Clean token
-    if (token.includes('/')) token = token.split('/').pop();
-    if (token.includes('?')) token = token.split('?')[0];
-    
-    fetch(`${API_BASE}/qr-login`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ token })
-    })
-    .then(r => r.json())
-    .then(data => {
-      if (data.ok) {
-        localStorage.setItem('token', data.token);
-        currentUser = data.user;
-        showToast('QR Login successful!', 'success');
-        location.reload();
-      } else {
-        showToast(data.error, 'error');
-      }
-    })
-    .catch(err => showToast('Error: ' + err.message, 'error'));
-  }
-};
-
-// Manual QR entry fallback
-window.manualQREntry = function() {
-  const code = prompt('Enter QR code manually:');
-  if (code) {
-    let token = code;
-    if (code.includes('token=')) {
-      const match = code.match(/token=([^&]+)/);
-      if (match) token = match[1];
-    } else if (code.includes('/qr/auto/')) {
-      const match = code.match(/\/qr\/auto\/([^?]+)/);
-      if (match) token = match[1];
-    } else if (code.includes('/qr-login.html?token=')) {
-      const match = code.match(/token=([^&]+)/);
-      if (match) token = match[1];
-    }
-    
-    fetch(`${API_BASE}/qr-login`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ token })
-    })
-    .then(r => r.json())
-    .then(data => {
-      if (data.ok) {
-        localStorage.setItem('token', data.token);
-        currentUser = data.user;
-        showToast('QR Login successful!', 'success');
-        location.reload();
-      } else {
-        showToast(data.error, 'error');
-      }
-    })
-    .catch(err => showToast('Error: ' + err.message, 'error'));
-  }
-};
-// Manual QR entry fallback
+    window.closeQRScanner = closeQRScanner;
 
     // ===== TASK FUNCTIONS =====
     async function loadUsersForDropdowns() {
@@ -1237,120 +1233,72 @@ window.manualQREntry = function() {
       document.getElementById('excelFilters').style.display = type === 'excel' ? 'block' : 'none';
     }
 
-   function exportSelectedReport() {
-  const type = document.getElementById('reportType')?.value;
-  if (type === 'attendance') {
-    exportAttendanceReport();
-  } else if (type === 'tasks') {
-    exportTasksReport();
-  } else if (type === 'excel') {
-    exportExcelReport();
-  }
-  closeModal();
-}
-// ===== FIXED EXPORT FUNCTIONS with Authentication =====
-async function exportAttendanceReport() {
-  try {
-    const token = localStorage.getItem('token');
-    if (!token) {
-      showToast('Please login first', 'error');
-      return;
+    function exportSelectedReport() {
+      const type = document.getElementById('reportType')?.value;
+      if (type === 'attendance') exportAttendanceReport();
+      else if (type === 'tasks') exportTasksReport();
+      else if (type === 'excel') exportExcelReport();
+      closeModal();
     }
-    
-    const startDate = document.getElementById('reportStartDate')?.value || '';
-    const endDate = document.getElementById('reportEndDate')?.value || '';
-    const teamId = document.getElementById('reportTeam')?.value || '';
-    
-    let url = `${API_BASE}/reports/attendance/csv?`;
-    if (startDate) url += `startDate=${startDate}&`;
-    if (endDate) url += `endDate=${endDate}&`;
-    if (teamId) url += `teamId=${teamId}&`;
-    
-    // Fetch with authentication
-    const response = await fetch(url, {
-      headers: { 'Authorization': `Bearer ${token}` }
-    });
-    
-    if (!response.ok) {
-      const error = await response.json();
-      throw new Error(error.error || 'Export failed');
-    }
-    
-    const blob = await response.blob();
-    const downloadUrl = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = downloadUrl;
-    a.download = `attendance-report-${new Date().toISOString().split('T')[0]}.csv`;
-    a.click();
-    URL.revokeObjectURL(downloadUrl);
-    showToast('Report downloaded!', 'success');
-  } catch (err) {
-    console.error('Export error:', err);
-    showToast(err.message, 'error');
-  }
-}
 
-async function exportTasksReport() {
-  try {
-    const token = localStorage.getItem('token');
-    if (!token) {
-      showToast('Please login first', 'error');
-      return;
+    async function exportAttendanceReport() {
+      try {
+        const token = localStorage.getItem('token');
+        if (!token) { showToast('Please login first', 'error'); return; }
+        const startDate = document.getElementById('reportStartDate')?.value || '';
+        const endDate = document.getElementById('reportEndDate')?.value || '';
+        const teamId = document.getElementById('reportTeam')?.value || '';
+        let url = `${API_BASE}/reports/attendance/csv?`;
+        if (startDate) url += `startDate=${startDate}&`;
+        if (endDate) url += `endDate=${endDate}&`;
+        if (teamId) url += `teamId=${teamId}&`;
+        const response = await fetch(url, { headers: { 'Authorization': `Bearer ${token}` } });
+        if (!response.ok) { const error = await response.json(); throw new Error(error.error || 'Export failed'); }
+        const blob = await response.blob();
+        const downloadUrl = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = downloadUrl;
+        a.download = `attendance-report-${new Date().toISOString().split('T')[0]}.csv`;
+        a.click();
+        URL.revokeObjectURL(downloadUrl);
+        showToast('Report downloaded!', 'success');
+      } catch (err) { console.error('Export error:', err); showToast(err.message, 'error'); }
     }
-    
-    const response = await fetch(`${API_BASE}/reports/tasks/csv`, {
-      headers: { 'Authorization': `Bearer ${token}` }
-    });
-    
-    if (!response.ok) {
-      const error = await response.json();
-      throw new Error(error.error || 'Export failed');
-    }
-    
-    const blob = await response.blob();
-    const downloadUrl = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = downloadUrl;
-    a.download = `tasks-report-${new Date().toISOString().split('T')[0]}.csv`;
-    a.click();
-    URL.revokeObjectURL(downloadUrl);
-    showToast('Tasks report downloaded!', 'success');
-  } catch (err) {
-    console.error('Export error:', err);
-    showToast(err.message, 'error');
-  }
-}
 
-async function exportExcelReport() {
-  try {
-    const token = localStorage.getItem('token');
-    if (!token) {
-      showToast('Please login first', 'error');
-      return;
+    async function exportTasksReport() {
+      try {
+        const token = localStorage.getItem('token');
+        if (!token) { showToast('Please login first', 'error'); return; }
+        const response = await fetch(`${API_BASE}/reports/tasks/csv`, { headers: { 'Authorization': `Bearer ${token}` } });
+        if (!response.ok) { const error = await response.json(); throw new Error(error.error || 'Export failed'); }
+        const blob = await response.blob();
+        const downloadUrl = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = downloadUrl;
+        a.download = `tasks-report-${new Date().toISOString().split('T')[0]}.csv`;
+        a.click();
+        URL.revokeObjectURL(downloadUrl);
+        showToast('Tasks report downloaded!', 'success');
+      } catch (err) { console.error('Export error:', err); showToast(err.message, 'error'); }
     }
-    
-    const response = await fetch(`${API_BASE}/reports/excel`, {
-      headers: { 'Authorization': `Bearer ${token}` }
-    });
-    
-    if (!response.ok) {
-      const error = await response.json();
-      throw new Error(error.error || 'Export failed');
+
+    async function exportExcelReport() {
+      try {
+        const token = localStorage.getItem('token');
+        if (!token) { showToast('Please login first', 'error'); return; }
+        const response = await fetch(`${API_BASE}/reports/excel`, { headers: { 'Authorization': `Bearer ${token}` } });
+        if (!response.ok) { const error = await response.json(); throw new Error(error.error || 'Export failed'); }
+        const blob = await response.blob();
+        const downloadUrl = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = downloadUrl;
+        a.download = `wfms-report-${new Date().toISOString().split('T')[0]}.xlsx`;
+        a.click();
+        URL.revokeObjectURL(downloadUrl);
+        showToast('Excel report downloaded!', 'success');
+      } catch (err) { console.error('Export error:', err); showToast(err.message, 'error'); }
     }
-    
-    const blob = await response.blob();
-    const downloadUrl = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = downloadUrl;
-    a.download = `wfms-report-${new Date().toISOString().split('T')[0]}.xlsx`;
-    a.click();
-    URL.revokeObjectURL(downloadUrl);
-    showToast('Excel report downloaded!', 'success');
-  } catch (err) {
-    console.error('Export error:', err);
-    showToast(err.message, 'error');
-  }
-}
+
     // ===== IMPERSONATION FUNCTIONS =====
     window.startImpersonation = async function() {
       const target_user_id = document.getElementById('impersonateUser').value;
@@ -1424,53 +1372,10 @@ async function exportExcelReport() {
       } catch (err) { localStorage.removeItem('token'); document.getElementById('auth-overlay').classList.remove('hidden'); document.getElementById('dashboard').classList.add('hidden'); }
     }
 
-    // Apply saved theme
     const savedTheme = localStorage.getItem('wfms_theme');
     if (savedTheme === 'light') { document.body.classList.add('light-theme'); document.getElementById('themeText').innerText = 'Light'; }
 
     checkAuth();
   </script>
-  <!-- QR Library Preloader -->
-<script>
-  // Preload QR library to ensure it's ready
-  (function preloadQRLibrary() {
-    const libraries = [
-      'https://cdn.jsdelivr.net/npm/html5-qrcode@2.3.8/html5-qrcode.min.js',
-      'https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js'
-    ];
-    
-    let loaded = false;
-    
-    function loadScript(src) {
-      return new Promise((resolve, reject) => {
-        const script = document.createElement('script');
-        script.src = src;
-        script.onload = resolve;
-        script.onerror = reject;
-        document.head.appendChild(script);
-      });
-    }
-    
-    async function load() {
-      for (const lib of libraries) {
-        try {
-          await loadScript(lib);
-          if (typeof window.Html5Qrcode !== 'undefined') {
-            console.log('✅ QR library loaded successfully');
-            loaded = true;
-            window.dispatchEvent(new CustomEvent('qr-library-ready'));
-            return;
-          }
-        } catch(e) {
-          console.log('Failed to load from:', lib);
-        }
-      }
-      console.warn('⚠️ QR library failed to load, using fallback');
-      window.Html5Qrcode = null;
-    }
-    
-    load();
-  })();
-</script>
 </body>
 </html>

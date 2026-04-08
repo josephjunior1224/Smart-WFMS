@@ -865,42 +865,47 @@ app.put('/api/users/profile', authenticateToken, async (req, res) => {
 // ===============================================
 // ===== QR CODE AUTO-LOGIN WITH ATTENDANCE RECORDING =====
 
-// Generate QR code for user (called after registration or from dashboard)
+/// In server.js - Optimized QR generation
+// // ===============================================
+// QR CODE ROUTES - COMPLETE WORKING VERSION
+// ===============================================
+
+// Generate QR code for user (short token for easy scanning)
 app.post('/api/qr/generate-user', authenticateToken, async (req, res) => {
   try {
     const userId = req.user.id;
     
     let qrCode = await QRCode.findOne({ user_id: userId });
     
-    // Generate a simple token (no URL, just the token for easy scanning)
-    const qrToken = uuidv4();
+    // Generate SHORT token (8-10 chars) for QR - MUCH easier to scan
+    const shortToken = Math.random().toString(36).substring(2, 12);
     
-    // Generate QR code with your brand colors
-    const qrData = await QR.toDataURL(qrToken, {
-      errorCorrectionLevel: 'M',
+    // Generate QR with maximum contrast for easy scanning
+    const qrData = await QR.toDataURL(shortToken, {
+      errorCorrectionLevel: 'L',
       type: 'image/png',
-      width: 500,
+      width: 600,
       margin: 2,
       color: {
-        dark: '#00F0FF',  // Nova Blue
-        light: '#0B0B0B'  // Deep Space
+        dark: '#000000',
+        light: '#FFFFFF'
       }
     });
     
     const expiresAt = new Date();
-    expiresAt.setDate(expiresAt.getDate() + 365); // 1 year validity
+    expiresAt.setDate(expiresAt.getDate() + 365);
     
     if (qrCode) {
-      qrCode.qr_token = qrToken;
+      qrCode.qr_token = shortToken;
       qrCode.qr_data = qrData;
       qrCode.expires_at = expiresAt;
       qrCode.status = 'active';
-      qrCode.generated_at = new Date();
+      qrCode.scan_count = 0;
       await qrCode.save();
     } else {
       qrCode = new QRCode({
         user_id: userId,
-        qr_token: qrToken,
+        qr_token: shortToken,
         qr_data: qrData,
         generated_at: new Date(),
         expires_at: expiresAt,
@@ -911,14 +916,14 @@ app.post('/api/qr/generate-user', authenticateToken, async (req, res) => {
     }
     
     await User.findByIdAndUpdate(userId, {
-      qr_token: qrToken,
+      qr_token: shortToken,
       qr_code_data: qrData,
       qr_expires_at: expiresAt
     });
     
     res.json({
       ok: true,
-      qrToken,
+      qrToken: shortToken,
       qrData,
       expiresAt,
       isNew: true
@@ -938,48 +943,42 @@ app.post('/api/qr-login', async (req, res) => {
       return res.status(400).json({ ok: false, error: 'QR token required' });
     }
     
-    // Clean the token (in case user scanned a URL)
-    if (token.includes('/')) {
-      const parts = token.split('/');
-      token = parts[parts.length - 1];
-    }
-    if (token.includes('?')) {
-      token = token.split('?')[0];
-    }
+    // Clean token - remove any URL parts
+    if (token.includes('/')) token = token.split('/').pop();
+    if (token.includes('?')) token = token.split('?')[0];
     if (token.includes('token=')) {
       const match = token.match(/token=([^&]+)/);
       if (match) token = match[1];
     }
-    if (token.includes('%')) {
-      token = decodeURIComponent(token);
-    }
+    if (token.includes('%')) token = decodeURIComponent(token);
     
-    // Find the QR code in database
-    const qrCode = await QRCode.findOne({ qr_token: token }).populate('user_id');
+    // Find QR code (works with both short and long tokens)
+    const qrCode = await QRCode.findOne({ 
+      qr_token: token
+    }).populate('user_id');
     
     if (!qrCode) {
       return res.status(404).json({ ok: false, error: 'Invalid QR code' });
     }
     
-    // Check if QR code is expired
+    // Check expiration
     if (qrCode.expires_at && new Date() > qrCode.expires_at) {
       return res.status(401).json({ ok: false, error: 'QR code has expired. Please generate a new one.' });
     }
     
-    // Check if QR code is revoked
+    // Check if revoked
     if (qrCode.status === 'revoked') {
       return res.status(401).json({ ok: false, error: 'QR code has been revoked. Please contact admin.' });
     }
     
     const user = qrCode.user_id;
     
-    // Check if user account is active
     if (!user || !user.is_active) {
-      return res.status(401).json({ ok: false, error: 'Account is deactivated. Please contact admin.' });
+      return res.status(401).json({ ok: false, error: 'Account is deactivated' });
     }
     
-    // RECORD THE QR SCAN in scan history
-    const scan = new QRScan({
+    // Record QR scan in history
+    await QRScan.create({
       user_id: user._id,
       qr_token: token,
       scanned_at: new Date(),
@@ -987,9 +986,8 @@ app.post('/api/qr-login', async (req, res) => {
       action: 'login',
       user_agent: req.headers['user-agent']
     });
-    await scan.save();
     
-    // Update QR code scan count
+    // Update scan count
     qrCode.scan_count = (qrCode.scan_count || 0) + 1;
     qrCode.last_scan_at = new Date();
     if (!qrCode.is_activated) {
@@ -998,7 +996,7 @@ app.post('/api/qr-login', async (req, res) => {
     }
     await qrCode.save();
     
-    // ===== RECORD ATTENDANCE AUTOMATICALLY =====
+    // RECORD ATTENDANCE AUTOMATICALLY
     try {
       const attendance = new Attendance({
         user_id: user._id,
@@ -1011,22 +1009,6 @@ app.post('/api/qr-login', async (req, res) => {
       console.log(`✅ Attendance recorded for ${user.name} via QR code`);
     } catch (attErr) {
       console.error('Failed to record attendance:', attErr);
-      // Don't fail the login if attendance recording fails
-    }
-    
-    // Also record a separate login action in audit log
-    try {
-      const auditLog = new AuditLog({
-        user_id: user._id,
-        action: 'qr_login',
-        resource: 'authentication',
-        details: { method: 'qr_code', scan_count: qrCode.scan_count },
-        ip_address: req.ip || req.connection?.remoteAddress,
-        user_agent: req.headers['user-agent']
-      });
-      await auditLog.save();
-    } catch (logErr) {
-      console.error('Failed to create audit log:', logErr);
     }
     
     // Generate JWT token for auto-login
@@ -1058,7 +1040,6 @@ app.post('/api/qr-login', async (req, res) => {
       console.error('Failed to create session:', sessErr);
     }
     
-    // Send success response with user data and token
     res.json({
       ok: true,
       token: jwtToken,
@@ -1077,10 +1058,126 @@ app.post('/api/qr-login', async (req, res) => {
     
   } catch (err) {
     console.error('QR login error:', err);
-    res.status(500).json({ ok: false, error: 'Server error during QR login' });
+    res.status(500).json({ ok: false, error: err.message });
   }
 });
 
+// Get QR code for current user (for dashboard display)
+app.get('/api/qr/my-code', authenticateToken, async (req, res) => {
+  try {
+    let qrCode = await QRCode.findOne({ user_id: req.user.id });
+    
+    if (!qrCode || qrCode.status !== 'active' || new Date() > qrCode.expires_at) {
+      // Generate new QR code
+      const shortToken = Math.random().toString(36).substring(2, 12);
+      const qrData = await QR.toDataURL(shortToken, {
+        errorCorrectionLevel: 'L',
+        type: 'image/png',
+        width: 600,
+        margin: 2,
+        color: { dark: '#000000', light: '#FFFFFF' }
+      });
+      const expiresAt = new Date();
+      expiresAt.setDate(expiresAt.getDate() + 365);
+      
+      if (qrCode) {
+        qrCode.qr_token = shortToken;
+        qrCode.qr_data = qrData;
+        qrCode.expires_at = expiresAt;
+        qrCode.status = 'active';
+        qrCode.scan_count = 0;
+        await qrCode.save();
+      } else {
+        qrCode = new QRCode({
+          user_id: req.user.id,
+          qr_token: shortToken,
+          qr_data: qrData,
+          generated_at: new Date(),
+          expires_at: expiresAt,
+          status: 'active'
+        });
+        await qrCode.save();
+      }
+      
+      await User.findByIdAndUpdate(req.user.id, {
+        qr_token: shortToken,
+        qr_code_data: qrData,
+        qr_expires_at: expiresAt
+      });
+    }
+    
+    // Get scan history
+    const scanHistory = await QRScan.find({ user_id: req.user.id })
+      .sort({ scanned_at: -1 })
+      .limit(10);
+    
+    res.json({
+      ok: true,
+      qrData: qrCode.qr_data,
+      qrToken: qrCode.qr_token,
+      expiresAt: qrCode.expires_at,
+      scanCount: qrCode.scan_count || 0,
+      scanHistory: scanHistory.map(s => ({
+        scanned_at: s.scanned_at,
+        scanner_ip: s.scanner_ip,
+        action: s.action
+      }))
+    });
+  } catch (err) {
+    console.error('Get QR error:', err);
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
+// Regenerate QR code (single, clean version)
+app.post('/api/qr/regenerate', authenticateToken, async (req, res) => {
+  try {
+    // Mark old QR as expired
+    await QRCode.updateOne({ user_id: req.user.id }, { status: 'expired' });
+    
+    // Generate new short token
+    const shortToken = Math.random().toString(36).substring(2, 12);
+    const qrData = await QR.toDataURL(shortToken, {
+      errorCorrectionLevel: 'L',
+      type: 'image/png',
+      width: 600,
+      margin: 2,
+      color: { dark: '#000000', light: '#FFFFFF' }
+    });
+    const expiresAt = new Date();
+    expiresAt.setDate(expiresAt.getDate() + 365);
+    
+    let qrCode = await QRCode.findOne({ user_id: req.user.id });
+    if (qrCode) {
+      qrCode.qr_token = shortToken;
+      qrCode.qr_data = qrData;
+      qrCode.expires_at = expiresAt;
+      qrCode.status = 'active';
+      qrCode.scan_count = 0;
+      await qrCode.save();
+    } else {
+      qrCode = new QRCode({
+        user_id: req.user.id,
+        qr_token: shortToken,
+        qr_data: qrData,
+        expires_at: expiresAt,
+        status: 'active'
+      });
+      await qrCode.save();
+    }
+    
+    await User.findByIdAndUpdate(req.user.id, {
+      qr_token: shortToken,
+      qr_code_data: qrData,
+      qr_expires_at: expiresAt
+    });
+    
+    res.json({ ok: true, qrData, qrToken: shortToken, expiresAt });
+  } catch (err) {
+    console.error('Regenerate QR error:', err);
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
 // Get QR code for current user (for dashboard display)
 app.get('/api/qr/my-code', authenticateToken, async (req, res) => {
   try {
