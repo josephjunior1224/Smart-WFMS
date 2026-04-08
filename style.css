@@ -72,6 +72,51 @@ body {
 .mt-4 { margin-top: 24px; }
 .w-100 { width: 100%; }
 
+
+/* modal */
+/* Add to your existing styles */
+.modal {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.8);
+  display: none;
+  align-items: center;
+  justify-content: center;
+  z-index: 2000;
+  padding: 20px;
+}
+
+.modal.active {
+  display: flex;
+}
+
+.modal-content {
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius);
+  max-width: 500px;
+  width: 100%;
+}
+
+.modal-header {
+  padding: 20px;
+  border-bottom: 1px solid var(--border-color);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.modal-body {
+  padding: 20px;
+}
+
+.modal-footer {
+  padding: 20px;
+  border-top: 1px solid var(--border-color);
+  display: flex;
+  gap: 12px;
+  justify-content: flex-end;
+}
 /* ===== COLORED NOTIFICATIONS ===== */
 .notification-item {
   background: var(--bg-card);
@@ -169,6 +214,25 @@ body {
   color: var(--text-primary);
 }
 
+.spinner {
+  width: 30px;
+  height: 30px;
+  border: 3px solid #2d2d2d;
+  border-top-color: #00F0FF;
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+}
+
+#scan-status {
+  font-size: 12px;
+  margin-bottom: 8px;
+  padding: 6px;
+  border-radius: 6px;
+  background: rgba(0,0,0,0.5);
+}
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
 /* ===== AUTH SCREEN ===== */
 #auth-overlay {
   display: flex;

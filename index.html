@@ -632,270 +632,320 @@
       });
     }
 
-    window.initQRScanner = async function(mode) {
-      console.log('Starting QR scanner...');
-      
-      const container = document.getElementById('qrScannerContainer');
-      if (!container) {
-        showToast('Scanner error', 'error');
-        return;
-      }
-      container.classList.remove('hidden');
-      
-      if (activeScanner) {
-        try {
-          if (typeof activeScanner.stop === 'function') {
-            await activeScanner.stop();
-          }
-        } catch(e) {}
-        activeScanner = null;
-      }
-      
-      const readerElement = document.getElementById('qr-reader');
-      if (!readerElement) {
-        showToast('Scanner element not found', 'error');
-        return;
-      }
-      
-      readerElement.innerHTML = '<div id="qr-video-container" style="width: 100%; min-height: 300px; background: #000; border-radius: 12px; display: flex; align-items: center; justify-content: center;"><div class="spinner" style="width: 30px; height: 30px; border: 3px solid #2d2d2d; border-top-color: #00F0FF; border-radius: 50%; animation: spin 1s linear infinite;"></div><p style="color: #9ca3af; margin-left: 10px;">Loading camera...</p></div>';
-      
-      if (typeof Instascan !== 'undefined') {
-        try {
-          await startInstascan(readerElement, mode);
-          return;
-        } catch (err) {
-          console.log('Instascan failed:', err);
-        }
-      }
-      
-      try {
-        await startSimpleCamera(readerElement, mode);
-      } catch (err) {
-        console.error('Camera error:', err);
-        readerElement.innerHTML = '<div style="text-align: center; padding: 20px;"><p style="color: #ef4444;">Camera error. Please use Manual QR Entry instead.</p><button class="btn btn-primary" style="margin-top: 10px;" onclick="manualQREntry()">Manual QR Entry</button><button class="btn btn-outline" style="margin-top: 10px; margin-left: 10px;" onclick="closeQRScanner()">Close</button></div>';
-        showToast('Camera not available. Please use Manual QR Entry.', 'error');
-      }
-    };
+    // ===== DEBUGGABLE QR SCANNER WITH FEEDBACK =====
+let scanningInterval = null;
+let videoStream = null;
+let isScanning = false;
 
-    async function startInstascan(readerElement, mode) {
-      return new Promise(async (resolve, reject) => {
-        try {
-          readerElement.innerHTML = '<video id="instascan-preview" style="width: 100%; border-radius: 12px; background: #000;"></video>';
-          
-          const scanner = new Instascan.Scanner({
-            video: document.getElementById('instascan-preview'),
-            mirror: false,
-            backgroundScan: true,
-            continuous: true,
-            refractoryPeriod: 3000
-          });
-          
-          activeScanner = scanner;
-          
-          scanner.addListener('scan', async (content) => {
-            console.log('✅ QR Code detected:', content);
-            try { await scanner.stop(); } catch(e) {}
-            activeScanner = null;
-            closeQRScanner();
-            await processQRLogin(content);
-          });
-          
-          scanner.addListener('error', (err) => {
-            console.debug('Scanner error:', err);
-          });
-          
-          const cameras = await Instascan.Camera.getCameras();
-          if (cameras.length === 0) {
-            reject(new Error('No camera found'));
+window.initQRScanner = async function(mode) {
+  console.log('Starting QR scanner...');
+  
+  const container = document.getElementById('qrScannerContainer');
+  if (!container) {
+    showToast('Scanner error', 'error');
+    return;
+  }
+  container.classList.remove('hidden');
+  
+  // Stop any existing scanning
+  if (scanningInterval) {
+    clearInterval(scanningInterval);
+    scanningInterval = null;
+  }
+  if (videoStream) {
+    videoStream.getTracks().forEach(track => track.stop());
+    videoStream = null;
+  }
+  
+  const readerElement = document.getElementById('qr-reader');
+  if (!readerElement) {
+    showToast('Scanner element not found', 'error');
+    return;
+  }
+  
+  // Try Instascan first (best for continuous scanning)
+  if (typeof Instascan !== 'undefined') {
+    try {
+      await startInstascan(readerElement, mode);
+      return;
+    } catch (err) {
+      console.log('Instascan failed:', err);
+    }
+  }
+  
+  // Fallback to continuous frame scanning with better feedback
+  try {
+    await startContinuousScannerWithFeedback(readerElement, mode);
+  } catch (err) {
+    console.error('Camera error:', err);
+    readerElement.innerHTML = '<div style="text-align: center; padding: 20px;"><p style="color: #ef4444;">Camera error: ' + err.message + '</p><button class="btn btn-primary" style="margin-top: 10px;" onclick="manualQREntry()">Manual QR Entry</button><button class="btn btn-outline" style="margin-top: 10px; margin-left: 10px;" onclick="closeQRScanner()">Close</button></div>';
+    showToast('Camera not available. Please use Manual QR Entry.', 'error');
+  }
+};
+
+async function startInstascan(readerElement, mode) {
+  return new Promise(async (resolve, reject) => {
+    try {
+      readerElement.innerHTML = '<video id="instascan-preview" style="width: 100%; border-radius: 12px; background: #000;"></video>';
+      
+      const scanner = new Instascan.Scanner({
+        video: document.getElementById('instascan-preview'),
+        mirror: false,
+        backgroundScan: true,
+        continuous: true,
+        refractoryPeriod: 2000
+      });
+      
+      activeScanner = scanner;
+      
+      scanner.addListener('scan', async (content) => {
+        console.log('✅ QR Code detected:', content);
+        try { await scanner.stop(); } catch(e) {}
+        activeScanner = null;
+        closeQRScanner();
+        await processQRLogin(content);
+      });
+      
+      scanner.addListener('error', (err) => {
+        console.debug('Scanner error:', err);
+      });
+      
+      const cameras = await Instascan.Camera.getCameras();
+      if (cameras.length === 0) {
+        reject(new Error('No camera found'));
+        return;
+      }
+      
+      const backCamera = cameras.find(cam => 
+        cam.name.toLowerCase().includes('back') || 
+        cam.name.toLowerCase().includes('environment') ||
+        cam.name.toLowerCase().includes('rear')
+      );
+      const selectedCamera = backCamera || cameras[0];
+      
+      await scanner.start(selectedCamera);
+      showToast('Scanner ready! Point camera at QR code', 'success');
+      resolve();
+    } catch (err) {
+      reject(err);
+    }
+  });
+}
+
+async function startContinuousScannerWithFeedback(readerElement, mode) {
+  return new Promise(async (resolve, reject) => {
+    try {
+      readerElement.innerHTML = `
+        <video id="qr-video" autoplay playsinline style="width: 100%; border-radius: 12px; background: #000;"></video>
+        <canvas id="qr-canvas" style="display: none;"></canvas>
+        <div style="text-align: center; margin-top: 10px;">
+          <div id="scan-status" style="color: #FBBF24; font-size: 12px; margin-bottom: 8px;">📷 Initializing camera...</div>
+          <div style="display: flex; gap: 10px; justify-content: center;">
+            <button class="btn btn-primary btn-sm" id="manualScanBtn">📷 Scan Now</button>
+            <button class="btn btn-outline btn-sm" onclick="manualQREntry()">✏️ Manual Entry</button>
+            <button class="btn btn-outline btn-sm" onclick="closeQRScanner()">❌ Close</button>
+          </div>
+          <div style="margin-top: 8px;">
+            <p style="color: #9ca3af; font-size: 11px;">💡 Tip: Hold QR code steady in the center of the frame</p>
+          </div>
+        </div>
+      `;
+      
+      const video = document.getElementById('qr-video');
+      const stream = await navigator.mediaDevices.getUserMedia({ 
+        video: { facingMode: "environment" } 
+      });
+      video.srcObject = stream;
+      videoStream = stream;
+      await video.play();
+      
+      // Update status when video is playing
+      const statusDiv = document.getElementById('scan-status');
+      if (statusDiv) statusDiv.innerHTML = '✅ Camera ready! Position QR code and click "Scan Now"';
+      
+      // Load jsQR library
+      if (typeof jsQR === 'undefined') {
+        await loadScript('https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.min.js');
+      }
+      
+      const canvas = document.getElementById('qr-canvas');
+      const context = canvas.getContext('2d');
+      
+      // Add manual scan button handler
+      const scanBtn = document.getElementById('manualScanBtn');
+      if (scanBtn) {
+        scanBtn.onclick = async () => {
+          if (!video.videoWidth || !video.videoHeight) {
+            showToast('Camera not ready yet', 'warning');
             return;
           }
           
-          const backCamera = cameras.find(cam => 
-            cam.name.toLowerCase().includes('back') || 
-            cam.name.toLowerCase().includes('environment') ||
-            cam.name.toLowerCase().includes('rear')
-          );
-          const selectedCamera = backCamera || cameras[0];
+          statusDiv.innerHTML = '🔍 Scanning... Please hold still';
+          statusDiv.style.color = '#00F0FF';
           
-          await scanner.start(selectedCamera);
-          showToast('Scanner ready! Point camera at QR code', 'success');
-          resolve();
-        } catch (err) {
-          reject(err);
-        }
-      });
-    }
-
-    async function startSimpleCamera(readerElement, mode) {
-      return new Promise(async (resolve, reject) => {
-        try {
-          readerElement.innerHTML = `
-            <video id="qr-video" autoplay playsinline style="width: 100%; border-radius: 12px; background: #000;"></video>
-            <canvas id="qr-canvas" style="display: none;"></canvas>
-            <div style="text-align: center; margin-top: 15px; display: flex; gap: 10px; justify-content: center;">
-              <button class="btn btn-primary" onclick="captureQRFrame()">📷 Scan QR Code</button>
-              <button class="btn btn-outline" onclick="manualQREntry()">✏️ Manual Entry</button>
-              <button class="btn btn-outline" onclick="closeQRScanner()">❌ Close</button>
-            </div>
-            <p style="text-align: center; color: #9ca3af; margin-top: 10px; font-size: 12px;">Position QR code in frame, then click "Scan QR Code"</p>
-          `;
+          canvas.width = video.videoWidth;
+          canvas.height = video.videoHeight;
+          context.drawImage(video, 0, 0, canvas.width, canvas.height);
           
-          const video = document.getElementById('qr-video');
-          const stream = await navigator.mediaDevices.getUserMedia({ 
-            video: { facingMode: "environment" } 
+          const imageData = context.getImageData(0, 0, canvas.width, canvas.height);
+          const code = jsQR(imageData.data, canvas.width, canvas.height, {
+            inversionAttempts: "dontInvert",
           });
-          video.srcObject = stream;
-          await video.play();
           
-          showToast('Camera ready! Position QR code and click "Scan QR Code"', 'success');
-          resolve();
-        } catch (err) {
-          reject(err);
-        }
-      });
-    }
-
-    window.captureQRFrame = async function() {
-      const video = document.getElementById('qr-video');
-      const canvas = document.getElementById('qr-canvas');
-      
-      if (!video || !canvas) {
-        showToast('Camera not ready', 'error');
-        return;
-      }
-      
-      const ctx = canvas.getContext('2d');
-      canvas.width = video.videoWidth;
-      canvas.height = video.videoHeight;
-      ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-      
-      showToast('Processing image...', 'info');
-      
-      if (typeof jsQR === 'undefined') {
-        try {
-          await loadScript('https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.min.js');
-        } catch(err) {
-          showToast('Failed to load QR scanner', 'error');
-          return;
-        }
-      }
-      
-      const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-      const code = jsQR(imageData.data, canvas.width, canvas.height);
-      
-      if (code) {
-        console.log('✅ QR detected:', code.data);
-        await processQRLogin(code.data);
-        closeQRScanner();
-      } else {
-        showToast('No QR code found. Make sure QR is clearly visible.', 'warning');
-      }
-    };
-
-    async function processQRLogin(content) {
-      let token = content;
-      if (content.includes('token=')) {
-        const match = content.match(/token=([^&]+)/);
-        if (match) token = match[1];
-      } else if (content.includes('/qr/auto/')) {
-        const match = content.match(/\/qr\/auto\/([^?]+)/);
-        if (match) token = match[1];
-      } else if (content.includes('/qr-login.html?token=')) {
-        const match = content.match(/token=([^&]+)/);
-        if (match) token = match[1];
-      }
-      
-      if (token.includes('/')) token = token.split('/').pop();
-      if (token.includes('?')) token = token.split('?')[0];
-      
-      showToast('QR detected! Logging in...', 'info');
-      
-      try {
-        const response = await fetch('/api/qr-login', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ token })
-        });
-        const data = await response.json();
-        
-        if (data.ok) {
-          localStorage.setItem('token', data.token);
-          if (data.refreshToken) localStorage.setItem('refreshToken', data.refreshToken);
-          currentUser = data.user;
-          showToast(`Welcome ${data.user.name}! Attendance recorded.`, 'success');
-          setTimeout(() => location.reload(), 1000);
-        } else {
-          showToast(data.error || 'QR login failed', 'error');
-        }
-      } catch (err) {
-        console.error('QR login error:', err);
-        showToast('Login error: ' + err.message, 'error');
-      }
-    }
-
-    function closeQRScanner() {
-      const video = document.getElementById('qr-video');
-      if (video && video.srcObject) {
-        const tracks = video.srcObject.getTracks();
-        tracks.forEach(track => track.stop());
-        video.srcObject = null;
-      }
-      
-      if (activeScanner) {
-        try {
-          if (typeof activeScanner.stop === 'function') {
-            activeScanner.stop();
-          }
-        } catch(e) {}
-        activeScanner = null;
-      }
-      
-      const container = document.getElementById('qrScannerContainer');
-      if (container) container.classList.add('hidden');
-      
-      const readerElement = document.getElementById('qr-reader');
-      if (readerElement) readerElement.innerHTML = '';
-    }
-
-    window.manualQREntry = function() {
-      const code = prompt('Enter QR code token manually:');
-      if (code) {
-        let token = code;
-        if (code.includes('token=')) {
-          const match = code.match(/token=([^&]+)/);
-          if (match) token = match[1];
-        } else if (code.includes('/qr/auto/')) {
-          const match = code.match(/\/qr\/auto\/([^?]+)/);
-          if (match) token = match[1];
-        }
-        
-        if (token.includes('/')) token = token.split('/').pop();
-        if (token.includes('?')) token = token.split('?')[0];
-        
-        showToast('Processing manual entry...', 'info');
-        
-        fetch('/api/qr-login', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ token })
-        })
-        .then(r => r.json())
-        .then(data => {
-          if (data.ok) {
-            localStorage.setItem('token', data.token);
-            currentUser = data.user;
-            showToast('QR Login successful!', 'success');
-            location.reload();
+          if (code) {
+            console.log('✅ QR detected:', code.data);
+            statusDiv.innerHTML = '✅ QR Code detected! Logging in...';
+            statusDiv.style.color = '#10b981';
+            // Stop video stream
+            if (videoStream) {
+              videoStream.getTracks().forEach(track => track.stop());
+              videoStream = null;
+            }
+            closeQRScanner();
+            await processQRLogin(code.data);
           } else {
-            showToast(data.error, 'error');
+            statusDiv.innerHTML = '❌ No QR code found. Make sure QR is clearly visible and try again.';
+            statusDiv.style.color = '#ef4444';
+            setTimeout(() => {
+              if (statusDiv) {
+                statusDiv.innerHTML = '✅ Camera ready! Position QR code and click "Scan Now"';
+                statusDiv.style.color = '#FBBF24';
+              }
+            }, 2000);
+            showToast('No QR code detected. Try adjusting distance or lighting.', 'warning');
           }
-        })
-        .catch(err => showToast('Error: ' + err.message, 'error'));
+        };
       }
-    };
+      
+      showToast('Camera ready! Position QR code and click "Scan Now"', 'success');
+      resolve();
+    } catch (err) {
+      reject(err);
+    }
+  });
+}
 
-    window.closeQRScanner = closeQRScanner;
+async function processQRLogin(content) {
+  console.log('Processing QR content:', content);
+  
+  let token = content;
+  
+  // Extract token from various QR formats
+  if (content.includes('token=')) {
+    const match = content.match(/token=([^&]+)/);
+    if (match) token = match[1];
+  } else if (content.includes('/qr/auto/')) {
+    const match = content.match(/\/qr\/auto\/([^?]+)/);
+    if (match) token = match[1];
+  } else if (content.includes('/qr-login.html?token=')) {
+    const match = content.match(/token=([^&]+)/);
+    if (match) token = match[1];
+  }
+  
+  // Clean token
+  if (token.includes('/')) token = token.split('/').pop();
+  if (token.includes('?')) token = token.split('?')[0];
+  if (token.includes('%')) token = decodeURIComponent(token);
+  
+  console.log('Extracted token:', token);
+  showToast('QR detected! Logging in...', 'info');
+  
+  try {
+    const response = await fetch('/api/qr-login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ token })
+    });
+    const data = await response.json();
+    
+    console.log('Login response:', data);
+    
+    if (data.ok) {
+      localStorage.setItem('token', data.token);
+      if (data.refreshToken) localStorage.setItem('refreshToken', data.refreshToken);
+      currentUser = data.user;
+      showToast(`Welcome ${data.user.name}! Attendance recorded.`, 'success');
+      setTimeout(() => location.reload(), 1000);
+    } else {
+      showToast(data.error || 'QR login failed', 'error');
+    }
+  } catch (err) {
+    console.error('QR login error:', err);
+    showToast('Login error: ' + err.message, 'error');
+  }
+}
 
+function closeQRScanner() {
+  // Stop continuous scanning
+  if (scanningInterval) {
+    clearInterval(scanningInterval);
+    scanningInterval = null;
+  }
+  
+  // Stop video stream
+  if (videoStream) {
+    videoStream.getTracks().forEach(track => track.stop());
+    videoStream = null;
+  }
+  
+  // Stop Instascan scanner
+  if (activeScanner) {
+    try {
+      if (typeof activeScanner.stop === 'function') {
+        activeScanner.stop();
+      }
+    } catch(e) {}
+    activeScanner = null;
+  }
+  
+  // Hide container
+  const container = document.getElementById('qrScannerContainer');
+  if (container) container.classList.add('hidden');
+  
+  // Clear reader element
+  const readerElement = document.getElementById('qr-reader');
+  if (readerElement) readerElement.innerHTML = '';
+}
+
+// Manual QR entry fallback
+window.manualQREntry = function() {
+  const code = prompt('Enter QR code token manually:');
+  if (code) {
+    let token = code;
+    if (code.includes('token=')) {
+      const match = code.match(/token=([^&]+)/);
+      if (match) token = match[1];
+    } else if (code.includes('/qr/auto/')) {
+      const match = code.match(/\/qr\/auto\/([^?]+)/);
+      if (match) token = match[1];
+    }
+    
+    if (token.includes('/')) token = token.split('/').pop();
+    if (token.includes('?')) token = token.split('?')[0];
+    
+    showToast('Processing manual entry...', 'info');
+    
+    fetch('/api/qr-login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ token })
+    })
+    .then(r => r.json())
+    .then(data => {
+      if (data.ok) {
+        localStorage.setItem('token', data.token);
+        currentUser = data.user;
+        showToast('QR Login successful!', 'success');
+        location.reload();
+      } else {
+        showToast(data.error, 'error');
+      }
+    })
+    .catch(err => showToast('Error: ' + err.message, 'error'));
+  }
+};
+
+window.closeQRScanner = closeQRScanner;
     // ===== TASK FUNCTIONS =====
     async function loadUsersForDropdowns() {
       try {

@@ -2,10 +2,15 @@
 <html lang="en">
 <head>
   <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>HERITAGE Workforce Management System</title>
-  <meta name="description" content="Enterprise workforce management solution" />
-  <meta name="theme-color" content="#0c1222" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>BNS · Black Nova Shift · Workforce Management System</title>
+  <meta name="description" content="Enterprise workforce management solution with QR code authentication" />
+  <meta name="theme-color" content="#0B0B0B" />
+  
+  <!-- BNS Brand Colors -->
+  <meta name="theme-color" content="#0B0B0B" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
   
   <!-- Tailwind CSS -->
   <script src="https://cdn.tailwindcss.com"></script>
@@ -23,6 +28,12 @@
   <!-- Font Awesome Icons -->
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
   
+  <!-- Instascan QR Scanner -->
+  <script src="https://cdn.jsdelivr.net/npm/instascan@1.0.0/instascan.min.js"></script>
+  
+  <!-- Socket.io -->
+  <script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
+  
   <!-- Google Fonts -->
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
   
@@ -33,18 +44,34 @@
       box-sizing: border-box;
     }
     
+    /* BNS Color Palette */
+    :root {
+      --bns-deep-space: #0B0B0B;
+      --bns-space-light: #1a1a1a;
+      --bns-nova-blue: #00F0FF;
+      --bns-nova-blue-dark: #00c0cc;
+      --bns-burst-orange: #FF5E00;
+      --bns-star-gold: #FBBF24;
+      --bns-code-green: #4EC9B0;
+      --bns-code-blue: #569CD6;
+    }
+    
     body {
       font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      background: linear-gradient(135deg, #0B0B0B 0%, #1a1a1a 100%);
       min-height: 100vh;
       transition: background 0.3s ease;
       margin: 0;
       padding: 0;
     }
     
-    /* Dark mode styles - CORRECTED selector */
+    /* Dark mode styles */
     html.dark body {
-      background: linear-gradient(135deg, #1a1c2c 0%, #2d1b3a 100%);
+      background: linear-gradient(135deg, #0B0B0B 0%, #1a1a1a 100%);
+    }
+    
+    html.light body {
+      background: linear-gradient(135deg, #f0f5fa 0%, #e2e8f0 100%);
     }
     
     #root {
@@ -60,11 +87,11 @@
     }
     
     ::-webkit-scrollbar-track {
-      background: rgba(255, 255, 255, 0.1);
+      background: rgba(255, 255, 255, 0.05);
     }
     
     ::-webkit-scrollbar-thumb {
-      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      background: linear-gradient(135deg, var(--bns-nova-blue), var(--bns-code-green));
       border-radius: 4px;
     }
     
@@ -90,34 +117,36 @@
     /* Sidebar styles */
     .sidebar {
       width: 280px;
-      background: rgba(255, 255, 255, 0.95);
+      background: rgba(26, 26, 26, 0.95);
       backdrop-filter: blur(10px);
       border-radius: 20px;
       padding: 25px;
       display: flex;
       flex-direction: column;
       gap: 10px;
-      box-shadow: 0 20px 40px rgba(0,0,0,0.1);
+      box-shadow: 0 20px 40px rgba(0, 0, 0, 0.5);
       height: calc(100vh - 40px);
       position: sticky;
       top: 20px;
+      border: 1px solid rgba(0, 240, 255, 0.1);
     }
     
-    html.dark .sidebar {
-      background: rgba(30, 30, 40, 0.95);
+    html.light .sidebar {
+      background: rgba(255, 255, 255, 0.95);
+      border: 1px solid rgba(0, 240, 255, 0.2);
     }
     
     .sidebar-header {
       text-align: center;
       padding-bottom: 20px;
-      border-bottom: 2px solid rgba(102, 126, 234, 0.2);
+      border-bottom: 2px solid rgba(0, 240, 255, 0.2);
       margin-bottom: 10px;
     }
     
     .sidebar-header .logo {
       font-size: 24px;
       font-weight: 800;
-      background: linear-gradient(135deg, #667eea, #764ba2);
+      background: linear-gradient(135deg, var(--bns-nova-blue), var(--bns-code-green));
       -webkit-background-clip: text;
       -webkit-text-fill-color: transparent;
       margin-bottom: 5px;
@@ -125,11 +154,7 @@
     
     .sidebar-header .sub-logo {
       font-size: 12px;
-      color: #666;
-    }
-    
-    html.dark .sidebar-header .sub-logo {
-      color: #aaa;
+      color: #9ca3af;
     }
     
     .nav-item {
@@ -140,46 +165,44 @@
       border-radius: 12px;
       cursor: pointer;
       transition: all 0.3s;
-      color: #444;
-    }
-    
-    html.dark .nav-item {
-      color: #ddd;
+      color: #9ca3af;
     }
     
     .nav-item i {
       width: 24px;
       font-size: 18px;
-      color: #667eea;
+      color: var(--bns-nova-blue);
     }
     
     .nav-item:hover {
-      background: linear-gradient(135deg, rgba(102, 126, 234, 0.1), rgba(118, 75, 162, 0.1));
+      background: rgba(0, 240, 255, 0.1);
       transform: translateX(5px);
+      color: var(--bns-nova-blue);
     }
     
     .nav-item.active {
-      background: linear-gradient(135deg, #667eea, #764ba2);
-      color: white;
+      background: linear-gradient(135deg, var(--bns-nova-blue), var(--bns-code-green));
+      color: #0B0B0B;
     }
     
     .nav-item.active i {
-      color: white;
+      color: #0B0B0B;
     }
     
     .main-content {
       flex: 1;
       margin-left: 20px;
-      background: rgba(255, 255, 255, 0.95);
+      background: rgba(26, 26, 26, 0.95);
       backdrop-filter: blur(10px);
       border-radius: 20px;
       padding: 30px;
       overflow-y: auto;
       height: calc(100vh - 40px);
+      border: 1px solid rgba(0, 240, 255, 0.1);
     }
     
-    html.dark .main-content {
-      background: rgba(30, 30, 40, 0.95);
+    html.light .main-content {
+      background: rgba(255, 255, 255, 0.95);
     }
     
     .page {
@@ -198,16 +221,22 @@
     
     /* Card styles */
     .card {
-      background: white;
-      border-radius: 15px;
-      padding: 20px;
-      box-shadow: 0 4px 6px rgba(0,0,0,0.05);
-      margin-bottom: 20px;
+      background: rgba(26, 26, 26, 0.8);
+      border: 1px solid rgba(0, 240, 255, 0.15);
+      border-radius: 16px;
+      padding: 24px;
+      margin-bottom: 24px;
+      transition: all 0.3s ease;
     }
     
-    html.dark .card {
-      background: rgba(40, 40, 50, 0.9);
-      color: #fff;
+    .card:hover {
+      border-color: var(--bns-nova-blue);
+      box-shadow: 0 0 20px rgba(0, 240, 255, 0.1);
+    }
+    
+    html.light .card {
+      background: rgba(255, 255, 255, 0.9);
+      border: 1px solid rgba(0, 240, 255, 0.3);
     }
     
     .card-header {
@@ -216,21 +245,18 @@
       justify-content: space-between;
       margin-bottom: 20px;
       padding-bottom: 10px;
-      border-bottom: 2px solid #f0f0f0;
+      border-bottom: 2px solid rgba(0, 240, 255, 0.2);
     }
     
-    html.dark .card-header {
-      border-bottom-color: #444;
-    }
-    
-    .card-header h3 {
+    .card-header h3, .card-header h5 {
       font-size: 18px;
       font-weight: 600;
-      color: #333;
+      color: #fff;
     }
     
-    html.dark .card-header h3 {
-      color: #fff;
+    html.light .card-header h3,
+    html.light .card-header h5 {
+      color: #0f172a;
     }
     
     /* Grid layouts */
@@ -244,19 +270,29 @@
     
     @media (max-width: 768px) {
       .grid-2, .grid-3, .grid-4 { grid-template-columns: 1fr; }
+      .sidebar { display: none; }
+      .main-content { margin-left: 0; }
     }
     
     /* Stat cards */
     .stat-card {
-      background: linear-gradient(135deg, #667eea, #764ba2);
-      border-radius: 15px;
+      background: linear-gradient(135deg, rgba(0, 240, 255, 0.15), rgba(78, 201, 176, 0.1));
+      border: 1px solid rgba(0, 240, 255, 0.3);
+      border-radius: 16px;
       padding: 20px;
       color: white;
+      transition: all 0.3s ease;
+    }
+    
+    .stat-card:hover {
+      transform: translateY(-4px);
+      box-shadow: 0 10px 30px rgba(0, 240, 255, 0.2);
     }
     
     .stat-card .stat-icon {
       font-size: 40px;
       margin-bottom: 10px;
+      color: var(--bns-nova-blue);
     }
     
     .stat-card .stat-value {
@@ -266,7 +302,11 @@
     
     .stat-card .stat-label {
       font-size: 14px;
-      opacity: 0.9;
+      opacity: 0.8;
+    }
+    
+    html.light .stat-card {
+      color: #0f172a;
     }
     
     /* Tables */
@@ -278,403 +318,1164 @@
     .data-table th {
       text-align: left;
       padding: 12px;
-      background: #f8f9fa;
-      color: #444;
+      background: rgba(0, 240, 255, 0.1);
+      color: var(--bns-nova-blue);
       font-weight: 600;
       font-size: 13px;
     }
     
-    html.dark .data-table th {
-      background: #333;
-      color: #fff;
-    }
-    
     .data-table td {
       padding: 12px;
-      border-bottom: 1px solid #eee;
+      border-bottom: 1px solid rgba(0, 240, 255, 0.1);
+      color: #e2e8f0;
     }
     
-    html.dark .data-table td {
-      border-bottom-color: #444;
-      color: #ddd;
+    html.light .data-table td {
+      color: #0f172a;
     }
     
     .data-table tr:hover td {
-      background: #f5f5f5;
-    }
-    
-    html.dark .data-table tr:hover td {
-      background: #3a3a4a;
+      background: rgba(0, 240, 255, 0.05);
     }
     
     .status-badge {
-      padding: 4px 8px;
+      padding: 4px 12px;
       border-radius: 20px;
       font-size: 11px;
       font-weight: 600;
+      display: inline-block;
     }
     
-    .status-active { background: #d4edda; color: #155724; }
-    .status-pending { background: #fff3cd; color: #856404; }
-    .status-inactive { background: #f8d7da; color: #721c24; }
-    
-    /* QR Modal */
-    .qr-modal {
-      position: fixed;
-      top: 0;
-      left: 0;
-      width: 100%;
-      height: 100%;
-      background: rgba(0,0,0,0.8);
-      display: none;
-      align-items: center;
-      justify-content: center;
-      z-index: 1000;
-    }
-    
-    .qr-modal.active {
-      display: flex;
-    }
-    
-    .qr-content {
-      background: white;
-      padding: 30px;
-      border-radius: 20px;
-      text-align: center;
-      max-width: 400px;
-      width: 90%;
-    }
-    
-    .qr-image {
-      width: 250px;
-      height: 250px;
-      margin: 20px auto;
-    }
-    
-    .qr-image img {
-      width: 100%;
-      height: 100%;
-      object-fit: contain;
-    }
+    .status-active { background: rgba(16, 185, 129, 0.2); color: #10b981; }
+    .status-pending { background: rgba(245, 158, 11, 0.2); color: #f59e0b; }
+    .status-inactive { background: rgba(239, 68, 68, 0.2); color: #ef4444; }
+    .status-info { background: rgba(0, 240, 255, 0.2); color: var(--bns-nova-blue); }
     
     /* Buttons */
     .btn {
       padding: 10px 20px;
       border: none;
       border-radius: 8px;
-      font-weight: 500;
+      font-weight: 600;
       cursor: pointer;
       transition: all 0.3s;
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 14px;
     }
     
     .btn-primary {
-      background: linear-gradient(135deg, #667eea, #764ba2);
-      color: white;
+      background: linear-gradient(135deg, var(--bns-nova-blue), var(--bns-code-green));
+      color: #0B0B0B;
     }
     
     .btn-primary:hover {
       transform: translateY(-2px);
-      box-shadow: 0 5px 15px rgba(102, 126, 234, 0.4);
+      box-shadow: 0 5px 20px rgba(0, 240, 255, 0.4);
+    }
+    
+    .btn-success {
+      background: linear-gradient(135deg, #10b981, #059669);
+      color: white;
+    }
+    
+    .btn-warning {
+      background: linear-gradient(135deg, #f59e0b, #d97706);
+      color: white;
+    }
+    
+    .btn-danger {
+      background: linear-gradient(135deg, #ef4444, #dc2626);
+      color: white;
     }
     
     .btn-outline {
       background: transparent;
-      border: 2px solid #667eea;
-      color: #667eea;
+      border: 2px solid var(--bns-nova-blue);
+      color: var(--bns-nova-blue);
     }
     
     .btn-outline:hover {
-      background: #667eea;
+      background: var(--bns-nova-blue);
+      color: #0B0B0B;
+    }
+    
+    .btn-sm {
+      padding: 6px 12px;
+      font-size: 12px;
+    }
+    
+    /* Modal */
+    .modal {
+      position: fixed;
+      inset: 0;
+      background: rgba(0, 0, 0, 0.9);
+      backdrop-filter: blur(8px);
+      display: none;
+      align-items: center;
+      justify-content: center;
+      z-index: 2000;
+      padding: 20px;
+    }
+    
+    .modal.active {
+      display: flex;
+    }
+    
+    .modal-content {
+      background: #1a1a1a;
+      border: 1px solid rgba(0, 240, 255, 0.3);
+      border-radius: 20px;
+      max-width: 500px;
+      width: 100%;
+      max-height: 90vh;
+      overflow-y: auto;
+    }
+    
+    .modal-header {
+      padding: 20px;
+      border-bottom: 1px solid rgba(0, 240, 255, 0.2);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    
+    .modal-header h3, .modal-header h5 {
       color: white;
+      margin: 0;
     }
     
-    /* Toggle switches */
-    .switch {
-      position: relative;
-      display: inline-block;
-      width: 60px;
-      height: 34px;
+    .modal-body {
+      padding: 20px;
     }
     
-    .switch input {
-      opacity: 0;
-      width: 0;
-      height: 0;
+    .modal-footer {
+      padding: 20px;
+      border-top: 1px solid rgba(0, 240, 255, 0.2);
+      display: flex;
+      gap: 12px;
+      justify-content: flex-end;
     }
     
-    .slider {
-      position: absolute;
-      cursor: pointer;
+    /* QR Scanner */
+    .qr-scanner-overlay {
+      position: fixed;
       top: 0;
       left: 0;
       right: 0;
       bottom: 0;
-      background-color: #ccc;
-      transition: .4s;
-      border-radius: 34px;
-    }
-    
-    .slider:before {
-      position: absolute;
-      content: "";
-      height: 26px;
-      width: 26px;
-      left: 4px;
-      bottom: 4px;
-      background-color: white;
-      transition: .4s;
-      border-radius: 50%;
-    }
-    
-    input:checked + .slider {
-      background: linear-gradient(135deg, #667eea, #764ba2);
-    }
-    
-    input:checked + .slider:before {
-      transform: translateX(26px);
-    }
-    
-    /* Settings slider */
-    .settings-slider {
-      width: 100%;
-      margin: 10px 0;
-    }
-    
-    /* Social links */
-    .social-links {
+      background: rgba(0, 0, 0, 0.95);
+      backdrop-filter: blur(8px);
       display: flex;
-      gap: 15px;
+      align-items: center;
       justify-content: center;
-      margin: 20px 0;
+      z-index: 3000;
+      padding: 20px;
     }
     
-    .social-link {
-      width: 45px;
-      height: 45px;
+    .qr-scanner-box {
+      background: #1a1a1a;
+      border: 1px solid rgba(0, 240, 255, 0.3);
+      border-radius: 20px;
+      padding: 24px;
+      max-width: 500px;
+      width: 100%;
+    }
+    
+    .qr-scanner-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 20px;
+    }
+    
+    .qr-scanner-header h5 {
+      color: white;
+      margin: 0;
+    }
+    
+    #qr-reader, #instascan-preview {
+      width: 100%;
+      border-radius: 12px;
+      background: #000;
+    }
+    
+    /* Toast Notifications */
+    .toast-container {
+      position: fixed;
+      top: 20px;
+      right: 20px;
+      z-index: 10000;
+    }
+    
+    .toast {
+      background: #1a1a1a;
+      border-left: 4px solid var(--bns-nova-blue);
+      border-radius: 8px;
+      padding: 12px 16px;
+      margin-bottom: 10px;
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+      animation: slideIn 0.3s ease;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      min-width: 250px;
+    }
+    
+    .toast-content {
+      color: white;
+      flex: 1;
+    }
+    
+    .toast-close {
+      background: none;
+      border: none;
+      color: #9ca3af;
+      cursor: pointer;
+      font-size: 18px;
+    }
+    
+    @keyframes slideIn {
+      from { opacity: 0; transform: translateX(100px); }
+      to { opacity: 1; transform: translateX(0); }
+    }
+    
+    /* BNS Logo */
+    .bns-logo {
+      text-align: center;
+      margin-bottom: 20px;
+    }
+    
+    .bns-letters {
+      display: flex;
+      justify-content: center;
+      gap: 5px;
+      font-size: 32px;
+      font-weight: 900;
+    }
+    
+    .bns-letters span {
+      background: linear-gradient(135deg, var(--bns-nova-blue), var(--bns-code-green));
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+    
+    .bns-dot-com {
+      color: var(--bns-nova-blue);
+      font-size: 12px;
+      letter-spacing: 1px;
+    }
+    
+    /* Theme Toggle */
+    .theme-toggle {
+      position: fixed;
+      top: 20px;
+      right: 20px;
+      background: rgba(26, 26, 26, 0.9);
+      backdrop-filter: blur(10px);
+      padding: 10px 16px;
+      border-radius: 50px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      border: 1px solid rgba(0, 240, 255, 0.3);
+      z-index: 1000;
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+    }
+    
+    .theme-toggle:hover {
+      border-color: var(--bns-nova-blue);
+      transform: translateY(-2px);
+    }
+    
+    /* App Download Button */
+    .app-download-btn {
+      background: linear-gradient(135deg, #FF5E00, #FBBF24);
+      color: #0B0B0B;
+      border: none;
+      padding: 12px 24px;
+      border-radius: 50px;
+      font-weight: 700;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      cursor: pointer;
+      transition: all 0.3s ease;
+      margin-bottom: 20px;
+    }
+    
+    .app-download-btn:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 5px 20px rgba(255, 94, 0, 0.4);
+    }
+    
+    /* Badges */
+    .badge {
+      display: inline-block;
+      padding: 4px 10px;
+      border-radius: 20px;
+      font-size: 11px;
+      font-weight: 600;
+    }
+    
+    .badge-success { background: rgba(16, 185, 129, 0.2); color: #10b981; }
+    .badge-warning { background: rgba(245, 158, 11, 0.2); color: #f59e0b; }
+    .badge-danger { background: rgba(239, 68, 68, 0.2); color: #ef4444; }
+    .badge-info { background: rgba(0, 240, 255, 0.2); color: var(--bns-nova-blue); }
+    
+    /* Form controls */
+    .form-group { margin-bottom: 20px; }
+    .form-label {
+      display: block;
+      margin-bottom: 8px;
+      font-weight: 600;
+      color: #e2e8f0;
+      font-size: 13px;
+    }
+    html.light .form-label { color: #0f172a; }
+    
+    .form-control {
+      width: 100%;
+      padding: 12px 16px;
+      border: 1px solid rgba(0, 240, 255, 0.3);
+      border-radius: 8px;
+      background: rgba(0, 0, 0, 0.3);
+      color: #e2e8f0;
+      font-size: 14px;
+      transition: all 0.3s ease;
+    }
+    
+    html.light .form-control {
+      background: rgba(0, 0, 0, 0.05);
+      color: #0f172a;
+    }
+    
+    .form-control:focus {
+      outline: none;
+      border-color: var(--bns-nova-blue);
+      box-shadow: 0 0 0 3px rgba(0, 240, 255, 0.1);
+    }
+    
+    select.form-control {
+      cursor: pointer;
+    }
+    
+    textarea.form-control {
+      resize: vertical;
+      min-height: 80px;
+    }
+    
+    /* Task items */
+    .task-list {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+    
+    .task-item {
+      background: rgba(0, 0, 0, 0.3);
+      border: 1px solid rgba(0, 240, 255, 0.15);
+      border-radius: 12px;
+      padding: 16px;
+      transition: all 0.3s ease;
+    }
+    
+    .task-item:hover {
+      border-color: var(--bns-nova-blue);
+    }
+    
+    html.light .task-item {
+      background: rgba(0, 0, 0, 0.03);
+    }
+    
+    /* Employee grid */
+    .employee-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+      gap: 16px;
+    }
+    
+    .employee-card {
+      background: rgba(0, 0, 0, 0.3);
+      border: 1px solid rgba(0, 240, 255, 0.15);
+      border-radius: 12px;
+      padding: 16px;
+      text-align: center;
+      transition: all 0.3s ease;
+    }
+    
+    .employee-card:hover {
+      border-color: var(--bns-nova-blue);
+      transform: translateY(-2px);
+    }
+    
+    .employee-avatar {
+      width: 60px;
+      height: 60px;
+      background: linear-gradient(135deg, var(--bns-nova-blue), var(--bns-code-green));
       border-radius: 50%;
       display: flex;
       align-items: center;
       justify-content: center;
-      color: white;
-      text-decoration: none;
-      transition: transform 0.3s;
-      font-size: 20px;
+      margin: 0 auto 12px;
+      font-size: 24px;
+      font-weight: bold;
+      color: #0B0B0B;
     }
     
-    .social-link:hover {
-      transform: translateY(-5px);
+    /* Team cards */
+    .team-card {
+      background: rgba(0, 0, 0, 0.3);
+      border: 1px solid rgba(0, 240, 255, 0.15);
+      border-radius: 12px;
+      padding: 16px;
+      margin-bottom: 12px;
     }
     
-    .facebook { background: #1877f2; }
-    .whatsapp { background: #25D366; }
-    .github { background: #333; }
-    .linkedin { background: #0077b5; }
+    /* Attendance buttons */
+    .attendance-buttons {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 12px;
+    }
+    
+    @media (max-width: 640px) {
+      .attendance-buttons {
+        grid-template-columns: repeat(2, 1fr);
+      }
+    }
+    
+    /* Tabs */
+    .tabs {
+      display: flex;
+      gap: 8px;
+      border-bottom: 1px solid rgba(0, 240, 255, 0.2);
+      margin-bottom: 24px;
+      flex-wrap: wrap;
+    }
+    
+    .tab {
+      padding: 10px 20px;
+      cursor: pointer;
+      color: #9ca3af;
+      border-radius: 8px 8px 0 0;
+      transition: all 0.3s ease;
+    }
+    
+    .tab:hover {
+      color: var(--bns-nova-blue);
+    }
+    
+    .tab.active {
+      color: var(--bns-nova-blue);
+      border-bottom: 2px solid var(--bns-nova-blue);
+    }
+    
+    .tab-content {
+      display: none;
+    }
+    
+    .tab-content.active {
+      display: block;
+    }
+    
+    /* Log box */
+    .log-box {
+      background: rgba(0, 0, 0, 0.3);
+      border: 1px solid rgba(0, 240, 255, 0.15);
+      border-radius: 12px;
+      padding: 16px;
+      max-height: 300px;
+      overflow-y: auto;
+      font-family: 'Fira Code', monospace;
+      font-size: 12px;
+    }
+    
+    .log-box p {
+      margin: 4px 0;
+      color: var(--bns-code-green);
+    }
+    
+    /* Worker stats */
+    .worker-stats {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+      gap: 16px;
+    }
+    
+    .stat-box {
+      background: rgba(0, 0, 0, 0.3);
+      border: 1px solid rgba(0, 240, 255, 0.15);
+      border-radius: 12px;
+      padding: 16px;
+      text-align: center;
+    }
+    
+    .stat-box .stat-number {
+      font-size: 28px;
+      font-weight: 700;
+      color: var(--bns-nova-blue);
+    }
+    
+    /* Impersonation banner */
+    .impersonation-banner {
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      background: linear-gradient(135deg, #f59e0b, #d97706);
+      color: #0B0B0B;
+      padding: 10px;
+      text-align: center;
+      z-index: 10000;
+      font-weight: bold;
+      display: none;
+    }
+    
+    .impersonation-banner.active {
+      display: block;
+    }
   </style>
 </head>
 <body>
   <div id="root"></div>
 
   <script type="text/babel">
-    // Safely initialize framer-motion if available (optional)
-    const framerMotion = window.framerMotion || window["framer-motion"] || {};
-    const { motion, AnimatePresence } = framerMotion;
-
-    const { useState, useEffect, useRef } = React;
-
+    // ===============================================
+    // BNS WORKFORCE MANAGEMENT SYSTEM - COMPLETE
+    // ===============================================
+    
+    const { useState, useEffect, useRef, useCallback } = React;
+    
+    // API Configuration
+    const API_BASE = '/api';
+    
     // Main App Component
     const App = () => {
+      // State Management
       const [activePage, setActivePage] = useState('dashboard');
-      const [theme, setTheme] = useState(localStorage.getItem('theme') || 'light');
+      const [theme, setTheme] = useState(localStorage.getItem('theme') || 'dark');
+      const [currentUser, setCurrentUser] = useState(null);
+      const [isAuthenticated, setIsAuthenticated] = useState(false);
+      const [loading, setLoading] = useState(false);
+      const [toasts, setToasts] = useState([]);
+      
+      // Data State
+      const [stats, setStats] = useState({ totalEmployees: 0, pendingTasks: 0, attendanceRate: 0, completedTasks: 0 });
+      const [tasks, setTasks] = useState([]);
+      const [teams, setTeams] = useState([]);
+      const [employees, setEmployees] = useState([]);
+      const [attendanceRecords, setAttendanceRecords] = useState([]);
+      const [attendanceSummary, setAttendanceSummary] = useState(null);
+      const [pendingApprovals, setPendingApprovals] = useState([]);
+      const [myTasks, setMyTasks] = useState([]);
+      const [myAttendance, setMyAttendance] = useState([]);
+      const [templates, setTemplates] = useState([]);
+      const [leaveRequests, setLeaveRequests] = useState([]);
+      const [pendingLeaveRequests, setPendingLeaveRequests] = useState([]);
+      const [activeSessions, setActiveSessions] = useState([]);
+      const [logCount, setLogCount] = useState(0);
+      
+      // UI State
       const [qrModalOpen, setQrModalOpen] = useState(false);
-      const [settings, setSettings] = useState({
-        darkMode: theme === 'dark',
-        notifications: true,
-        autoRefresh: true,
-        refreshInterval: 30,
-        language: 'en',
-        timezone: 'UTC+1',
-        dateFormat: 'MM/DD/YYYY',
-        twoFactorAuth: false,
-        sessionTimeout: 30,
-        maxLoginAttempts: 5
-      });
-
-      // Refs for charts
+      const [qrScannerOpen, setQrScannerOpen] = useState(false);
+      const [reportModalOpen, setReportModalOpen] = useState(false);
+      const [leaveModalOpen, setLeaveModalOpen] = useState(false);
+      const [taskReportModalOpen, setTaskReportModalOpen] = useState(false);
+      const [selectedTask, setSelectedTask] = useState(null);
+      const [impersonationActive, setImpersonationActive] = useState(false);
+      const [impersonatedUser, setImpersonatedUser] = useState(null);
+      
+      // Chart refs
       const deptChartRef = useRef(null);
       const trendChartRef = useRef(null);
-      const deptStatsRef = useRef(null);
-      const empTypeRef = useRef(null);
-      const monthlyTrendRef = useRef(null);
-      const deptPerfRef = useRef(null);
-
-      // Apply theme to html element - CORRECTED
-      useEffect(() => {
-        if (theme === 'dark') {
-          document.documentElement.classList.add('dark');
-        } else {
-          document.documentElement.classList.remove('dark');
-        }
-        localStorage.setItem('theme', theme);
-      }, [theme]);
-
-      // Initialize charts - FIXED with proper Chart.js initialization
-      useEffect(() => {
-        // Small delay to ensure DOM is ready
+      const performanceChartRef = useRef(null);
+      
+      // Socket ref
+      const socketRef = useRef(null);
+      
+      // ===== HELPER FUNCTIONS =====
+      const showToast = (message, type = 'info') => {
+        const id = Date.now();
+        setToasts(prev => [...prev, { id, message, type }]);
         setTimeout(() => {
-          // Department Chart
-          if (deptChartRef.current) {
-            new Chart(deptChartRef.current, {
-              type: 'doughnut',
-              data: {
-                labels: ['Operations', 'HR', 'Finance', 'IT', 'Peace Programs', 'Admin'],
-                datasets: [{
-                  data: [850, 420, 315, 290, 400, 572],
-                  backgroundColor: ['#667eea', '#26B99A', '#F39C12', '#E74C3C', '#9B59B6', '#3498DB']
-                }]
-              },
-              options: {
-                responsive: true,
-                maintainAspectRatio: false
+          setToasts(prev => prev.filter(t => t.id !== id));
+        }, 5000);
+      };
+      
+      const getAuthHeaders = () => {
+        const token = localStorage.getItem('token');
+        return token ? { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' } : { 'Content-Type': 'application/json' };
+      };
+      
+      const apiCall = async (endpoint, options = {}) => {
+        try {
+          const response = await fetch(`${API_BASE}${endpoint}`, {
+            ...options,
+            headers: { ...getAuthHeaders(), ...options.headers }
+          });
+          const data = await response.json();
+          if (!response.ok) throw new Error(data.error || 'Request failed');
+          return data;
+        } catch (err) {
+          showToast(err.message, 'error');
+          throw err;
+        }
+      };
+      
+      // ===== AUTH FUNCTIONS =====
+      const login = async (email, password) => {
+        setLoading(true);
+        try {
+          const data = await apiCall('/login', { method: 'POST', body: JSON.stringify({ email, password }) });
+          if (data.ok) {
+            localStorage.setItem('token', data.token);
+            setCurrentUser(data.user);
+            setIsAuthenticated(true);
+            showToast(`Welcome ${data.user.name}!`, 'success');
+            loadDashboardData();
+          }
+        } catch (err) {
+          showToast(err.message, 'error');
+        } finally {
+          setLoading(false);
+        }
+      };
+      
+      const register = async (name, email, password, role) => {
+        setLoading(true);
+        try {
+          const data = await apiCall('/signup', { method: 'POST', body: JSON.stringify({ name, email, password, role }) });
+          if (data.ok) {
+            showToast('Account created! Please login.', 'success');
+            if (data.qrData) {
+              window.open(`/qr-display.html?qr=${encodeURIComponent(data.qrData)}&token=${data.qrToken}&expires=${data.expiresAt}`, '_blank');
+            }
+          }
+        } catch (err) {
+          showToast(err.message, 'error');
+        } finally {
+          setLoading(false);
+        }
+      };
+      
+      const logout = () => {
+        localStorage.removeItem('token');
+        setCurrentUser(null);
+        setIsAuthenticated(false);
+        showToast('Logged out', 'info');
+      };
+      
+      // ===== QR CODE FUNCTIONS =====
+      const viewMyQRCode = async () => {
+        try {
+          const data = await apiCall('/qr/my-code');
+          if (data.ok) {
+            window.open(`/qr-display.html?qr=${encodeURIComponent(data.qrData)}&token=${data.qrToken}&expires=${data.expiresAt}`, '_blank');
+          }
+        } catch (err) {
+          showToast(err.message, 'error');
+        }
+      };
+      
+      const initQRScanner = () => {
+        setQrScannerOpen(true);
+        setTimeout(() => {
+          const readerElement = document.getElementById('qr-reader');
+          if (readerElement && typeof Instascan !== 'undefined') {
+            readerElement.innerHTML = '<video id="instascan-preview" style="width: 100%; border-radius: 12px; background: #000;"></video>';
+            
+            const scanner = new Instascan.Scanner({
+              video: document.getElementById('instascan-preview'),
+              mirror: false,
+              backgroundScan: true,
+              continuous: true
+            });
+            
+            scanner.addListener('scan', async (content) => {
+              let token = content;
+              if (content.includes('token=')) {
+                const match = content.match(/token=([^&]+)/);
+                if (match) token = match[1];
+              }
+              await scanner.stop();
+              setQrScannerOpen(false);
+              
+              try {
+                const data = await apiCall('/qr-login', { method: 'POST', body: JSON.stringify({ token }) });
+                if (data.ok) {
+                  localStorage.setItem('token', data.token);
+                  setCurrentUser(data.user);
+                  setIsAuthenticated(true);
+                  showToast(`Welcome ${data.user.name}! Attendance recorded.`, 'success');
+                  loadDashboardData();
+                }
+              } catch (err) {
+                showToast(err.message, 'error');
               }
             });
-          }
-
-          // Attendance Trend Chart
-          if (trendChartRef.current) {
-            new Chart(trendChartRef.current, {
-              type: 'line',
-              data: {
-                labels: ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'],
-                datasets: [{
-                  label: 'Attendance Rate',
-                  data: [94, 92, 96, 95, 93, 78, 65],
-                  borderColor: '#667eea',
-                  backgroundColor: 'rgba(102, 126, 234, 0.1)',
-                  tension: 0.4,
-                  fill: true
-                }]
-              },
-              options: {
-                responsive: true,
-                maintainAspectRatio: false
-              }
-            });
-          }
-
-          // Department Stats Chart
-          if (deptStatsRef.current) {
-            new Chart(deptStatsRef.current, {
-              type: 'bar',
-              data: {
-                labels: ['Operations', 'HR', 'Finance', 'IT', 'Peace Programs'],
-                datasets: [{
-                  label: 'Employee Count',
-                  data: [850, 420, 315, 290, 400],
-                  backgroundColor: '#667eea'
-                }]
-              },
-              options: {
-                responsive: true,
-                maintainAspectRatio: false
-              }
-            });
-          }
-
-          // Employment Type Chart
-          if (empTypeRef.current) {
-            new Chart(empTypeRef.current, {
-              type: 'pie',
-              data: {
-                labels: ['Full-time', 'Part-time', 'Contract', 'Intern'],
-                datasets: [{
-                  data: [1850, 420, 315, 262],
-                  backgroundColor: ['#667eea', '#26B99A', '#F39C12', '#E74C3C']
-                }]
-              },
-              options: {
-                responsive: true,
-                maintainAspectRatio: false
-              }
-            });
-          }
-
-          // Monthly Trend Chart
-          if (monthlyTrendRef.current) {
-            new Chart(monthlyTrendRef.current, {
-              type: 'line',
-              data: {
-                labels: ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun'],
-                datasets: [{
-                  label: 'Attendance %',
-                  data: [92, 93, 94, 93, 95, 94],
-                  borderColor: '#26B99A',
-                  backgroundColor: 'rgba(38, 185, 154, 0.1)',
-                  tension: 0.4,
-                  fill: true
-                }]
-              },
-              options: {
-                responsive: true,
-                maintainAspectRatio: false
-              }
-            });
-          }
-
-          // Department Performance Chart
-          if (deptPerfRef.current) {
-            new Chart(deptPerfRef.current, {
-              type: 'radar',
-              data: {
-                labels: ['Operations', 'HR', 'Finance', 'IT', 'Peace Programs', 'Admin'],
-                datasets: [{
-                  label: 'Performance Score',
-                  data: [95, 92, 88, 96, 94, 90],
-                  backgroundColor: 'rgba(102, 126, 234, 0.2)',
-                  borderColor: '#667eea',
-                  pointBackgroundColor: '#667eea'
-                }]
-              },
-              options: {
-                responsive: true,
-                maintainAspectRatio: false
+            
+            Instascan.Camera.getCameras().then(cameras => {
+              if (cameras.length > 0) {
+                const backCamera = cameras.find(cam => cam.name.toLowerCase().includes('back'));
+                scanner.start(backCamera || cameras[0]);
               }
             });
           }
         }, 100);
-      }, []);
-
-      const toggleTheme = () => {
-        setTheme(prev => prev === 'light' ? 'dark' : 'light');
-        setSettings(prev => ({ ...prev, darkMode: theme === 'light' }));
       };
-
-      const updateSetting = (key, value) => {
-        setSettings(prev => ({ ...prev, [key]: value }));
-        // Apply settings automatically
-        if (key === 'darkMode') {
-          setTheme(value ? 'dark' : 'light');
+      
+      const manualQREntry = () => {
+        const token = prompt('Enter QR code token:');
+        if (token) {
+          apiCall('/qr-login', { method: 'POST', body: JSON.stringify({ token }) })
+            .then(data => {
+              if (data.ok) {
+                localStorage.setItem('token', data.token);
+                setCurrentUser(data.user);
+                setIsAuthenticated(true);
+                showToast(`Welcome ${data.user.name}!`, 'success');
+                loadDashboardData();
+              }
+            })
+            .catch(err => showToast(err.message, 'error'));
         }
       };
-
+      
+      // ===== DASHBOARD DATA LOADING =====
+      const loadDashboardData = async () => {
+        try {
+          const [statsData, tasksData, teamsData, employeesData, attendanceRecordsData, summaryData, approvalsData, myTasksData, myAttendanceData, templatesData, leaveData, pendingLeaveData, sessionsData, logsData] = await Promise.all([
+            apiCall('/dashboard/stats').catch(() => ({ stats: {} })),
+            apiCall('/tasks').catch(() => ({ tasks: [] })),
+            apiCall('/teams').catch(() => ({ teams: [] })),
+            apiCall('/users').catch(() => ({ users: [] })),
+            apiCall('/attendance/my').catch(() => ({ records: [] })),
+            apiCall('/attendance/summary/weekly').catch(() => ({ summary: null })),
+            apiCall('/admin/pending-approvals').catch(() => []),
+            apiCall('/my/tasks').catch(() => ({ tasks: [] })),
+            apiCall('/my/attendance').catch(() => ({ attendance: [] })),
+            apiCall('/report-templates').catch(() => ({ templates: [] })),
+            apiCall('/leave/my-requests').catch(() => ({ requests: [] })),
+            currentUser?.role === 'admin' ? apiCall('/admin/leave/pending').catch(() => ({ requests: [] })) : Promise.resolve({ requests: [] }),
+            currentUser?.role === 'admin' ? apiCall('/admin/impersonation/sessions').catch(() => ({ sessions: [] })) : Promise.resolve({ sessions: [] }),
+            apiCall('/logs/count').catch(() => ({ count: 0 }))
+          ]);
+          
+          setStats(statsData.stats || {});
+          setTasks(tasksData.tasks || []);
+          setTeams(teamsData.teams || []);
+          setEmployees(employeesData.users || []);
+          setAttendanceRecords(attendanceRecordsData.records || []);
+          setAttendanceSummary(summaryData.summary);
+          setPendingApprovals(approvalsData);
+          setMyTasks(myTasksData.tasks || []);
+          setMyAttendance(myAttendanceData.attendance || []);
+          setTemplates(templatesData.templates || []);
+          setLeaveRequests(leaveData.requests || []);
+          setPendingLeaveRequests(pendingLeaveData.requests || []);
+          setActiveSessions(sessionsData.sessions || []);
+          setLogCount(logsData.count || 0);
+        } catch (err) {
+          console.error('Failed to load dashboard data:', err);
+        }
+      };
+      
+      // ===== ATTENDANCE FUNCTIONS =====
+      const recordAttendance = async (action) => {
+        try {
+          await apiCall('/attendance', { method: 'POST', body: JSON.stringify({ action }) });
+          showToast(`${action.replace('_', ' ')} recorded`, 'success');
+          loadDashboardData();
+        } catch (err) {
+          showToast(err.message, 'error');
+        }
+      };
+      
+      // ===== TASK FUNCTIONS =====
+      const createTask = async (taskData) => {
+        try {
+          await apiCall('/tasks', { method: 'POST', body: JSON.stringify(taskData) });
+          showToast('Task created!', 'success');
+          loadDashboardData();
+        } catch (err) {
+          showToast(err.message, 'error');
+        }
+      };
+      
+      const approveTask = async (taskId, feedback) => {
+        try {
+          await apiCall(`/tasks/${taskId}/approve`, { method: 'POST', body: JSON.stringify({ feedback }) });
+          showToast('Task approved!', 'success');
+          loadDashboardData();
+        } catch (err) {
+          showToast(err.message, 'error');
+        }
+      };
+      
+      const rejectTask = async (taskId, feedback) => {
+        try {
+          await apiCall(`/tasks/${taskId}/reject`, { method: 'POST', body: JSON.stringify({ feedback }) });
+          showToast('Task rejected', 'warning');
+          loadDashboardData();
+        } catch (err) {
+          showToast(err.message, 'error');
+        }
+      };
+      
+      const submitTaskReport = async (taskId, daily_report, hours_spent, status) => {
+        try {
+          await apiCall(`/tasks/${taskId}/submit-report`, { method: 'POST', body: JSON.stringify({ daily_report, hours_spent, status }) });
+          showToast('Report submitted for approval!', 'success');
+          loadDashboardData();
+        } catch (err) {
+          showToast(err.message, 'error');
+        }
+      };
+      
+      // ===== TEAM FUNCTIONS =====
+      const createTeam = async (teamData) => {
+        try {
+          await apiCall('/teams', { method: 'POST', body: JSON.stringify(teamData) });
+          showToast('Team created!', 'success');
+          loadDashboardData();
+        } catch (err) {
+          showToast(err.message, 'error');
+        }
+      };
+      
+      const deleteTeam = async (teamId) => {
+        if (!confirm('Delete this team?')) return;
+        try {
+          await apiCall(`/teams/${teamId}`, { method: 'DELETE', body: JSON.stringify({ forceDelete: true }) });
+          showToast('Team deleted', 'success');
+          loadDashboardData();
+        } catch (err) {
+          showToast(err.message, 'error');
+        }
+      };
+      
+      // ===== LEAVE REQUEST FUNCTIONS =====
+      const submitLeaveRequest = async (type, start_date, end_date, reason) => {
+        try {
+          await apiCall('/leave/request', { method: 'POST', body: JSON.stringify({ type, start_date, end_date, reason }) });
+          showToast('Leave request submitted!', 'success');
+          loadDashboardData();
+        } catch (err) {
+          showToast(err.message, 'error');
+        }
+      };
+      
+      const approveLeave = async (requestId) => {
+        try {
+          await apiCall(`/admin/leave/${requestId}/approve`, { method: 'PUT' });
+          showToast('Leave approved', 'success');
+          loadDashboardData();
+        } catch (err) {
+          showToast(err.message, 'error');
+        }
+      };
+      
+      const rejectLeave = async (requestId) => {
+        try {
+          await apiCall(`/admin/leave/${requestId}/reject`, { method: 'PUT' });
+          showToast('Leave rejected', 'warning');
+          loadDashboardData();
+        } catch (err) {
+          showToast(err.message, 'error');
+        }
+      };
+      
+      // ===== IMPERSONATION FUNCTIONS =====
+      const startImpersonation = async (targetUserId, reason) => {
+        try {
+          const data = await apiCall('/admin/impersonate/start', { method: 'POST', body: JSON.stringify({ target_user_id: targetUserId, reason }) });
+          if (data.ok) {
+            localStorage.setItem('token', data.impersonation_token);
+            setImpersonationActive(true);
+            setImpersonatedUser(data.target_user);
+            showToast(`Impersonating ${data.target_user.name}`, 'warning');
+            loadDashboardData();
+          }
+        } catch (err) {
+          showToast(err.message, 'error');
+        }
+      };
+      
+      const endImpersonation = async () => {
+        try {
+          await apiCall('/admin/impersonation/end', { method: 'POST', body: JSON.stringify({ session_token: 'current' }) });
+          localStorage.removeItem('token');
+          setImpersonationActive(false);
+          setImpersonatedUser(null);
+          showToast('Impersonation ended', 'success');
+          // Reload to get original token
+          window.location.reload();
+        } catch (err) {
+          localStorage.removeItem('token');
+          window.location.reload();
+        }
+      };
+      
+      // ===== REPORT EXPORT FUNCTIONS =====
+      const exportAttendanceReport = async () => {
+        try {
+          const response = await fetch(`${API_BASE}/reports/attendance/csv`, { headers: getAuthHeaders() });
+          const blob = await response.blob();
+          const url = URL.createObjectURL(blob);
+          const a = document.createElement('a');
+          a.href = url;
+          a.download = `attendance-report-${new Date().toISOString().split('T')[0]}.csv`;
+          a.click();
+          URL.revokeObjectURL(url);
+          showToast('Report downloaded!', 'success');
+        } catch (err) {
+          showToast(err.message, 'error');
+        }
+      };
+      
+      const exportTasksReport = async () => {
+        try {
+          const response = await fetch(`${API_BASE}/reports/tasks/csv`, { headers: getAuthHeaders() });
+          const blob = await response.blob();
+          const url = URL.createObjectURL(blob);
+          const a = document.createElement('a');
+          a.href = url;
+          a.download = `tasks-report-${new Date().toISOString().split('T')[0]}.csv`;
+          a.click();
+          URL.revokeObjectURL(url);
+          showToast('Tasks report downloaded!', 'success');
+        } catch (err) {
+          showToast(err.message, 'error');
+        }
+      };
+      
+      const exportExcelReport = async () => {
+        try {
+          const response = await fetch(`${API_BASE}/reports/excel`, { headers: getAuthHeaders() });
+          const blob = await response.blob();
+          const url = URL.createObjectURL(blob);
+          const a = document.createElement('a');
+          a.href = url;
+          a.download = `wfms-report-${new Date().toISOString().split('T')[0]}.xlsx`;
+          a.click();
+          URL.revokeObjectURL(url);
+          showToast('Excel report downloaded!', 'success');
+        } catch (err) {
+          showToast(err.message, 'error');
+        }
+      };
+      
+      // ===== TEMPLATE FUNCTIONS =====
+      const createTemplate = async (name, type, description, config) => {
+        try {
+          await apiCall('/report-templates', { method: 'POST', body: JSON.stringify({ name, type, description, config }) });
+          showToast('Template created!', 'success');
+          loadDashboardData();
+        } catch (err) {
+          showToast(err.message, 'error');
+        }
+      };
+      
+      const useTemplate = async (templateId) => {
+        try {
+          const data = await apiCall(`/report-templates/${templateId}/use`, { method: 'POST', body: JSON.stringify({}) });
+          showToast(`Report generated from template!`, 'success');
+          return data.report;
+        } catch (err) {
+          showToast(err.message, 'error');
+          return null;
+        }
+      };
+      
+      // ===== INITIALIZATION =====
+      useEffect(() => {
+        // Apply theme
+        if (theme === 'dark') {
+          document.documentElement.classList.add('dark');
+          document.documentElement.classList.remove('light');
+        } else {
+          document.documentElement.classList.add('light');
+          document.documentElement.classList.remove('dark');
+        }
+        localStorage.setItem('theme', theme);
+      }, [theme]);
+      
+      useEffect(() => {
+        // Check authentication
+        const token = localStorage.getItem('token');
+        if (token) {
+          apiCall('/auth/me')
+            .then(data => {
+              if (data.ok) {
+                setCurrentUser(data.user);
+                setIsAuthenticated(true);
+                loadDashboardData();
+              } else {
+                localStorage.removeItem('token');
+              }
+            })
+            .catch(() => {
+              localStorage.removeItem('token');
+            });
+        }
+      }, []);
+      
+      useEffect(() => {
+        // Initialize charts
+        if (deptChartRef.current && performanceChartRef.current) {
+          // Charts initialization handled in render
+        }
+      }, [stats]);
+      
+      // ===== RENDER COMPONENTS =====
+      const toggleTheme = () => {
+        setTheme(prev => prev === 'dark' ? 'light' : 'dark');
+      };
+      
+      // Navigation items
       const navItems = [
         { id: 'dashboard', icon: 'fa-tachometer-alt', label: 'Dashboard' },
-        { id: 'workforce', icon: 'fa-users', label: 'Workforce Management' },
+        { id: 'workforce', icon: 'fa-users', label: 'Workforce' },
         { id: 'attendance', icon: 'fa-qrcode', label: 'QR Attendance' },
-        { id: 'analytics', icon: 'fa-chart-line', label: 'Analytics & Reports' },
-        { id: 'payroll', icon: 'fa-money-bill-wave', label: 'Payroll Integration' },
-        { id: 'security', icon: 'fa-shield-alt', label: 'Security & Compliance' },
-        { id: 'heritage', icon: 'fa-university', label: 'HERITAGE & HEPIDS' },
-        { id: 'settings', icon: 'fa-cog', label: 'System Settings' }
+        { id: 'tasks', icon: 'fa-tasks', label: 'Tasks' },
+        { id: 'teams', icon: 'fa-users', label: 'Teams' },
+        { id: 'analytics', icon: 'fa-chart-line', label: 'Analytics' },
+        { id: 'templates', icon: 'fa-copy', label: 'Templates' },
+        { id: 'leave', icon: 'fa-calendar-alt', label: 'Leave' },
+        { id: 'my-tasks', icon: 'fa-list-check', label: 'My Tasks' },
+        { id: 'my-attendance', icon: 'fa-clock', label: 'My Attendance' },
+        { id: 'logs', icon: 'fa-history', label: 'Logs' },
+        { id: 'settings', icon: 'fa-cog', label: 'Settings' }
       ];
-
+      
+      if (currentUser?.role === 'admin') {
+        navItems.push({ id: 'impersonate', icon: 'fa-mask', label: 'Impersonate' });
+      }
+      
+      // Login Screen
+      if (!isAuthenticated) {
+        return (
+          <div className="flex items-center justify-center min-h-screen p-5" style={{ background: 'radial-gradient(circle at 50% 50%, #1a1a1a, #0B0B0B)' }}>
+            <div className="w-full max-w-md bg-[#1a1a1a] border border-[rgba(0,240,255,0.2)] rounded-2xl p-10 shadow-2xl">
+              <div className="text-center mb-8">
+                <div className="bns-logo">
+                  <div className="bns-letters">
+                    <span>B</span><span>N</span><span>S</span>
+                  </div>
+                  <div className="bns-dot-com">.com</div>
+                </div>
+                <h2 className="text-gradient text-2xl font-bold mt-4">Shift Into the Future</h2>
+              </div>
+              
+              <div className="space-y-4">
+                <div>
+                  <label className="form-label">Email</label>
+                  <input type="email" id="loginEmail" className="form-control" placeholder="admin@wfms.com" defaultValue="admin@wfms.com" />
+                </div>
+                <div>
+                  <label className="form-label">Password</label>
+                  <input type="password" id="loginPassword" className="form-control" placeholder="••••••" defaultValue="admin123" />
+                </div>
+                <button className="btn btn-primary w-full py-3" onClick={() => login(document.getElementById('loginEmail').value, document.getElementById('loginPassword').value)}>
+                  Sign In
+                </button>
+              </div>
+              
+              <div className="text-center mt-6 text-gray-400 text-sm">
+                <button className="text-[#00F0FF] hover:underline" onClick={() => {
+                  document.getElementById('loginContainer').classList.add('hidden');
+                  document.getElementById('registerContainer').classList.remove('hidden');
+                }}>Create an account</button>
+              </div>
+              
+              <div className="mt-6 pt-6 border-t border-gray-800 text-center">
+                <button className="btn btn-outline w-full mb-2" onClick={initQRScanner}>
+                  <i className="fas fa-qrcode"></i> Scan QR Code
+                </button>
+                <button className="btn btn-outline w-full" onClick={manualQREntry}>
+                  <i className="fas fa-keyboard"></i> Manual QR Entry
+                </button>
+              </div>
+            </div>
+            
+            <div id="registerContainer" className="hidden fixed inset-0 flex items-center justify-center bg-black/90 z-50">
+              <div className="bg-[#1a1a1a] border border-[rgba(0,240,255,0.2)] rounded-2xl p-10 max-w-md w-full mx-4">
+                <div className="text-center mb-8">
+                  <div className="bns-logo">
+                    <div className="bns-letters"><span>B</span><span>N</span><span>S</span></div>
+                    <div className="bns-dot-com">.com</div>
+                  </div>
+                  <h2 className="text-gradient text-2xl font-bold mt-4">Join the Shift</h2>
+                </div>
+                <div className="space-y-4">
+                  <div><label className="form-label">Full Name</label><input type="text" id="regName" className="form-control" /></div>
+                  <div><label className="form-label">Email</label><input type="email" id="regEmail" className="form-control" /></div>
+                  <div><label className="form-label">Password</label><input type="password" id="regPassword" className="form-control" /></div>
+                  <div><label className="form-label">Role</label><select id="regRole" className="form-control"><option value="employee">Employee</option><option value="admin">Admin</option></select></div>
+                  <button className="btn btn-primary w-full py-3" onClick={() => register(document.getElementById('regName').value, document.getElementById('regEmail').value, document.getElementById('regPassword').value, document.getElementById('regRole').value)}>
+                    Create Account
+                  </button>
+                </div>
+                <div className="text-center mt-6">
+                  <button className="text-[#00F0FF]" onClick={() => {
+                    document.getElementById('registerContainer').classList.add('hidden');
+                  }}>Back to Login</button>
+                </div>
+              </div>
+            </div>
+            
+            {/* QR Scanner Modal */}
+            {qrScannerOpen && (
+              <div className="fixed inset-0 bg-black/95 backdrop-blur-sm flex items-center justify-center z-[3000] p-5">
+                <div className="bg-[#1a1a1a] border border-[rgba(0,240,255,0.3)] rounded-2xl p-6 max-w-md w-full">
+                  <div className="flex justify-between items-center mb-5">
+                    <h5 className="text-white text-lg font-semibold m-0">Scan QR Code</h5>
+                    <button className="text-gray-400 text-2xl cursor-pointer bg-transparent border-none" onClick={() => setQrScannerOpen(false)}>×</button>
+                  </div>
+                  <div id="qr-reader" className="w-full min-h-[300px]"></div>
+                </div>
+              </div>
+            )}
+          </div>
+        );
+      }
+      
+      // Dashboard Main Layout
       return (
         <div className="flex w-full">
+          {/* Impersonation Banner */}
+          {impersonationActive && (
+            <div className="impersonation-banner active">
+              ⚠️ IMPERSONATING: {impersonatedUser?.name} | 
+              <button onClick={endImpersonation} className="ml-2 underline bg-transparent border-none text-[#0B0B0B] cursor-pointer">End Impersonation</button>
+            </div>
+          )}
+          
           {/* Sidebar */}
           <div className="sidebar">
             <div className="sidebar-header">
-              <div className="logo">HERITAGE WMS</div>
-              <div className="sub-logo">Enterprise Workforce Solutions</div>
+              <div className="bns-logo">
+                <div className="bns-letters"><span>B</span><span>N</span><span>S</span></div>
+                <div className="bns-dot-com">.com</div>
+              </div>
+              <div className="logo mt-2">BLACK NOVA SHIFT</div>
+              <div className="sub-logo">Workforce Management</div>
             </div>
+            
+            {/* App Download Button */}
+            <button className="app-download-btn" onClick={() => {
+              // Create a simple PWA install prompt
+              if (window.deferredPrompt) {
+                window.deferredPrompt.prompt();
+              } else {
+                alert('📱 To install the app:\n\n1. Click the share button in your browser\n2. Select "Add to Home Screen"\n3. Name it "BNS WFMS"');
+              }
+            }}>
+              <i className="fas fa-download"></i> Download BNS App
+            </button>
             
             {navItems.map(item => (
               <div
@@ -686,795 +1487,620 @@
                 <span>{item.label}</span>
               </div>
             ))}
-
+            
             <div className="nav-item" onClick={toggleTheme}>
-              <i className={`fas ${theme === 'light' ? 'fa-moon' : 'fa-sun'}`}></i>
-              <span>{theme === 'light' ? 'Dark Mode' : 'Light Mode'}</span>
+              <i className={`fas ${theme === 'dark' ? 'fa-sun' : 'fa-moon'}`}></i>
+              <span>{theme === 'dark' ? 'Light Mode' : 'Dark Mode'}</span>
+            </div>
+            
+            <div className="mt-auto pt-4 border-t border-[rgba(0,240,255,0.2)]">
+              <div className="flex items-center gap-3 p-3">
+                <div className="w-10 h-10 rounded-full bg-gradient-to-r from-[#00F0FF] to-[#4EC9B0] flex items-center justify-center text-[#0B0B0B] font-bold">
+                  {currentUser?.name?.charAt(0) || 'U'}
+                </div>
+                <div className="flex-1">
+                  <div className="font-semibold text-sm">{currentUser?.name}</div>
+                  <div className="text-xs text-gray-400">{currentUser?.role}</div>
+                </div>
+                <button className="btn btn-danger btn-sm" onClick={logout}>
+                  <i className="fas fa-sign-out-alt"></i>
+                </button>
+              </div>
             </div>
           </div>
-
+          
           {/* Main Content */}
           <div className="main-content">
             {/* Dashboard Page */}
-            <div className={`page ${activePage === 'dashboard' ? 'active' : ''}`}>
-              <h2 className="text-2xl font-bold mb-6 dark:text-white">Dashboard Overview</h2>
-              
-              <div className="grid-4">
-                <div className="stat-card">
-                  <div className="stat-icon"><i className="fas fa-users"></i></div>
-                  <div className="stat-value">2,847</div>
-                  <div className="stat-label">Total Workforce</div>
-                  <div className="text-sm mt-2">↑ 12% from last month</div>
+            {activePage === 'dashboard' && (
+              <div className="page active">
+                <h2 className="text-2xl font-bold mb-6">Dashboard Overview</h2>
+                
+                <div className="grid-4">
+                  <div className="stat-card">
+                    <div className="stat-icon"><i className="fas fa-users"></i></div>
+                    <div className="stat-value">{stats.totalEmployees || 0}</div>
+                    <div className="stat-label">Total Workforce</div>
+                  </div>
+                  <div className="stat-card">
+                    <div className="stat-icon"><i className="fas fa-tasks"></i></div>
+                    <div className="stat-value">{stats.pendingTasks || 0}</div>
+                    <div className="stat-label">Pending Tasks</div>
+                  </div>
+                  <div className="stat-card">
+                    <div className="stat-icon"><i className="fas fa-chart-line"></i></div>
+                    <div className="stat-value">{stats.attendanceRate || 0}%</div>
+                    <div className="stat-label">Attendance Rate</div>
+                  </div>
+                  <div className="stat-card">
+                    <div className="stat-icon"><i className="fas fa-check-circle"></i></div>
+                    <div className="stat-value">{stats.completedTasks || 0}</div>
+                    <div className="stat-label">Completed Tasks</div>
+                  </div>
                 </div>
-                <div className="stat-card" style={{background: 'linear-gradient(135deg, #26B99A, #1ABB9C)'}}>
-                  <div className="stat-icon"><i className="fas fa-check-circle"></i></div>
-                  <div className="stat-value">2,156</div>
-                  <div className="stat-label">Present Today</div>
-                  <div className="text-sm mt-2">92% attendance rate</div>
-                </div>
-                <div className="stat-card" style={{background: 'linear-gradient(135deg, #F39C12, #E67E22)'}}>
-                  <div className="stat-icon"><i className="fas fa-clock"></i></div>
-                  <div className="stat-value">7.8</div>
-                  <div className="stat-label">Avg. Work Hours</div>
-                  <div className="text-sm mt-2">↑ 0.3 hrs from avg</div>
-                </div>
-                <div className="stat-card" style={{background: 'linear-gradient(135deg, #E74C3C, #C0392B)'}}>
-                  <div className="stat-icon"><i className="fas fa-credit-card"></i></div>
-                  <div className="stat-value">$2.4M</div>
-                  <div className="stat-label">Payroll (MTD)</div>
-                  <div className="text-sm mt-2">Within budget</div>
-                </div>
-              </div>
-
-              <div className="grid-2 mt-6">
+                
                 <div className="card">
                   <div className="card-header">
-                    <h3>Department Distribution</h3>
+                    <h3>Quick Attendance</h3>
                   </div>
-                  <div style={{ height: '200px' }}>
-                    <canvas ref={deptChartRef} height="200"></canvas>
+                  <div className="attendance-buttons">
+                    <button className="btn btn-success" onClick={() => recordAttendance('clock_in')}><i className="fas fa-sign-in-alt"></i> Clock In</button>
+                    <button className="btn btn-warning" onClick={() => recordAttendance('break_start')}><i className="fas fa-coffee"></i> Break Start</button>
+                    <button className="btn btn-info" onClick={() => recordAttendance('break_end')}><i className="fas fa-play"></i> Break End</button>
+                    <button className="btn btn-danger" onClick={() => recordAttendance('clock_out')}><i className="fas fa-sign-out-alt"></i> Clock Out</button>
                   </div>
                 </div>
+                
                 <div className="card">
                   <div className="card-header">
-                    <h3>Attendance Trends</h3>
+                    <h3>My QR Code</h3>
+                    <button className="btn btn-primary btn-sm" onClick={viewMyQRCode}><i className="fas fa-qrcode"></i> View QR Code</button>
                   </div>
-                  <div style={{ height: '200px' }}>
-                    <canvas ref={trendChartRef} height="200"></canvas>
+                  <div className="text-center py-5 text-gray-400">
+                    <i className="fas fa-qrcode text-6xl mb-3 text-[#00F0FF]"></i>
+                    <p>Click "View QR Code" to see your personal login QR code</p>
+                  </div>
+                </div>
+                
+                <div className="card">
+                  <div className="card-header">
+                    <h3>Recent Tasks</h3>
+                    <button className="btn btn-outline btn-sm" onClick={() => setActivePage('tasks')}>View All</button>
+                  </div>
+                  <div className="task-list">
+                    {tasks.slice(0, 5).map(task => (
+                      <div key={task._id} className="task-item">
+                        <strong>{task.title}</strong>
+                        <span className="badge badge-info float-right">{task.status}</span>
+                        <p className="text-sm text-gray-400 mt-1">Assigned to: {task.assigned_to?.name || 'Unassigned'}</p>
+                      </div>
+                    ))}
+                    {tasks.length === 0 && <p className="text-gray-400 text-center">No tasks yet</p>}
+                  </div>
+                </div>
+                
+                <div className="card">
+                  <div className="card-header">
+                    <h3>System Logs</h3>
+                  </div>
+                  <div className="log-box">
+                    <p>[INFO] System ready - Total logs: {logCount}</p>
                   </div>
                 </div>
               </div>
-
-              <div className="card mt-6">
-                <div className="card-header">
-                  <h3>Recent Activity</h3>
-                  <button className="btn btn-primary" onClick={() => setQrModalOpen(true)}>
-                    <i className="fas fa-qrcode mr-2"></i>Generate QR
-                  </button>
-                </div>
-                <table className="data-table">
-                  <thead>
-                    <tr>
-                      <th>Employee</th>
-                      <th>Department</th>
-                      <th>Check-in</th>
-                      <th>Check-out</th>
-                      <th>Status</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    <tr>
-                      <td>John Mbeki</td>
-                      <td>Operations</td>
-                      <td>08:15 AM</td>
-                      <td>--:-- --</td>
-                      <td><span className="status-badge status-active">Active</span></td>
-                    </tr>
-                    <tr>
-                      <td>Sarah Ndi</td>
-                      <td>HR</td>
-                      <td>08:30 AM</td>
-                      <td>--:-- --</td>
-                      <td><span className="status-badge status-active">Active</span></td>
-                    </tr>
-                    <tr>
-                      <td>Paul Biya Jr</td>
-                      <td>Finance</td>
-                      <td>09:00 AM</td>
-                      <td>--:-- --</td>
-                      <td><span className="status-badge status-pending">Late</span></td>
-                    </tr>
-                  </tbody>
-                </table>
-              </div>
-            </div>
-
-            {/* Workforce Management Page */}
-            <div className={`page ${activePage === 'workforce' ? 'active' : ''}`}>
-              <h2 className="text-2xl font-bold mb-6 dark:text-white">Workforce Management</h2>
-              
-              <div className="card">
-                <div className="card-header">
-                  <h3>Employee Directory</h3>
-                  <div>
-                    <button className="btn btn-outline mr-2"><i className="fas fa-download mr-2"></i>Export</button>
-                    <button className="btn btn-primary"><i className="fas fa-plus mr-2"></i>Add Employee</button>
+            )}
+            
+            {/* Workforce Page */}
+            {activePage === 'workforce' && (
+              <div className="page active">
+                <h2 className="text-2xl font-bold mb-6">Workforce Management</h2>
+                
+                <div className="card">
+                  <div className="card-header">
+                    <h3>Employee Directory</h3>
+                    <div className="flex gap-2">
+                      <button className="btn btn-outline btn-sm" onClick={exportTasksReport}><i className="fas fa-download"></i> Export</button>
+                    </div>
+                  </div>
+                  <div className="employee-grid">
+                    {employees.filter(e => e.role !== 'admin').map(emp => (
+                      <div key={emp._id} className="employee-card">
+                        <div className="employee-avatar">{emp.name?.charAt(0) || '?'}</div>
+                        <div className="font-semibold">{emp.name}</div>
+                        <small className="text-gray-400">{emp.role}</small>
+                      </div>
+                    ))}
                   </div>
                 </div>
-                <table className="data-table">
-                  <thead>
-                    <tr>
-                      <th>ID</th>
-                      <th>Name</th>
-                      <th>Department</th>
-                      <th>Position</th>
-                      <th>Join Date</th>
-                      <th>Status</th>
-                      <th>Actions</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    <tr>
-                      <td>WF-001</td>
-                      <td>John Mbeki</td>
-                      <td>Operations</td>
-                      <td>Manager</td>
-                      <td>2022-03-15</td>
-                      <td><span className="status-badge status-active">Active</span></td>
-                      <td><i className="fas fa-edit text-blue-500 cursor-pointer"></i></td>
-                    </tr>
-                    <tr>
-                      <td>WF-045</td>
-                      <td>Sarah Ndi</td>
-                      <td>HR</td>
-                      <td>Director</td>
-                      <td>2021-11-01</td>
-                      <td><span className="status-badge status-active">Active</span></td>
-                      <td><i className="fas fa-edit text-blue-500 cursor-pointer"></i></td>
-                    </tr>
-                    <tr>
-                      <td>WF-089</td>
-                      <td>Paul Biya Jr</td>
-                      <td>Finance</td>
-                      <td>Analyst</td>
-                      <td>2023-01-10</td>
-                      <td><span className="status-badge status-active">Active</span></td>
-                      <td><i className="fas fa-edit text-blue-500 cursor-pointer"></i></td>
-                    </tr>
-                    <tr>
-                      <td>WF-112</td>
-                      <td>Marie Claire</td>
-                      <td>Peace Studies</td>
-                      <td>Coordinator</td>
-                      <td>2023-06-20</td>
-                      <td><span className="status-badge status-active">Active</span></td>
-                      <td><i className="fas fa-edit text-blue-500 cursor-pointer"></i></td>
-                    </tr>
-                    <tr>
-                      <td>WF-156</td>
-                      <td>Jean Pierre</td>
-                      <td>IT</td>
-                      <td>Admin</td>
-                      <td>2022-09-05</td>
-                      <td><span className="status-badge status-active">Active</span></td>
-                      <td><i className="fas fa-edit text-blue-500 cursor-pointer"></i></td>
-                    </tr>
-                    <tr>
-                      <td>WF-203</td>
-                      <td>Alice Ngon</td>
-                      <td>Humanitarian</td>
-                      <td>Field Officer</td>
-                      <td>2024-01-15</td>
-                      <td><span className="status-badge status-pending">Probation</span></td>
-                      <td><i className="fas fa-edit text-blue-500 cursor-pointer"></i></td>
-                    </tr>
-                  </tbody>
-                </table>
-              </div>
-
-              <div className="grid-2 mt-6">
+                
                 <div className="card">
                   <div className="card-header">
                     <h3>Department Overview</h3>
                   </div>
-                  <div style={{ height: '200px' }}>
-                    <canvas ref={deptStatsRef} height="200"></canvas>
-                  </div>
-                </div>
-                <div className="card">
-                  <div className="card-header">
-                    <h3>Employment Type</h3>
-                  </div>
-                  <div style={{ height: '200px' }}>
-                    <canvas ref={empTypeRef} height="200"></canvas>
+                  <div style={{ height: '300px' }}>
+                    <canvas ref={deptChartRef}></canvas>
                   </div>
                 </div>
               </div>
-            </div>
-
-            {/* QR Attendance Page - FIXED QR code URL with template literal */}
-            <div className={`page ${activePage === 'attendance' ? 'active' : ''}`}>
-              <h2 className="text-2xl font-bold mb-6 dark:text-white">QR Attendance System</h2>
-              
-              <div className="grid-2">
-                <div className="card">
-                  <div className="card-header">
-                    <h3>Generate Attendance QR</h3>
-                  </div>
-                  <div className="text-center p-6">
-                    <div className="qr-image mx-auto mb-4">
-                      <img 
-                        src="WFMS-1024.jpeg"
-                        alt="Scan the QR code to Access the system" 
-                      />
-                    </div>
-                    <p className="mb-4 dark:text-gray-300">Scan to mark attendance</p>
-                    <button className="btn btn-primary" onClick={() => setQrModalOpen(true)}>
-                      <i className="fas fa-sync-alt mr-2"></i>Generate New QR
+            )}
+            
+            {/* QR Attendance Page */}
+            {activePage === 'attendance' && (
+              <div className="page active">
+                <h2 className="text-2xl font-bold mb-6">QR Attendance System</h2>
+                
+                <div className="grid-2">
+                  <div className="card text-center">
+                    <i className="fas fa-qrcode text-6xl text-[#00F0FF] mb-4"></i>
+                    <p className="mb-4">Scan QR code to mark attendance</p>
+                    <button className="btn btn-primary" onClick={initQRScanner}>
+                      <i className="fas fa-camera"></i> Scan QR Code
                     </button>
                   </div>
+                  <div className="card">
+                    <h3 className="font-semibold mb-4">Today's Attendance</h3>
+                    <div className="space-y-3">
+                      <div className="flex justify-between p-3 bg-black/30 rounded"><span>Present</span><span className="font-bold text-green-500">{stats.presentToday || 0}</span></div>
+                      <div className="flex justify-between p-3 bg-black/30 rounded"><span>Absent</span><span className="font-bold text-red-500">{stats.absentToday || 0}</span></div>
+                      <div className="flex justify-between p-3 bg-black/30 rounded"><span>Late</span><span className="font-bold text-yellow-500">{stats.lateToday || 0}</span></div>
+                    </div>
+                  </div>
                 </div>
-
+                
                 <div className="card">
                   <div className="card-header">
-                    <h3>Today's Attendance</h3>
+                    <h3>Recent Scans</h3>
                   </div>
-                  <div className="space-y-4">
-                    <div className="flex justify-between items-center p-3 bg-gray-50 dark:bg-gray-700 rounded">
-                      <span>Present</span>
-                      <span className="font-bold text-green-600">2,156</span>
+                  <table className="data-table">
+                    <thead><tr><th>Time</th><th>Employee</th><th>Status</th></tr></thead>
+                    <tbody>
+                      {attendanceRecords.slice(0, 5).map(record => (
+                        <tr key={record._id}>
+                          <td>{new Date(record.timestamp).toLocaleTimeString()}</td>
+                          <td>{record.user_id?.name || 'Unknown'}</td>
+                          <td><span className="status-badge status-active">{record.action}</span></td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+            
+            {/* Tasks Page */}
+            {activePage === 'tasks' && (
+              <div className="page active">
+                <h2 className="text-2xl font-bold mb-6">Task Management</h2>
+                
+                {currentUser?.role === 'admin' && (
+                  <div className="card">
+                    <div className="card-header"><h3>Create New Task</h3></div>
+                    <div className="grid-2">
+                      <div className="form-group"><label className="form-label">Title</label><input type="text" id="taskTitle" className="form-control" /></div>
+                      <div className="form-group"><label className="form-label">Assigned To</label><select id="taskAssign" className="form-control"><option value="">Select Employee</option>{employees.map(e => <option key={e._id} value={e._id}>{e.name}</option>)}</select></div>
+                      <div className="form-group"><label className="form-label">Priority</label><select id="taskPriority" className="form-control"><option value="low">Low</option><option value="medium" selected>Medium</option><option value="high">High</option></select></div>
+                      <div className="form-group"><label className="form-label">Due Date</label><input type="date" id="taskDueDate" className="form-control" /></div>
+                      <div className="form-group" style={{ gridColumn: 'span 2' }}><label className="form-label">Description</label><textarea id="taskDesc" className="form-control" rows="3"></textarea></div>
                     </div>
-                    <div className="flex justify-between items-center p-3 bg-gray-50 dark:bg-gray-700 rounded">
-                      <span>Absent</span>
-                      <span className="font-bold text-red-600">234</span>
-                    </div>
-                    <div className="flex justify-between items-center p-3 bg-gray-50 dark:bg-gray-700 rounded">
-                      <span>Late</span>
-                      <span className="font-bold text-yellow-600">89</span>
-                    </div>
-                    <div className="flex justify-between items-center p-3 bg-gray-50 dark:bg-gray-700 rounded">
-                      <span>On Leave</span>
-                      <span className="font-bold text-blue-600">368</span>
-                    </div>
+                    <button className="btn btn-primary" onClick={() => createTask({
+                      title: document.getElementById('taskTitle').value,
+                      description: document.getElementById('taskDesc').value,
+                      assigned_to: document.getElementById('taskAssign').value,
+                      priority: document.getElementById('taskPriority').value,
+                      due_date: document.getElementById('taskDueDate').value
+                    })}>Create Task</button>
                   </div>
-                </div>
-              </div>
-
-              <div className="card mt-6">
-                <div className="card-header">
-                  <h3>Recent Scans</h3>
-                </div>
-                <table className="data-table">
-                  <thead>
-                    <tr>
-                      <th>Time</th>
-                      <th>Employee</th>
-                      <th>Department</th>
-                      <th>Type</th>
-                      <th>Status</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    <tr>
-                      <td>08:15 AM</td>
-                      <td>John Mbeki</td>
-                      <td>Operations</td>
-                      <td>Check-in</td>
-                      <td><span className="status-badge status-active">On Time</span></td>
-                    </tr>
-                    <tr>
-                      <td>08:30 AM</td>
-                      <td>Sarah Ndi</td>
-                      <td>HR</td>
-                      <td>Check-in</td>
-                      <td><span className="status-badge status-active">On Time</span></td>
-                    </tr>
-                    <tr>
-                      <td>09:00 AM</td>
-                      <td>Paul Biya Jr</td>
-                      <td>Finance</td>
-                      <td>Check-in</td>
-                      <td><span className="status-badge status-pending">Late</span></td>
-                    </tr>
-                  </tbody>
-                </table>
-              </div>
-            </div>
-
-            {/* Analytics & Reports Page */}
-            <div className={`page ${activePage === 'analytics' ? 'active' : ''}`}>
-              <h2 className="text-2xl font-bold mb-6 dark:text-white">Analytics & Reports</h2>
-              
-              <div className="grid-4">
-                <div className="card text-center">
-                  <div className="text-3xl font-bold text-blue-600">94%</div>
-                  <div className="text-sm text-gray-600 dark:text-gray-400">Attendance Rate</div>
-                </div>
-                <div className="card text-center">
-                  <div className="text-3xl font-bold text-green-600">7.8h</div>
-                  <div className="text-sm text-gray-600 dark:text-gray-400">Avg Work Hours</div>
-                </div>
-                <div className="card text-center">
-                  <div className="text-3xl font-bold text-purple-600">96%</div>
-                  <div className="text-sm text-gray-600 dark:text-gray-400">Productivity</div>
-                </div>
-                <div className="card text-center">
-                  <div className="text-3xl font-bold text-orange-600">12</div>
-                  <div className="text-sm text-gray-600 dark:text-gray-400">Departments</div>
-                </div>
-              </div>
-
-              <div className="grid-2 mt-6">
+                )}
+                
                 <div className="card">
-                  <div className="card-header">
-                    <h3>Monthly Attendance Trend</h3>
-                  </div>
-                  <div style={{ height: '200px' }}>
-                    <canvas ref={monthlyTrendRef} height="200"></canvas>
+                  <div className="card-header"><h3>All Tasks</h3></div>
+                  <div className="task-list">
+                    {tasks.map(task => (
+                      <div key={task._id} className="task-item">
+                        <div className="flex justify-between items-start">
+                          <div><strong>{task.title}</strong><p className="text-sm text-gray-400 mt-1">{task.description?.substring(0, 100)}</p></div>
+                          <div><span className="badge badge-info">{task.status}</span><span className="badge badge-warning ml-2">{task.priority}</span></div>
+                        </div>
+                        <div className="flex justify-between mt-2 text-sm text-gray-400">
+                          <span>Assigned to: {task.assigned_to?.name || 'Unassigned'}</span>
+                          {currentUser?.role === 'admin' && <button className="btn btn-danger btn-sm" onClick={() => rejectTask(task._id, 'Deleted by admin')}>Delete</button>}
+                        </div>
+                      </div>
+                    ))}
                   </div>
                 </div>
+                
+                {currentUser?.role === 'admin' && (
+                  <div className="card">
+                    <div className="card-header"><h3>Pending Approvals</h3></div>
+                    <div className="task-list">
+                      {pendingApprovals.map(task => (
+                        <div key={task._id} className="task-item">
+                          <div><strong>{task.title}</strong><p className="text-sm text-gray-400 mt-1">Submitted by: {task.submitted_by?.name}</p></div>
+                          <p className="text-sm mt-2">Report: {task.daily_report?.substring(0, 100)}</p>
+                          <div className="flex gap-2 mt-3">
+                            <button className="btn btn-success btn-sm" onClick={() => approveTask(task._id, prompt('Feedback (optional):') || '')}>Approve</button>
+                            <button className="btn btn-danger btn-sm" onClick={() => rejectTask(task._id, prompt('Rejection reason:'))}>Reject</button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+            
+            {/* Teams Page */}
+            {activePage === 'teams' && (
+              <div className="page active">
+                <h2 className="text-2xl font-bold mb-6">Team Management</h2>
+                
+                {currentUser?.role === 'admin' && (
+                  <div className="card">
+                    <div className="card-header"><h3>Create New Team</h3></div>
+                    <div className="grid-2">
+                      <div className="form-group"><label className="form-label">Team Name</label><input type="text" id="teamName" className="form-control" /></div>
+                      <div className="form-group"><label className="form-label">Department</label><input type="text" id="teamDepartment" className="form-control" /></div>
+                      <div className="form-group"><label className="form-label">Manager</label><select id="teamManager" className="form-control"><option value="">Select Manager</option>{employees.filter(e => e.role === 'admin' || e.role === 'manager').map(e => <option key={e._id} value={e._id}>{e.name}</option>)}</select></div>
+                      <div className="form-group" style={{ gridColumn: 'span 2' }}><label className="form-label">Description</label><textarea id="teamDescription" className="form-control" rows="3"></textarea></div>
+                    </div>
+                    <button className="btn btn-primary" onClick={() => createTeam({
+                      name: document.getElementById('teamName').value,
+                      department: document.getElementById('teamDepartment').value,
+                      manager: document.getElementById('teamManager').value,
+                      description: document.getElementById('teamDescription').value
+                    })}>Create Team</button>
+                  </div>
+                )}
+                
                 <div className="card">
-                  <div className="card-header">
-                    <h3>Department Performance</h3>
-                  </div>
-                  <div style={{ height: '200px' }}>
-                    <canvas ref={deptPerfRef} height="200"></canvas>
-                  </div>
+                  <div className="card-header"><h3>All Teams</h3></div>
+                  {teams.map(team => (
+                    <div key={team._id} className="team-card">
+                      <div className="flex justify-between items-center">
+                        <div><strong className="text-lg">{team.name}</strong><div className="text-sm text-gray-400">{team.department || 'No department'}</div></div>
+                        <div><span className="badge badge-success">Active</span>{currentUser?.role === 'admin' && <button className="btn btn-danger btn-sm ml-2" onClick={() => deleteTeam(team._id)}>Delete</button>}</div>
+                      </div>
+                      <div className="mt-2 text-sm">Manager: {team.manager?.name || 'Not assigned'} | Members: {team.members?.length || 0}</div>
+                    </div>
+                  ))}
                 </div>
               </div>
-
-              <div className="card mt-6">
-                <div className="card-header">
-                  <h3>Generate Reports</h3>
-                </div>
-                <div className="grid-3">
-                  <button className="btn btn-outline">
-                    <i className="fas fa-file-pdf mr-2"></i>Attendance Report
-                  </button>
-                  <button className="btn btn-outline">
-                    <i className="fas fa-file-excel mr-2"></i>Payroll Report
-                  </button>
-                  <button className="btn btn-outline">
-                    <i className="fas fa-file-csv mr-2"></i>Performance Report
-                  </button>
-                </div>
-              </div>
-            </div>
-
-            {/* Payroll Integration Page */}
-            <div className={`page ${activePage === 'payroll' ? 'active' : ''}`}>
-              <h2 className="text-2xl font-bold mb-6 dark:text-white">Payroll Integration</h2>
-              
-              <div className="grid-4">
-                <div className="card text-center">
-                  <div className="text-3xl font-bold text-green-600">$2.4M</div>
-                  <div className="text-sm text-gray-600 dark:text-gray-400">Monthly Payroll</div>
-                </div>
-                <div className="card text-center">
-                  <div className="text-3xl font-bold text-blue-600">2,847</div>
-                  <div className="text-sm text-gray-600 dark:text-gray-400">Active Employees</div>
-                </div>
-                <div className="card text-center">
-                  <div className="text-3xl font-bold text-purple-600">$843</div>
-                  <div className="text-sm text-gray-600 dark:text-gray-400">Average Salary</div>
-                </div>
-                <div className="card text-center">
-                  <div className="text-3xl font-bold text-orange-600">15</div>
-                  <div className="text-sm text-gray-600 dark:text-gray-400">Days Until Payday</div>
-                </div>
-              </div>
-
-              <div className="card mt-6">
-                <div className="card-header">
-                  <h3>Recent Payroll Runs</h3>
-                </div>
-                <table className="data-table">
-                  <thead>
-                    <tr>
-                      <th>Period</th>
-                      <th>Amount</th>
-                      <th>Employees</th>
-                      <th>Status</th>
-                      <th>Actions</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    <tr>
-                      <td>March 2026</td>
-                      <td>$2,400,000</td>
-                      <td>2,847</td>
-                      <td><span className="status-badge status-active">Completed</span></td>
-                      <td><i className="fas fa-download text-blue-500 cursor-pointer"></i></td>
-                    </tr>
-                    <tr>
-                      <td>February 2026</td>
-                      <td>$2,350,000</td>
-                      <td>2,812</td>
-                      <td><span className="status-badge status-active">Completed</span></td>
-                      <td><i className="fas fa-download text-blue-500 cursor-pointer"></i></td>
-                    </tr>
-                    <tr>
-                      <td>January 2026</td>
-                      <td>$2,380,000</td>
-                      <td>2,825</td>
-                      <td><span className="status-badge status-active">Completed</span></td>
-                      <td><i className="fas fa-download text-blue-500 cursor-pointer"></i></td>
-                    </tr>
-                  </tbody>
-                </table>
-              </div>
-            </div>
-
-            {/* Security & Compliance Page */}
-            <div className={`page ${activePage === 'security' ? 'active' : ''}`}>
-              <h2 className="text-2xl font-bold mb-6 dark:text-white">Security & Compliance</h2>
-              
-              <div className="grid-2">
-                <div className="card">
-                  <div className="card-header">
-                    <h3>Security Overview</h3>
-                  </div>
-                  <div className="space-y-4">
-                    <div className="flex justify-between items-center">
-                      <span>Two-Factor Authentication</span>
-                      <span className="status-badge status-active">Enabled</span>
-                    </div>
-                    <div className="flex justify-between items-center">
-                      <span>Last Security Audit</span>
-                      <span>March 15, 2026</span>
-                    </div>
-                    <div className="flex justify-between items-center">
-                      <span>Active Sessions</span>
-                      <span>1,245</span>
-                    </div>
-                    <div className="flex justify-between items-center">
-                      <span>Failed Login Attempts (24h)</span>
-                      <span>23</span>
-                    </div>
-                  </div>
-                </div>
-
-                <div className="card">
-                  <div className="card-header">
-                    <h3>Compliance Status</h3>
-                  </div>
-                  <div className="space-y-4">
-                    <div className="flex justify-between items-center">
-                      <span>GDPR Compliance</span>
-                      <span className="status-badge status-active">Compliant</span>
-                    </div>
-                    <div className="flex justify-between items-center">
-                      <span>ISO 27001</span>
-                      <span className="status-badge status-active">Certified</span>
-                    </div>
-                    <div className="flex justify-between items-center">
-                      <span>SOC 2 Type II</span>
-                      <span className="status-badge status-active">Compliant</span>
-                    </div>
-                    <div className="flex justify-between items-center">
-                      <span>HIPAA</span>
-                      <span className="status-badge status-pending">In Progress</span>
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              <div className="card mt-6">
-                <div className="card-header">
-                  <h3>Security Policies</h3>
-                </div>
-                <ul className="list-disc pl-6 space-y-2 dark:text-gray-300">
-                  <li>Password must be at least 12 characters with special characters</li>
-                  <li>Session timeout after 30 minutes of inactivity</li>
-                  <li>Two-factor authentication required for admin access</li>
-                  <li>Biometric verification for payroll approval</li>
-                  <li>Automatic logout on suspicious activity</li>
-                </ul>
-              </div>
-            </div>
-
-            {/* HERITAGE & HEPIDS Page */}
-            <div className={`page ${activePage === 'heritage' ? 'active' : ''}`}>
-              <h2 className="text-2xl font-bold mb-6 dark:text-white">HERITAGE LTD & HEPIDS</h2>
-              
-              <div className="grid-2">
-                <div className="card">
-                  <div className="card-header">
-                    <h3>HERITAGE LTD</h3>
-                  </div>
-                  <div className="text-center p-4">
-                    <i className="fas fa-building text-6xl text-blue-500 mb-4"></i>
-                    <p className="mb-4 dark:text-gray-300">
-                      Professional organization for the leverage of peace studies and humanitarian action, 
-                      and the improvement of peace in Africa through technology.
-                    </p>
-                    <p className="text-sm text-gray-600 dark:text-gray-400">
-                      Founded: 2010 | Headquarters: Yaoundé, Cameroon
-                    </p>
-                  </div>
-                </div>
-
-                <div className="card">
-                  <div className="card-header">
-                    <h3>HEPIDS Institute</h3>
-                  </div>
-                  <div className="text-center p-4">
-                    <i className="fas fa-university text-6xl text-purple-500 mb-4"></i>
-                    <p className="mb-4 dark:text-gray-300">
-                      Heritage Institute for Peace & Development Studies - Higher education institute 
-                      dedicated to peace studies, conflict resolution, and humanitarian leadership.
-                    </p>
-                    <a href="https://heipeds.com" target="_blank" rel="noopener noreferrer" className="btn btn-primary">
-                      Visit Official Website
-                    </a>
-                  </div>
-                </div>
-              </div>
-
-              <div className="card mt-6">
-                <div className="card-header">
-                  <h3>Our Impact in Africa</h3>
-                </div>
+            )}
+            
+            {/* Analytics Page */}
+            {activePage === 'analytics' && (
+              <div className="page active">
+                <h2 className="text-2xl font-bold mb-6">Analytics & Reports</h2>
+                
                 <div className="grid-4">
-                  <div className="text-center">
-                    <div className="text-3xl font-bold text-blue-600">15+</div>
-                    <div className="text-sm text-gray-600">African Countries</div>
+                  <div className="stat-card"><div className="stat-value">{stats.attendanceRate || 0}%</div><div className="stat-label">Attendance Rate</div></div>
+                  <div className="stat-card"><div className="stat-value">{stats.completionRate || 0}%</div><div className="stat-label">Task Completion</div></div>
+                  <div className="stat-card"><div className="stat-value">{tasks.length}</div><div className="stat-label">Total Tasks</div></div>
+                  <div className="stat-card"><div className="stat-value">{employees.filter(e => e.role !== 'admin').length}</div><div className="stat-label">Active Employees</div></div>
+                </div>
+                
+                <div className="card">
+                  <div className="card-header">
+                    <h3>Performance Dashboard</h3>
+                    <select id="analyticsPeriod" className="form-control w-32" onChange={() => {}}><option value="week">This Week</option><option value="month">This Month</option></select>
                   </div>
-                  <div className="text-center">
-                    <div className="text-3xl font-bold text-green-600">200+</div>
-                    <div className="text-sm text-gray-600">Partner Organizations</div>
+                  <div style={{ height: '300px' }}>
+                    <canvas ref={performanceChartRef}></canvas>
                   </div>
-                  <div className="text-center">
-                    <div className="text-3xl font-bold text-purple-600">50K+</div>
-                    <div className="text-sm text-gray-600">Workforce Trained</div>
-                  </div>
-                  <div className="text-center">
-                    <div className="text-3xl font-bold text-orange-600">98%</div>
-                    <div className="text-sm text-gray-600">Success Rate</div>
+                </div>
+                
+                <div className="card">
+                  <div className="card-header"><h3>Export Reports</h3></div>
+                  <div className="flex gap-3 flex-wrap">
+                    <button className="btn btn-primary" onClick={exportAttendanceReport}><i className="fas fa-file-csv"></i> Attendance Report</button>
+                    <button className="btn btn-primary" onClick={exportTasksReport}><i className="fas fa-file-csv"></i> Tasks Report</button>
+                    <button className="btn btn-success" onClick={exportExcelReport}><i className="fas fa-file-excel"></i> Excel Report</button>
                   </div>
                 </div>
               </div>
-            </div>
-
-            {/* System Settings Page */}
-            <div className={`page ${activePage === 'settings' ? 'active' : ''}`}>
-              <h2 className="text-2xl font-bold mb-6 dark:text-white">System Settings</h2>
-              
-              <div className="grid-2">
+            )}
+            
+            {/* Templates Page */}
+            {activePage === 'templates' && (
+              <div className="page active">
+                <h2 className="text-2xl font-bold mb-6">Report Templates</h2>
+                
+                {currentUser?.role === 'admin' && (
+                  <div className="card">
+                    <div className="card-header"><h3>Create Template</h3></div>
+                    <div className="grid-2">
+                      <div className="form-group"><label className="form-label">Template Name</label><input type="text" id="templateName" className="form-control" /></div>
+                      <div className="form-group"><label className="form-label">Type</label><select id="templateType" className="form-control"><option value="attendance">Attendance</option><option value="performance">Performance</option></select></div>
+                      <div className="form-group" style={{ gridColumn: 'span 2' }}><label className="form-label">Description</label><textarea id="templateDesc" className="form-control" rows="2"></textarea></div>
+                    </div>
+                    <button className="btn btn-primary" onClick={() => createTemplate(
+                      document.getElementById('templateName').value,
+                      document.getElementById('templateType').value,
+                      document.getElementById('templateDesc').value,
+                      { dateRange: 'week', compareWithPrevious: true }
+                    )}>Create Template</button>
+                  </div>
+                )}
+                
                 <div className="card">
-                  <div className="card-header">
-                    <h3>General Settings</h3>
-                  </div>
-                  <div className="space-y-4">
-                    <div className="flex justify-between items-center">
-                      <span>Dark Mode</span>
-                      <label className="switch">
-                        <input 
-                          type="checkbox" 
-                          checked={settings.darkMode}
-                          onChange={(e) => updateSetting('darkMode', e.target.checked)}
-                        />
-                        <span className="slider"></span>
-                      </label>
+                  <div className="card-header"><h3>Available Templates</h3></div>
+                  {templates.map(template => (
+                    <div key={template._id} className="team-card">
+                      <div className="flex justify-between items-center">
+                        <div><strong>{template.name}</strong><span className="badge badge-info ml-2">{template.type}</span><div className="text-sm text-gray-400">{template.description}</div></div>
+                        <button className="btn btn-primary btn-sm" onClick={() => useTemplate(template._id)}>Use Template</button>
+                      </div>
                     </div>
-                    
-                    <div className="flex justify-between items-center">
-                      <span>Notifications</span>
-                      <label className="switch">
-                        <input 
-                          type="checkbox" 
-                          checked={settings.notifications}
-                          onChange={(e) => updateSetting('notifications', e.target.checked)}
-                        />
-                        <span className="slider"></span>
-                      </label>
-                    </div>
-                    
-                    <div className="flex justify-between items-center">
-                      <span>Auto-refresh Data</span>
-                      <label className="switch">
-                        <input 
-                          type="checkbox" 
-                          checked={settings.autoRefresh}
-                          onChange={(e) => updateSetting('autoRefresh', e.target.checked)}
-                        />
-                        <span className="slider"></span>
-                      </label>
-                    </div>
-                    
-                    <div>
-                      <label className="block mb-2">Refresh Interval (seconds)</label>
-                      <input 
-                        type="range" 
-                        min="10" 
-                        max="300" 
-                        value={settings.refreshInterval}
-                        onChange={(e) => updateSetting('refreshInterval', parseInt(e.target.value))}
-                        className="settings-slider w-full"
-                      />
-                      <div className="text-right text-sm">{settings.refreshInterval} seconds</div>
-                    </div>
-                  </div>
+                  ))}
                 </div>
-
+              </div>
+            )}
+            
+            {/* Leave Page */}
+            {activePage === 'leave' && (
+              <div className="page active">
+                <h2 className="text-2xl font-bold mb-6">Leave Management</h2>
+                
                 <div className="card">
-                  <div className="card-header">
-                    <h3>Language & Region</h3>
+                  <div className="card-header"><h3>Submit Leave Request</h3></div>
+                  <div className="grid-2">
+                    <div className="form-group"><label className="form-label">Leave Type</label><select id="leaveType" className="form-control"><option value="annual">Annual</option><option value="sick">Sick</option><option value="unpaid">Unpaid</option><option value="emergency">Emergency</option></select></div>
+                    <div className="form-group"><label className="form-label">Start Date</label><input type="date" id="leaveStart" className="form-control" /></div>
+                    <div className="form-group"><label className="form-label">End Date</label><input type="date" id="leaveEnd" className="form-control" /></div>
+                    <div className="form-group" style={{ gridColumn: 'span 2' }}><label className="form-label">Reason</label><textarea id="leaveReason" className="form-control" rows="2"></textarea></div>
                   </div>
-                  <div className="space-y-4">
-                    <div>
-                      <label className="block mb-2">Language</label>
-                      <select 
-                        className="w-full p-2 border rounded dark:bg-gray-700 dark:border-gray-600"
-                        value={settings.language}
-                        onChange={(e) => updateSetting('language', e.target.value)}
-                      >
-                        <option value="en">English</option>
-                        <option value="fr">French</option>
-                        <option value="es">Spanish</option>
-                        <option value="ar">Arabic</option>
-                      </select>
-                    </div>
-                    
-                    <div>
-                      <label className="block mb-2">Timezone</label>
-                      <select 
-                        className="w-full p-2 border rounded dark:bg-gray-700 dark:border-gray-600"
-                        value={settings.timezone}
-                        onChange={(e) => updateSetting('timezone', e.target.value)}
-                      >
-                        <option value="UTC+1">UTC+1 (West Africa)</option>
-                        <option value="UTC+0">UTC+0 (GMT)</option>
-                        <option value="UTC+2">UTC+2 (Central Africa)</option>
-                        <option value="UTC+3">UTC+3 (East Africa)</option>
-                      </select>
-                    </div>
-                    
-                    <div>
-                      <label className="block mb-2">Date Format</label>
-                      <select 
-                        className="w-full p-2 border rounded dark:bg-gray-700 dark:border-gray-600"
-                        value={settings.dateFormat}
-                        onChange={(e) => updateSetting('dateFormat', e.target.value)}
-                      >
-                        <option value="MM/DD/YYYY">MM/DD/YYYY</option>
-                        <option value="DD/MM/YYYY">DD/MM/YYYY</option>
-                        <option value="YYYY-MM-DD">YYYY-MM-DD</option>
-                      </select>
-                    </div>
-                  </div>
+                  <button className="btn btn-primary" onClick={() => submitLeaveRequest(
+                    document.getElementById('leaveType').value,
+                    document.getElementById('leaveStart').value,
+                    document.getElementById('leaveEnd').value,
+                    document.getElementById('leaveReason').value
+                  )}>Submit Request</button>
                 </div>
-
+                
                 <div className="card">
-                  <div className="card-header">
-                    <h3>Security Settings</h3>
-                  </div>
-                  <div className="space-y-4">
-                    <div className="flex justify-between items-center">
-                      <span>Two-Factor Authentication</span>
-                      <label className="switch">
-                        <input 
-                          type="checkbox" 
-                          checked={settings.twoFactorAuth}
-                          onChange={(e) => updateSetting('twoFactorAuth', e.target.checked)}
-                        />
-                        <span className="slider"></span>
-                      </label>
+                  <div className="card-header"><h3>My Leave Requests</h3></div>
+                  {leaveRequests.map(req => (
+                    <div key={req._id} className="team-card">
+                      <div className="flex justify-between">
+                        <div><strong className="capitalize">{req.type}</strong> - {new Date(req.start_date).toLocaleDateString()} to {new Date(req.end_date).toLocaleDateString()}</div>
+                        <span className={`badge ${req.status === 'approved' ? 'badge-success' : req.status === 'rejected' ? 'badge-danger' : 'badge-warning'}`}>{req.status}</span>
+                      </div>
+                      <div className="text-sm text-gray-400 mt-1">Reason: {req.reason}</div>
                     </div>
-                    
-                    <div>
-                      <label className="block mb-2">Session Timeout (minutes)</label>
-                      <input 
-                        type="number" 
-                        min="5" 
-                        max="120" 
-                        value={settings.sessionTimeout}
-                        onChange={(e) => updateSetting('sessionTimeout', parseInt(e.target.value))}
-                        className="w-full p-2 border rounded dark:bg-gray-700 dark:border-gray-600"
-                      />
-                    </div>
-                    
-                    <div>
-                      <label className="block mb-2">Max Login Attempts</label>
-                      <input 
-                        type="number" 
-                        min="3" 
-                        max="10" 
-                        value={settings.maxLoginAttempts}
-                        onChange={(e) => updateSetting('maxLoginAttempts', parseInt(e.target.value))}
-                        className="w-full p-2 border rounded dark:bg-gray-700 dark:border-gray-600"
-                      />
-                    </div>
-                  </div>
+                  ))}
                 </div>
-
-                <div className="card">
-                  <div className="card-header">
-                    <h3>System Information</h3>
+                
+                {currentUser?.role === 'admin' && (
+                  <div className="card">
+                    <div className="card-header"><h3>Pending Leave Requests</h3></div>
+                    {pendingLeaveRequests.map(req => (
+                      <div key={req._id} className="team-card">
+                        <div><strong>{req.user_id?.name}</strong> - {req.type} ({new Date(req.start_date).toLocaleDateString()} - {new Date(req.end_date).toLocaleDateString()})</div>
+                        <div className="text-sm text-gray-400 mt-1">Reason: {req.reason}</div>
+                        <div className="flex gap-2 mt-3">
+                          <button className="btn btn-success btn-sm" onClick={() => approveLeave(req._id)}>Approve</button>
+                          <button className="btn btn-danger btn-sm" onClick={() => rejectLeave(req._id)}>Reject</button>
+                        </div>
+                      </div>
+                    ))}
                   </div>
-                  <div className="space-y-4">
-                    <div className="flex justify-between">
-                      <span>Version</span>
-                      <span className="font-bold">2.4.1</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span>Last Update</span>
-                      <span>March 20, 2026</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span>Database</span>
-                      <span>PostgreSQL 15</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span>API Status</span>
-                      <span className="status-badge status-active">Operational</span>
-                    </div>
+                )}
+              </div>
+            )}
+            
+            {/* My Tasks Page */}
+            {activePage === 'my-tasks' && (
+              <div className="page active">
+                <h2 className="text-2xl font-bold mb-6">My Assigned Tasks</h2>
+                
+                <div className="worker-stats mb-4">
+                  <div className="stat-box"><div className="stat-number">{myTasks.length}</div><div className="text-sm text-gray-400">Total Tasks</div></div>
+                  <div className="stat-box"><div className="stat-number">{myTasks.filter(t => t.status === 'pending').length}</div><div className="text-sm text-gray-400">Pending</div></div>
+                  <div className="stat-box"><div className="stat-number">{myTasks.filter(t => t.status === 'in-progress').length}</div><div className="text-sm text-gray-400">In Progress</div></div>
+                  <div className="stat-box"><div className="stat-number">{myTasks.filter(t => t.status === 'completed').length}</div><div className="text-sm text-gray-400">Completed</div></div>
+                </div>
+                
+                <div className="card">
+                  <div className="task-list">
+                    {myTasks.map(task => (
+                      <div key={task._id} className="task-item">
+                        <div className="flex justify-between items-start">
+                          <div><strong>{task.title}</strong><p className="text-sm text-gray-400 mt-1">{task.description?.substring(0, 100)}</p></div>
+                          <span className={`badge ${task.priority === 'high' ? 'badge-danger' : 'badge-info'}`}>{task.priority}</span>
+                        </div>
+                        <div className="flex gap-2 mt-3">
+                          <button className="btn btn-primary btn-sm" onClick={() => {
+                            setSelectedTask(task);
+                            setTaskReportModalOpen(true);
+                          }}><i className="fas fa-paper-plane"></i> Submit Report</button>
+                          <button className="btn btn-success btn-sm" onClick={() => submitTaskReport(task._id, '', 0, 'completed')}><i className="fas fa-check"></i> Complete</button>
+                        </div>
+                      </div>
+                    ))}
                   </div>
                 </div>
               </div>
-
-              <div className="card mt-6">
-                <div className="card-header">
-                  <h3>System Actions</h3>
+            )}
+            
+            {/* My Attendance Page */}
+            {activePage === 'my-attendance' && (
+              <div className="page active">
+                <h2 className="text-2xl font-bold mb-6">My Attendance</h2>
+                
+                <div className="worker-stats mb-4">
+                  <div className="stat-box"><div className="stat-number">{myAttendance.length}</div><div className="text-sm text-gray-400">Total Records</div></div>
+                  <div className="stat-box"><div className="stat-number">{myAttendance.filter(a => a.action === 'clock_in').length}</div><div className="text-sm text-gray-400">Days Present</div></div>
                 </div>
-                <div className="flex gap-4 flex-wrap">
-                  <button className="btn btn-primary">
-                    <i className="fas fa-save mr-2"></i>Save All Settings
-                  </button>
-                  <button className="btn btn-outline">
-                    <i className="fas fa-redo mr-2"></i>Reset to Default
-                  </button>
-                  <button className="btn btn-outline">
-                    <i className="fas fa-download mr-2"></i>Export Settings
-                  </button>
+                
+                <div className="card">
+                  <div className="card-header"><h3>Attendance History</h3></div>
+                  <table className="data-table">
+                    <thead><tr><th>Date</th><th>Action</th><th>Time</th><th>IP Address</th></tr></thead>
+                    <tbody>
+                      {myAttendance.slice(0, 20).map(record => (
+                        <tr key={record._id}>
+                          <td>{new Date(record.timestamp).toLocaleDateString()}</td>
+                          <td>{record.action}</td>
+                          <td>{new Date(record.timestamp).toLocaleTimeString()}</td>
+                          <td>{record.ip_address || '-'}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+                
+                <div className="card">
+                  <div className="card-header"><h3>Request Correction</h3></div>
+                  <div className="grid-2">
+                    <div className="form-group"><label className="form-label">Date</label><input type="date" id="correctionDate" className="form-control" /></div>
+                    <div className="form-group"><label className="form-label">Reason</label><textarea id="correctionReason" className="form-control" rows="2"></textarea></div>
+                  </div>
+                  <button className="btn btn-primary" onClick={() => {
+                    const date = document.getElementById('correctionDate').value;
+                    const reason = document.getElementById('correctionReason').value;
+                    if (date && reason) {
+                      apiCall('/my/attendance/correction', { method: 'POST', body: JSON.stringify({ date, reason, expectedTime: '09:00', actualTime: '09:15' }) })
+                        .then(() => showToast('Correction request submitted!', 'success'))
+                        .catch(err => showToast(err.message, 'error'));
+                    } else {
+                      showToast('Date and reason required', 'error');
+                    }
+                  }}>Submit Correction Request</button>
                 </div>
               </div>
-              
-              {/* Footer with Social Links */}
-              <div className="card mt-6">
-                <div className="card-header">
-                  <h3>Connect With Us</h3>
-                </div>
-                <div className="social-links">
-                  <a href="https://facebook.com/wilsonjuniorblackstar" target="_blank" rel="noopener noreferrer" className="social-link facebook" title="Facebook">
-                    <i className="fab fa-facebook-f"></i>
-                  </a>
-                  <a href="https://wa.me/237687352072" target="_blank" rel="noopener noreferrer" className="social-link whatsapp" title="WhatsApp">
-                    <i className="fab fa-whatsapp"></i>
-                  </a>
-                  <a href="https://github.com/blackstar" target="_blank" rel="noopener noreferrer" className="social-link github" title="GitHub">
-                    <i className="fab fa-github"></i>
-                  </a>
-                  <a href="https://linkedin.com/in/wilsonjunior" target="_blank" rel="noopener noreferrer" className="social-link linkedin" title="LinkedIn">
-                    <i className="fab fa-linkedin-in"></i>
-                  </a>
-                </div>
-                <div className="text-center text-sm text-gray-500 dark:text-gray-400 mt-4">
-                  © {new Date().getFullYear()} HERITAGE Workforce Management System — All Rights Reserved
+            )}
+            
+            {/* Logs Page */}
+            {activePage === 'logs' && (
+              <div className="page active">
+                <h2 className="text-2xl font-bold mb-6">System Logs</h2>
+                
+                <div className="card">
+                  <div className="card-header"><h3>Recent Activity</h3><div className="text-sm text-gray-400">Total logs: {logCount}</div></div>
+                  <div className="log-box">
+                    <p>[INFO] System initialized</p>
+                    <p>[INFO] User {currentUser?.name} logged in</p>
+                    <p>[INFO] Dashboard loaded successfully</p>
+                  </div>
                 </div>
               </div>
-            </div>
+            )}
+            
+            {/* Impersonate Page */}
+            {activePage === 'impersonate' && currentUser?.role === 'admin' && (
+              <div className="page active">
+                <h2 className="text-2xl font-bold mb-6">Impersonation</h2>
+                
+                <div className="card">
+                  <div className="card-header"><h3>Start Impersonation</h3></div>
+                  <div className="grid-2">
+                    <div className="form-group"><label className="form-label">User to Impersonate</label><select id="impersonateTarget" className="form-control"><option value="">Select User</option>{employees.filter(e => e.role !== 'admin').map(e => <option key={e._id} value={e._id}>{e.name} ({e.role})</option>)}</select></div>
+                    <div className="form-group"><label className="form-label">Reason</label><input type="text" id="impersonateReason" className="form-control" placeholder="e.g., Troubleshooting" /></div>
+                  </div>
+                  <button className="btn btn-warning" onClick={() => startImpersonation(
+                    document.getElementById('impersonateTarget').value,
+                    document.getElementById('impersonateReason').value
+                  )}><i className="fas fa-mask"></i> Start Impersonation</button>
+                </div>
+                
+                <div className="card">
+                  <div className="card-header"><h3>Active Sessions</h3></div>
+                  {activeSessions.map(session => (
+                    <div key={session._id} className="team-card">
+                      <div><strong>{session.admin_name}</strong> impersonating <strong>{session.target_user_name}</strong></div>
+                      <div className="text-sm text-gray-400">Reason: {session.reason} | Started: {new Date(session.timestamp).toLocaleString()}</div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+            
+            {/* Settings Page */}
+            {activePage === 'settings' && (
+              <div className="page active">
+                <h2 className="text-2xl font-bold mb-6">System Settings</h2>
+                
+                <div className="card">
+                  <div className="card-header"><h3>Appearance</h3></div>
+                  <div className="flex justify-between items-center py-3">
+                    <span>Dark Mode</span>
+                    <label className="switch">
+                      <input type="checkbox" checked={theme === 'dark'} onChange={toggleTheme} />
+                      <span className="slider"></span>
+                    </label>
+                  </div>
+                </div>
+                
+                <div className="card">
+                  <div className="card-header"><h3>System Information</h3></div>
+                  <div className="space-y-2">
+                    <div className="flex justify-between"><span>Version</span><span className="font-bold">BNS WFMS v2.4.1</span></div>
+                    <div className="flex justify-between"><span>Environment</span><span>{process.env.NODE_ENV || 'development'}</span></div>
+                    <div className="flex justify-between"><span>API Status</span><span className="status-badge status-active">Operational</span></div>
+                  </div>
+                </div>
+                
+                <div className="card">
+                  <div className="card-header"><h3>Connect With Us</h3></div>
+                  <div className="social-links">
+                    <a href="#" className="social-link facebook"><i className="fab fa-facebook-f"></i></a>
+                    <a href="#" className="social-link whatsapp"><i className="fab fa-whatsapp"></i></a>
+                    <a href="#" className="social-link github"><i className="fab fa-github"></i></a>
+                    <a href="#" className="social-link linkedin"><i className="fab fa-linkedin-in"></i></a>
+                  </div>
+                  <div className="text-center text-sm text-gray-500 mt-4">
+                    © {new Date().getFullYear()} BNS · Black Nova Shift — All Rights Reserved
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
-
-          {/* QR Modal */}
-          <div className={`qr-modal ${qrModalOpen ? 'active' : ''}`} onClick={() => setQrModalOpen(false)}>
-            <div className="qr-content" onClick={e => e.stopPropagation()}>
-              <h3 className="text-xl font-bold mb-4">Scan the QR Code to get into the system</h3>
-              <div className="qr-image">
-                <img 
-                  src="WFMS-1024.jpeg" alt="QR Code" />
+          
+          {/* Task Report Modal */}
+          {taskReportModalOpen && selectedTask && (
+            <div className="modal active">
+              <div className="modal-content">
+                <div className="modal-header">
+                  <h5>Submit Task Report</h5>
+                  <button className="btn-close" onClick={() => setTaskReportModalOpen(false)}>×</button>
+                </div>
+                <div className="modal-body">
+                  <div className="form-group"><label className="form-label">Task</label><input type="text" className="form-control" value={selectedTask.title} readOnly /></div>
+                  <div className="form-group"><label className="form-label">Work Completed</label><textarea id="reportContent" className="form-control" rows="4" placeholder="Describe what you've done..."></textarea></div>
+                  <div className="form-group"><label className="form-label">Hours Spent</label><input type="number" id="reportHours" className="form-control" step="0.5" min="0" /></div>
+                  <div className="form-group"><label className="form-label">Status</label><select id="reportStatus" className="form-control"><option value="in-progress">In Progress</option><option value="completed">Completed</option></select></div>
+                </div>
+                <div className="modal-footer">
+                  <button className="btn btn-outline" onClick={() => setTaskReportModalOpen(false)}>Cancel</button>
+                  <button className="btn btn-primary" onClick={() => {
+                    submitTaskReport(
+                      selectedTask._id,
+                      document.getElementById('reportContent').value,
+                      parseFloat(document.getElementById('reportHours').value) || 0,
+                      document.getElementById('reportStatus').value
+                    );
+                    setTaskReportModalOpen(false);
+                  }}>Submit Report</button>
+                </div>
               </div>
-              <p className="mb-4 text-gray-600">Scan with HERITAGE WMS Mobile App</p>
-              <button className="btn btn-primary" onClick={() => setQrModalOpen(false)}>
-                Close
-              </button>
             </div>
+          )}
+          
+          {/* Toast Container */}
+          <div className="toast-container">
+            {toasts.map(toast => (
+              <div key={toast.id} className="toast">
+                <div className="toast-content">{toast.message}</div>
+                <button className="toast-close" onClick={() => setToasts(prev => prev.filter(t => t.id !== toast.id))}>×</button>
+              </div>
+            ))}
           </div>
         </div>
       );
     };
-
-    // CRITICAL FIX: Actually render the app to the DOM
+    
+    // Render App
     const root = ReactDOM.createRoot(document.getElementById('root'));
     root.render(<App />);
   </script>
