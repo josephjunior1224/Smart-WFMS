@@ -1586,6 +1586,11 @@
   <!-- app.client.js FIRST for global functions -->
   <script src="app.client.js"></script>
   <script>
+function closeTaskReport() {
+  document.getElementById('taskReportModal').classList.remove('active');
+}
+</script>
+  <script>
     // app.client.js will override inline functions with full implementations
     console.log('app.client.js loaded - full functions now available');
   </script>

@@ -943,17 +943,9 @@ app.post('/api/generate-qr', async (req, res) => {
       return res.status(400).json({ error: 'username required' });
     }
 
+    logger.warn('Legacy tokens.json usage detected - using QRCode model instead');
+
     const token = uuidv4();
-    let tokens = {};
-    try {
-      tokens = JSON.parse(fs.readFileSync(TOKENS_FILE, 'utf8') || '{}');
-    } catch (e) {
-      tokens = {};
-    }
-
-    tokens[token] = { username, role, createdAt: new Date().toISOString() };
-    fs.writeFileSync(TOKENS_FILE, JSON.stringify(tokens, null, 2), 'utf8');
-
     const qrData = await QR.toDataURL(token);
     res.json({ ok: true, token, qrData });
   } catch (err) {
@@ -964,25 +956,8 @@ app.post('/api/generate-qr', async (req, res) => {
 
 // Validate token (legacy)
 app.post('/api/validate-token', (req, res) => {
-  try {
-    const { token } = req.body;
-    if (!token) return res.status(400).json({ error: 'token required' });
-    
-    let tokens = {};
-    try {
-      tokens = JSON.parse(fs.readFileSync(TOKENS_FILE, 'utf8') || '{}');
-    } catch (e) {
-      tokens = {};
-    }
-    
-    const info = tokens[token];
-    if (!info) return res.status(404).json({ ok: false });
-    
-    res.json({ ok: true, user: info });
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ error: 'Token validation failed' });
-  }
+  logger.warn('Legacy /api/validate-token - use QR endpoints instead');
+  res.status(410).json({ ok: false, error: 'Legacy endpoint deprecated. Use /api/qr/validate/:token' });
 });
 
 // ========== 10. API 404 HANDLER ==========
