@@ -863,37 +863,32 @@ app.put('/api/users/profile', authenticateToken, async (req, res) => {
 // ===============================================
 // QR CODE ROUTES
 // ===============================================
+// ===== QR CODE AUTO-LOGIN WITH ATTENDANCE RECORDING =====
 
+// Generate QR code for user (called after registration or from dashboard)
 app.post('/api/qr/generate-user', authenticateToken, async (req, res) => {
   try {
     const userId = req.user.id;
     
     let qrCode = await QRCode.findOne({ user_id: userId });
     
-    if (qrCode && qrCode.status === 'active' && new Date() < qrCode.expires_at) {
-      return res.json({
-        ok: true,
-        qrToken: qrCode.qr_token,
-        qrData: qrCode.qr_data,
-        expiresAt: qrCode.expires_at,
-        isNew: false
-      });
-    }
-    
+    // Generate a simple token (no URL, just the token for easy scanning)
     const qrToken = uuidv4();
-    const baseUrl = `${req.protocol}://${req.get('host')}`;
-    const qrLoginUrl = `${baseUrl}/qr-login.html?token=${qrToken}`;
     
-    const qrData = await QR.toDataURL(qrLoginUrl, {
-      errorCorrectionLevel: 'H',
+    // Generate QR code with your brand colors
+    const qrData = await QR.toDataURL(qrToken, {
+      errorCorrectionLevel: 'M',
       type: 'image/png',
       width: 500,
       margin: 2,
-      color: { dark: '#00F0FF', light: '#0B0B0B' }
+      color: {
+        dark: '#00F0FF',  // Nova Blue
+        light: '#0B0B0B'  // Deep Space
+      }
     });
     
     const expiresAt = new Date();
-    expiresAt.setDate(expiresAt.getDate() + 365);
+    expiresAt.setDate(expiresAt.getDate() + 365); // 1 year validity
     
     if (qrCode) {
       qrCode.qr_token = qrToken;
@@ -934,25 +929,202 @@ app.post('/api/qr/generate-user', authenticateToken, async (req, res) => {
   }
 });
 
+// MAIN QR LOGIN ENDPOINT - Auto-login + Attendance Recording
+app.post('/api/qr-login', async (req, res) => {
+  try {
+    let { token } = req.body;
+    
+    if (!token) {
+      return res.status(400).json({ ok: false, error: 'QR token required' });
+    }
+    
+    // Clean the token (in case user scanned a URL)
+    if (token.includes('/')) {
+      const parts = token.split('/');
+      token = parts[parts.length - 1];
+    }
+    if (token.includes('?')) {
+      token = token.split('?')[0];
+    }
+    if (token.includes('token=')) {
+      const match = token.match(/token=([^&]+)/);
+      if (match) token = match[1];
+    }
+    if (token.includes('%')) {
+      token = decodeURIComponent(token);
+    }
+    
+    // Find the QR code in database
+    const qrCode = await QRCode.findOne({ qr_token: token }).populate('user_id');
+    
+    if (!qrCode) {
+      return res.status(404).json({ ok: false, error: 'Invalid QR code' });
+    }
+    
+    // Check if QR code is expired
+    if (qrCode.expires_at && new Date() > qrCode.expires_at) {
+      return res.status(401).json({ ok: false, error: 'QR code has expired. Please generate a new one.' });
+    }
+    
+    // Check if QR code is revoked
+    if (qrCode.status === 'revoked') {
+      return res.status(401).json({ ok: false, error: 'QR code has been revoked. Please contact admin.' });
+    }
+    
+    const user = qrCode.user_id;
+    
+    // Check if user account is active
+    if (!user || !user.is_active) {
+      return res.status(401).json({ ok: false, error: 'Account is deactivated. Please contact admin.' });
+    }
+    
+    // RECORD THE QR SCAN in scan history
+    const scan = new QRScan({
+      user_id: user._id,
+      qr_token: token,
+      scanned_at: new Date(),
+      scanner_ip: req.ip || req.connection?.remoteAddress || '0.0.0.0',
+      action: 'login',
+      user_agent: req.headers['user-agent']
+    });
+    await scan.save();
+    
+    // Update QR code scan count
+    qrCode.scan_count = (qrCode.scan_count || 0) + 1;
+    qrCode.last_scan_at = new Date();
+    if (!qrCode.is_activated) {
+      qrCode.is_activated = true;
+      qrCode.first_scan_at = new Date();
+    }
+    await qrCode.save();
+    
+    // ===== RECORD ATTENDANCE AUTOMATICALLY =====
+    try {
+      const attendance = new Attendance({
+        user_id: user._id,
+        action: 'clock_in',
+        timestamp: new Date(),
+        ip_address: req.ip || req.connection?.remoteAddress || '0.0.0.0',
+        notes: 'QR Code Auto Login'
+      });
+      await attendance.save();
+      console.log(`✅ Attendance recorded for ${user.name} via QR code`);
+    } catch (attErr) {
+      console.error('Failed to record attendance:', attErr);
+      // Don't fail the login if attendance recording fails
+    }
+    
+    // Also record a separate login action in audit log
+    try {
+      const auditLog = new AuditLog({
+        user_id: user._id,
+        action: 'qr_login',
+        resource: 'authentication',
+        details: { method: 'qr_code', scan_count: qrCode.scan_count },
+        ip_address: req.ip || req.connection?.remoteAddress,
+        user_agent: req.headers['user-agent']
+      });
+      await auditLog.save();
+    } catch (logErr) {
+      console.error('Failed to create audit log:', logErr);
+    }
+    
+    // Generate JWT token for auto-login
+    const jwtToken = jwt.sign(
+      { 
+        id: user._id, 
+        email: user.email, 
+        role: user.role, 
+        name: user.name 
+      },
+      JWT_SECRET,
+      { expiresIn: '7d' }
+    );
+    
+    const refreshToken = jwt.sign({ id: user._id }, JWT_SECRET, { expiresIn: '30d' });
+    
+    // Create session record
+    try {
+      await Session.create({
+        user_id: user._id,
+        token: jwtToken,
+        login_method: 'qr',
+        login_time: new Date(),
+        last_activity: new Date(),
+        ip_address: req.ip || req.connection?.remoteAddress,
+        user_agent: req.headers['user-agent']
+      });
+    } catch (sessErr) {
+      console.error('Failed to create session:', sessErr);
+    }
+    
+    // Send success response with user data and token
+    res.json({
+      ok: true,
+      token: jwtToken,
+      refreshToken: refreshToken,
+      user: {
+        id: user._id,
+        name: user.name,
+        email: user.email,
+        role: user.role,
+        department: user.department
+      },
+      scanCount: qrCode.scan_count,
+      attendanceRecorded: true,
+      message: `Welcome back, ${user.name}! Your attendance has been recorded.`
+    });
+    
+  } catch (err) {
+    console.error('QR login error:', err);
+    res.status(500).json({ ok: false, error: 'Server error during QR login' });
+  }
+});
+
+// Get QR code for current user (for dashboard display)
 app.get('/api/qr/my-code', authenticateToken, async (req, res) => {
   try {
     let qrCode = await QRCode.findOne({ user_id: req.user.id });
     
     if (!qrCode || qrCode.status !== 'active' || new Date() > qrCode.expires_at) {
-      const response = await fetch(`${req.protocol}://${req.get('host')}/api/qr/generate-user`, {
-        method: 'POST',
-        headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}`, 'Content-Type': 'application/json' }
+      // Generate new QR code
+      const qrToken = uuidv4();
+      const qrData = await QR.toDataURL(qrToken, {
+        errorCorrectionLevel: 'M',
+        type: 'image/png',
+        width: 500,
+        margin: 2,
+        color: { dark: '#00F0FF', light: '#0B0B0B' }
       });
-      const data = await response.json();
-      if (data.ok) {
-        qrCode = await QRCode.findOne({ user_id: req.user.id });
+      const expiresAt = new Date();
+      expiresAt.setDate(expiresAt.getDate() + 365);
+      
+      if (qrCode) {
+        qrCode.qr_token = qrToken;
+        qrCode.qr_data = qrData;
+        qrCode.expires_at = expiresAt;
+        qrCode.status = 'active';
+        await qrCode.save();
+      } else {
+        qrCode = new QRCode({
+          user_id: req.user.id,
+          qr_token: qrToken,
+          qr_data: qrData,
+          generated_at: new Date(),
+          expires_at: expiresAt,
+          status: 'active'
+        });
+        await qrCode.save();
       }
+      
+      await User.findByIdAndUpdate(req.user.id, {
+        qr_token: qrToken,
+        qr_code_data: qrData,
+        qr_expires_at: expiresAt
+      });
     }
     
-    if (!qrCode) {
-      return res.status(404).json({ ok: false, error: 'QR code not found' });
-    }
-    
+    // Get scan history
     const scanHistory = await QRScan.find({ user_id: req.user.id })
       .sort({ scanned_at: -1 })
       .limit(10);
@@ -975,81 +1147,49 @@ app.get('/api/qr/my-code', authenticateToken, async (req, res) => {
   }
 });
 
-app.post('/api/qr-login', async (req, res) => {
+// Regenerate QR code
+app.post('/api/qr/regenerate', authenticateToken, async (req, res) => {
   try {
-    const { token } = req.body;
+    await QRCode.updateOne({ user_id: req.user.id }, { status: 'expired' });
     
-    if (!token) {
-      return res.status(400).json({ ok: false, error: 'QR token required' });
+    const qrToken = uuidv4();
+    const qrData = await QR.toDataURL(qrToken, {
+      errorCorrectionLevel: 'M',
+      type: 'image/png',
+      width: 500,
+      margin: 2,
+      color: { dark: '#00F0FF', light: '#0B0B0B' }
+    });
+    const expiresAt = new Date();
+    expiresAt.setDate(expiresAt.getDate() + 365);
+    
+    let qrCode = await QRCode.findOne({ user_id: req.user.id });
+    if (qrCode) {
+      qrCode.qr_token = qrToken;
+      qrCode.qr_data = qrData;
+      qrCode.expires_at = expiresAt;
+      qrCode.status = 'active';
+      qrCode.scan_count = 0;
+      await qrCode.save();
+    } else {
+      qrCode = new QRCode({
+        user_id: req.user.id,
+        qr_token: qrToken,
+        qr_data: qrData,
+        expires_at: expiresAt,
+        status: 'active'
+      });
+      await qrCode.save();
     }
     
-    const qrCode = await QRCode.findOne({ qr_token: token }).populate('user_id');
-    
-    if (!qrCode) {
-      return res.status(404).json({ ok: false, error: 'Invalid QR code' });
-    }
-    
-    if (qrCode.expires_at && new Date() > qrCode.expires_at) {
-      return res.status(401).json({ ok: false, error: 'QR code has expired. Please generate a new one.' });
-    }
-    
-    if (qrCode.status === 'revoked') {
-      return res.status(401).json({ ok: false, error: 'QR code has been revoked. Please contact admin.' });
-    }
-    
-    const user = qrCode.user_id;
-    
-    if (!user || !user.is_active) {
-      return res.status(401).json({ ok: false, error: 'Account is deactivated' });
-    }
-    
-    await QRScan.create({
-      user_id: user._id,
-      qr_token: token,
-      scanned_at: new Date(),
-      scanner_ip: req.ip || req.connection?.remoteAddress || '0.0.0.0',
-      action: 'login',
-      user_agent: req.headers['user-agent']
+    await User.findByIdAndUpdate(req.user.id, {
+      qr_token: qrToken,
+      qr_code_data: qrData,
+      qr_expires_at: expiresAt
     });
     
-    qrCode.scan_count = (qrCode.scan_count || 0) + 1;
-    qrCode.last_scan_at = new Date();
-    if (!qrCode.is_activated) {
-      qrCode.is_activated = true;
-      qrCode.first_scan_at = new Date();
-    }
-    await qrCode.save();
-    
-    const jwtToken = jwt.sign(
-      { id: user._id, email: user.email, role: user.role, name: user.name },
-      JWT_SECRET,
-      { expiresIn: '7d' }
-    );
-    
-    const refreshToken = jwt.sign({ id: user._id }, JWT_SECRET, { expiresIn: '30d' });
-    
-    try {
-      await recordAttendance(user._id, 'login', req, { skipValidation: true });
-    } catch (attErr) {
-      console.log('Attendance record skipped for QR login');
-    }
-    
-    res.json({
-      ok: true,
-      token: jwtToken,
-      refreshToken,
-      user: {
-        id: user._id,
-        name: user.name,
-        email: user.email,
-        role: user.role,
-        department: user.department
-      },
-      scanCount: qrCode.scan_count,
-      message: `Welcome back, ${user.name}!`
-    });
+    res.json({ ok: true, qrData, qrToken, expiresAt });
   } catch (err) {
-    console.error('QR login error:', err);
     res.status(500).json({ ok: false, error: err.message });
   }
 });

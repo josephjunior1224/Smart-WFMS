@@ -653,44 +653,252 @@
       } catch (err) { showToast(err.message, 'error'); }
     };
 
-    window.initQRScanner = async function(mode) {
-      const container = document.getElementById('qrScannerContainer');
-      if (container) container.classList.remove('hidden');
-      if (typeof window.Html5Qrcode === 'undefined') { showToast('QR scanner loading...', 'info'); setTimeout(() => window.initQRScanner(mode), 1000); return; }
-      const readerDiv = document.getElementById('qr-reader');
-      if (!readerDiv) return;
-      readerDiv.innerHTML = '';
-      try {
-        qrScanner = new Html5Qrcode(readerDiv);
-        await qrScanner.start({ facingMode: "environment" }, { fps: 10, qrbox: { width: 250, height: 250 } }, async (decodedText) => {
-          await qrScanner.stop();
-          closeQRScanner();
-          let token = decodedText;
-          if (decodedText.includes('token=')) { const match = decodedText.match(/token=([^&]+)/); if (match) token = match[1]; }
-          try {
-            const resp = await fetch(`${API_BASE}/qr-login`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ token }) });
-            const data = await resp.json();
-            if (data.ok) { localStorage.setItem('token', data.token); currentUser = data.user; showToast('QR Login successful!', 'success'); await loadDashboard(); }
-            else { showToast(data.error, 'error'); }
-          } catch (err) { showToast('QR login error', 'error'); }
-        }, (error) => {});
-      } catch (err) { showToast('Camera error: ' + err.message, 'error'); closeQRScanner(); }
-    };
+    // ===== FIXED QR SCANNER FUNCTIONS =====
+// =/// ===== COMPLETE FIXED QR SCANNER FUNCTIONS =====
+window.initQRScanner = async function(mode) {
+  console.log('Starting QR scanner, mode:', mode);
+  
+  const container = document.getElementById('qrScannerContainer');
+  if (!container) {
+    console.error('QR Scanner container not found');
+    showToast('Scanner error', 'error');
+    return;
+  }
+  container.classList.remove('hidden');
 
-    window.manualQREntry = function() {
-      const code = prompt('Enter QR code manually:');
-      if (code) {
-        fetch(`${API_BASE}/qr-login`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ token: code }) })
-          .then(r => r.json()).then(data => { if (data.ok) { localStorage.setItem('token', data.token); currentUser = data.user; showToast('QR Login successful!', 'success'); loadDashboard(); } else { showToast(data.error, 'error'); } })
-          .catch(err => showToast('Error: ' + err.message, 'error'));
+  // Wait for Html5Qrcode library to load
+  if (typeof window.Html5Qrcode === 'undefined') {
+    showToast('QR scanner loading, please wait...', 'info');
+    let attempts = 0;
+    const waitForLibrary = setInterval(() => {
+      attempts++;
+      if (typeof window.Html5Qrcode !== 'undefined') {
+        clearInterval(waitForLibrary);
+        showToast('QR scanner ready!', 'success');
+        window.initQRScanner(mode);
+      } else if (attempts > 20) {
+        clearInterval(waitForLibrary);
+        showToast('QR scanner failed to load. Please refresh the page.', 'error');
+        closeQRScanner();
       }
-    };
+    }, 500);
+    return;
+  }
 
-    function closeQRScanner() {
-      const container = document.getElementById('qrScannerContainer');
-      if (container) container.classList.add('hidden');
-      if (qrScanner) { qrScanner.stop().catch(() => {}); qrScanner = null; }
+  const readerElement = document.getElementById('qr-reader');
+  if (!readerElement) {
+    console.error('QR reader element not found');
+    showToast('Scanner element not found', 'error');
+    closeQRScanner();
+    return;
+  }
+  
+  // Clear previous scanner content
+  readerElement.innerHTML = '';
+  
+  try {
+    // Create new scanner instance
+    qrScanner = new window.Html5Qrcode("qr-reader");
+    
+    const config = { fps: 10, qrbox: { width: 250, height: 250 } };
+    
+    await qrScanner.start(
+      { facingMode: "environment" },
+      config,
+      async (decodedText) => {
+        // Success callback - QR code detected
+        console.log('QR Code detected:', decodedText);
+        await qrScanner.stop();
+        closeQRScanner();
+        
+        // Extract token from QR code
+        let token = decodedText;
+        if (decodedText.includes('token=')) {
+          const match = decodedText.match(/token=([^&]+)/);
+          if (match) token = match[1];
+        } else if (decodedText.includes('/qr/auto/')) {
+          const match = decodedText.match(/\/qr\/auto\/([^?]+)/);
+          if (match) token = match[1];
+        } else if (decodedText.includes('/qr-login.html?token=')) {
+          const match = decodedText.match(/token=([^&]+)/);
+          if (match) token = match[1];
+        }
+        
+        // Clean the token
+        if (token.includes('/')) token = token.split('/').pop();
+        if (token.includes('?')) token = token.split('?')[0];
+        
+        showToast('QR code detected! Logging in...', 'info');
+        
+        // Process QR login
+        try {
+          const response = await fetch(`${API_BASE}/qr-login`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ token })
+          });
+          const data = await response.json();
+          
+          if (data.ok) {
+            localStorage.setItem('token', data.token);
+            if (data.refreshToken) localStorage.setItem('refreshToken', data.refreshToken);
+            currentUser = data.user;
+            showToast(`Welcome ${data.user.name}!`, 'success');
+            setTimeout(() => location.reload(), 1000);
+          } else {
+            showToast(data.error || 'QR login failed', 'error');
+          }
+        } catch (err) {
+          console.error('QR login error:', err);
+          showToast('QR login error: ' + err.message, 'error');
+        }
+      },
+      (error) => {
+        // Error callback - continue scanning silently
+        console.debug('QR scan error:', error);
+      }
+    ).catch(async (err) => {
+      console.error('Camera start error:', err);
+      if (err.message && err.message.includes('NotAllowedError')) {
+        showToast('Camera permission denied. Please allow camera access.', 'error');
+        closeQRScanner();
+      } else if (err.message && err.message.includes('NotFoundError')) {
+        showToast('No camera found on this device.', 'error');
+        closeQRScanner();
+      } else {
+        // Try with user-facing camera as fallback
+        try {
+          if (qrScanner) await qrScanner.stop();
+          readerElement.innerHTML = '';
+          qrScanner = new window.Html5Qrcode("qr-reader");
+          await qrScanner.start(
+            { facingMode: "user" },
+            config,
+            async (decodedText) => {
+              await qrScanner.stop();
+              closeQRScanner();
+              let token = decodedText;
+              if (decodedText.includes('token=')) {
+                const match = decodedText.match(/token=([^&]+)/);
+                if (match) token = match[1];
+              }
+              const response = await fetch(`${API_BASE}/qr-login`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ token })
+              });
+              const data = await response.json();
+              if (data.ok) {
+                localStorage.setItem('token', data.token);
+                currentUser = data.user;
+                showToast(`Welcome ${data.user.name}!`, 'success');
+                location.reload();
+              } else {
+                showToast(data.error, 'error');
+              }
+            },
+            (error) => {}
+          );
+        } catch (fallbackErr) {
+          showToast('Camera error: ' + fallbackErr.message, 'error');
+          closeQRScanner();
+        }
+      }
+    });
+  } catch (err) {
+    console.error('QR scanner error:', err);
+    showToast('Scanner error: ' + (err.message || 'Unknown error'), 'error');
+    closeQRScanner();
+  }
+};
+
+function closeQRScanner() {
+  const container = document.getElementById('qrScannerContainer');
+  if (container) container.classList.add('hidden');
+  if (qrScanner) {
+    try {
+      qrScanner.stop().catch(() => {});
+    } catch(e) {}
+    qrScanner = null;
+  }
+}
+
+// Manual QR entry fallback
+window.manualQREntry = function() {
+  const code = prompt('Enter QR code manually:');
+  if (code) {
+    let token = code;
+    if (code.includes('token=')) {
+      const match = code.match(/token=([^&]+)/);
+      if (match) token = match[1];
+    } else if (code.includes('/qr/auto/')) {
+      const match = code.match(/\/qr\/auto\/([^?]+)/);
+      if (match) token = match[1];
+    } else if (code.includes('/qr-login.html?token=')) {
+      const match = code.match(/token=([^&]+)/);
+      if (match) token = match[1];
     }
+    
+    // Clean token
+    if (token.includes('/')) token = token.split('/').pop();
+    if (token.includes('?')) token = token.split('?')[0];
+    
+    fetch(`${API_BASE}/qr-login`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ token })
+    })
+    .then(r => r.json())
+    .then(data => {
+      if (data.ok) {
+        localStorage.setItem('token', data.token);
+        currentUser = data.user;
+        showToast('QR Login successful!', 'success');
+        location.reload();
+      } else {
+        showToast(data.error, 'error');
+      }
+    })
+    .catch(err => showToast('Error: ' + err.message, 'error'));
+  }
+};
+
+// Manual QR entry fallback
+window.manualQREntry = function() {
+  const code = prompt('Enter QR code manually:');
+  if (code) {
+    let token = code;
+    if (code.includes('token=')) {
+      const match = code.match(/token=([^&]+)/);
+      if (match) token = match[1];
+    } else if (code.includes('/qr/auto/')) {
+      const match = code.match(/\/qr\/auto\/([^?]+)/);
+      if (match) token = match[1];
+    } else if (code.includes('/qr-login.html?token=')) {
+      const match = code.match(/token=([^&]+)/);
+      if (match) token = match[1];
+    }
+    
+    fetch(`${API_BASE}/qr-login`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ token })
+    })
+    .then(r => r.json())
+    .then(data => {
+      if (data.ok) {
+        localStorage.setItem('token', data.token);
+        currentUser = data.user;
+        showToast('QR Login successful!', 'success');
+        location.reload();
+      } else {
+        showToast(data.error, 'error');
+      }
+    })
+    .catch(err => showToast('Error: ' + err.message, 'error'));
+  }
+};
+// Manual QR entry fallback
 
     // ===== TASK FUNCTIONS =====
     async function loadUsersForDropdowns() {
@@ -1029,29 +1237,120 @@
       document.getElementById('excelFilters').style.display = type === 'excel' ? 'block' : 'none';
     }
 
-    function exportSelectedReport() {
-      const type = document.getElementById('reportType')?.value;
-      if (type === 'attendance') exportAttendanceReport();
-      else if (type === 'tasks') exportTasksReport();
-      else if (type === 'excel') exportExcelReport();
-      closeModal();
+   function exportSelectedReport() {
+  const type = document.getElementById('reportType')?.value;
+  if (type === 'attendance') {
+    exportAttendanceReport();
+  } else if (type === 'tasks') {
+    exportTasksReport();
+  } else if (type === 'excel') {
+    exportExcelReport();
+  }
+  closeModal();
+}
+// ===== FIXED EXPORT FUNCTIONS with Authentication =====
+async function exportAttendanceReport() {
+  try {
+    const token = localStorage.getItem('token');
+    if (!token) {
+      showToast('Please login first', 'error');
+      return;
     }
-
-    async function exportAttendanceReport() {
-      const startDate = document.getElementById('reportStartDate')?.value || '';
-      const endDate = document.getElementById('reportEndDate')?.value || '';
-      const teamId = document.getElementById('reportTeam')?.value || '';
-      let url = `${API_BASE}/reports/attendance/csv?`;
-      if (startDate) url += `startDate=${startDate}&`;
-      if (endDate) url += `endDate=${endDate}&`;
-      if (teamId) url += `teamId=${teamId}&`;
-      window.open(url, '_blank');
-      showToast('Report downloading...', 'success');
+    
+    const startDate = document.getElementById('reportStartDate')?.value || '';
+    const endDate = document.getElementById('reportEndDate')?.value || '';
+    const teamId = document.getElementById('reportTeam')?.value || '';
+    
+    let url = `${API_BASE}/reports/attendance/csv?`;
+    if (startDate) url += `startDate=${startDate}&`;
+    if (endDate) url += `endDate=${endDate}&`;
+    if (teamId) url += `teamId=${teamId}&`;
+    
+    // Fetch with authentication
+    const response = await fetch(url, {
+      headers: { 'Authorization': `Bearer ${token}` }
+    });
+    
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.error || 'Export failed');
     }
+    
+    const blob = await response.blob();
+    const downloadUrl = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = downloadUrl;
+    a.download = `attendance-report-${new Date().toISOString().split('T')[0]}.csv`;
+    a.click();
+    URL.revokeObjectURL(downloadUrl);
+    showToast('Report downloaded!', 'success');
+  } catch (err) {
+    console.error('Export error:', err);
+    showToast(err.message, 'error');
+  }
+}
 
-    async function exportTasksReport() { window.open(`${API_BASE}/reports/tasks/csv`, '_blank'); showToast('Tasks report downloading...', 'success'); }
-    async function exportExcelReport() { window.open(`${API_BASE}/reports/excel`, '_blank'); showToast('Excel report downloading...', 'success'); }
+async function exportTasksReport() {
+  try {
+    const token = localStorage.getItem('token');
+    if (!token) {
+      showToast('Please login first', 'error');
+      return;
+    }
+    
+    const response = await fetch(`${API_BASE}/reports/tasks/csv`, {
+      headers: { 'Authorization': `Bearer ${token}` }
+    });
+    
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.error || 'Export failed');
+    }
+    
+    const blob = await response.blob();
+    const downloadUrl = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = downloadUrl;
+    a.download = `tasks-report-${new Date().toISOString().split('T')[0]}.csv`;
+    a.click();
+    URL.revokeObjectURL(downloadUrl);
+    showToast('Tasks report downloaded!', 'success');
+  } catch (err) {
+    console.error('Export error:', err);
+    showToast(err.message, 'error');
+  }
+}
 
+async function exportExcelReport() {
+  try {
+    const token = localStorage.getItem('token');
+    if (!token) {
+      showToast('Please login first', 'error');
+      return;
+    }
+    
+    const response = await fetch(`${API_BASE}/reports/excel`, {
+      headers: { 'Authorization': `Bearer ${token}` }
+    });
+    
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.error || 'Export failed');
+    }
+    
+    const blob = await response.blob();
+    const downloadUrl = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = downloadUrl;
+    a.download = `wfms-report-${new Date().toISOString().split('T')[0]}.xlsx`;
+    a.click();
+    URL.revokeObjectURL(downloadUrl);
+    showToast('Excel report downloaded!', 'success');
+  } catch (err) {
+    console.error('Export error:', err);
+    showToast(err.message, 'error');
+  }
+}
     // ===== IMPERSONATION FUNCTIONS =====
     window.startImpersonation = async function() {
       const target_user_id = document.getElementById('impersonateUser').value;
@@ -1131,5 +1430,47 @@
 
     checkAuth();
   </script>
+  <!-- QR Library Preloader -->
+<script>
+  // Preload QR library to ensure it's ready
+  (function preloadQRLibrary() {
+    const libraries = [
+      'https://cdn.jsdelivr.net/npm/html5-qrcode@2.3.8/html5-qrcode.min.js',
+      'https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js'
+    ];
+    
+    let loaded = false;
+    
+    function loadScript(src) {
+      return new Promise((resolve, reject) => {
+        const script = document.createElement('script');
+        script.src = src;
+        script.onload = resolve;
+        script.onerror = reject;
+        document.head.appendChild(script);
+      });
+    }
+    
+    async function load() {
+      for (const lib of libraries) {
+        try {
+          await loadScript(lib);
+          if (typeof window.Html5Qrcode !== 'undefined') {
+            console.log('✅ QR library loaded successfully');
+            loaded = true;
+            window.dispatchEvent(new CustomEvent('qr-library-ready'));
+            return;
+          }
+        } catch(e) {
+          console.log('Failed to load from:', lib);
+        }
+      }
+      console.warn('⚠️ QR library failed to load, using fallback');
+      window.Html5Qrcode = null;
+    }
+    
+    load();
+  })();
+</script>
 </body>
 </html>
