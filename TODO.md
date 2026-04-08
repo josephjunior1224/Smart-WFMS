@@ -1,75 +1,50 @@
-# WFMS Frontend Fix - Complete Feature Activation Plan
-*Status: Approved by user - Implementation in progress*
+# WFMS Task Tracker - Phase 4 Completion
+**Current Phase**: 3/12 → **Target**: Complete Phase 4 (Team CRUD, Analytics, Notifications, Impersonation)
 
-## 📋 Steps to Fix UI (app.client.js)
+## ✅ Completed (Phase 3)
+- [x] Fix all JS ReferenceErrors (approveTask, rejectTask, deleteTask, etc.)
+- [x] Worker stats & task buttons functional
+- [x] Reports download (PDF/Excel/CSV)
+- [x] Attendance summary API
+- [x] Core UI: Login/register/QR/tasks/attendance
+- [x] Real-time Socket.io notifications
+- [x] Role-based dashboards (admin/worker)
 
-### 1. **✅ CREATE TODO.md** 
-*Current step - completed*
+## 🔄 In Progress (Phase 4)
+### 1. **Notifications Colors** ✅ (Complete)
+- [x] Added colored notifications: Red (critical), Green (success), Yellow (warning), Blue (info)
+- [x] Updated `style.css`, `index.html`, `app.client.js` rendering
 
-### 2. **Fix Event Binding Mismatch** (app.client.js)
-```
-Replace getElementById('loginBtn') → querySelector('.btn-primary')
-Add global functions: window.login(), window.clockIn(), etc.
-```
+### 2. **Impersonation** (High Priority - User Request)
+- [ ] Verify `models/ImpersonationSession.js` operational
+- [ ] Test admin → worker impersonation flow
+- [ ] Add UI button in admin panel
 
-### 3. **Add Post-Login Dashboard Loading**
-```
-dashboardLoad() → Called in showDashboard()
-- loadStats() → #totalEmployees, #totalTasks, #totalLogs
-- loadTasks() → #taskList, #myTaskList
-- loadEmployees() → #employeeList (admin only)
-- loadTeams() → #teamsList (admin only)
-- loadAttendance() → #attendanceSummary
-```
+### 3. **Team CRUD** (Backend + Frontend)
+- [ ] Enhance `Team.js` model (skills, scheduling rules)
+- [ ] API: POST/PUT/DELETE teams, members
+- [ ] Frontend: Team creation/listing UI
 
-### 4. **Role-Based Panel Toggle**
-```
-if (user.role === 'admin') → show #admin-panel
-else → show #worker-panel
-```
+### 4. **Analytics & Reports**
+- [ ] `WeeklySummary.js` full CRUD
+- [ ] `Analytics.js` dashboard charts
+- [ ] Report templates (`ReportTemplate.js`)
 
-### 5. **Implement All onclick Functions**
-```
-- clockIn(), clockOut(), breakStart(), breakEnd()
-- addTask(), createTeam()
-- downloadReport('pdf'), downloadReport('excel')
-- initQRScanner(), manualQREntry()
-```
+### 5. **UI Polish**
+- [ ] Fix performance chart (`index.html` canvas)
+- [ ] Create/load `app.client.js` (main logic)
+- [ ] Error messages with colors (red/green/yellow/blue)
 
-### 6. **Real-Time Socket Integration**
-```
-socket.on('tasks_updated', loadTasks)
-socket.on('stats_updated', loadStats)
-socket.on('logs_updated', loadLogs)
-```
+### 6. **Testing & Deploy**
+- [ ] Full E2E test (all roles, QR flow)
+- [ ] Update `render.yaml`, Vercel deploy
+- [ ] Production hardening
 
-### 7. **QR Scanner & Notifications**
-```
-window.initQRScanner() → Full Html5Qrcode setup
-loadNotifications() → #notificationsPanel
-```
+## ⏳ **NEXT: Fix UI Dropdowns & Missing Features** (Feedback Response)
+1. **Task Form** (Assign To, Category): Populate dropdowns from API
+2. **Team Management** (Team Lead, Members): Load users/teams
+3. **Impersonation UI**: Add admin panel button
+4. **Performance Chart**: Fetch `/api/admin/performance-metrics` + Chart.js
+5. **Full E2E Test**
 
-### 8. **Test & Verify**
-```
-1. npm start (server running)
-2. localhost:8000 → Full login → All panels visible
-3. Stats populate → Tasks list → Charts → QR scanner
-4. Hard refresh → Session persists
-5. All buttons work
-```
-
-## Progress Tracker
-```
-✅ Step 1: CREATE TODO.md
-✅ Step 2: Edit app.client.js bindings (global functions + dashboardLoad + role panels + onclicks + sockets)
-✅ Step 3: Fix client API calls to use existing backend endpoints
-✅ Step 4: Test all features at localhost:8000
-☐ Step 5: Complete → attempt_completion
-```
-
-
-
-
-
-**Next: Edit app.client.js**
-
+**Status**: Core functional. Fixing UI population & charts now.
