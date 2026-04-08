@@ -475,7 +475,7 @@ const webhookFailureSchema = new mongoose.Schema({
 const User = mongoose.model('User', userSchema);
 const Task = mongoose.model('Task', taskSchema);
 const Team = mongoose.model('Team', teamSchema);
-const TeamReport = require('./models/TeamReport');
+const TeamReport = mongoose.model('TeamReport', teamReportSchema);
 const QRCode = mongoose.model('QRCode', qrCodeSchema);
 const QRScan = mongoose.model('QRScan', qrScanSchema);
 const Performance = mongoose.model('Performance', performanceSchema);
@@ -488,6 +488,15 @@ const AuditLog = mongoose.model('AuditLog', auditLogSchema);
 const SecurityAlert = mongoose.model('SecurityAlert', securityAlertSchema);
 const Session = mongoose.model('Session', sessionSchema);
 const WebhookFailure = mongoose.model('WebhookFailure', webhookFailureSchema);
+const ImpersonationSession = require('./models/ImpersonationSession');
+
+const AttendanceLog = require('./models/AttendanceLog');
+const WeeklySummary = require('./models/WeeklySummary');
+const ReportTemplate = require('./models/ReportTemplate');
+
+
+
+
 
 // ============================================
 // HELPER FUNCTIONS
@@ -519,27 +528,32 @@ const getDatabaseStats = async () => {
 // ============================================
 // EXPORT ALL MODELS AND HELPERS
 // ============================================
+
 module.exports = {
-    User,
-    Task,
-    Team,
-    TeamReport,
-    QRCode,
-    QRScan,
-    Performance,
-    Attendance,
-    TimeLog,
-    TokenBlacklist,
-    Webhook,
-    Alert,
-    AuditLog,
-    SecurityAlert,
-    Session,
-    WebhookFailure,
-    isConnected,
-    connectionStatus,
-    getDatabaseStats,
-    mongoose,
-    MONGODB_URI,
-    connectionOptions
+  User,
+  Task,
+  Team,
+  TeamReport,
+  AttendanceLog,
+  WeeklySummary,
+  ReportTemplate,
+  QRCode,
+  QRScan,
+  Performance,
+  Attendance,
+  TimeLog,
+  TokenBlacklist,
+  Webhook,
+  Alert,
+  AuditLog,
+  SecurityAlert,
+  Session,
+  WebhookFailure,
+  isConnected,
+  connectionStatus,
+  getDatabaseStats,
+  mongoose,
+  MONGODB_URI,
+  connectionOptions
 };
+

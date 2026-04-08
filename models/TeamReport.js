@@ -1,38 +1,22 @@
-// models/TeamReport.js
+// models/TeamReport.js - Team Leader Reports
 const mongoose = require('mongoose');
 
 const teamReportSchema = new mongoose.Schema({
-  team_id: { 
-    type: mongoose.Schema.Types.ObjectId, 
-    ref: 'Team', 
-    required: true,
-    index: true 
-  },
-  submitted_by: { 
-    type: mongoose.Schema.Types.ObjectId, 
-    ref: 'User', 
-    required: true 
-  },
-  title: { type: String, required: true },
-  content: { type: String, required: true },
-  status: { 
-    type: String, 
-    enum: ['pending', 'approved', 'rejected'], 
-    default: 'pending' 
-  },
-  hours_worked: { type: Number, default: 0 },
+  team_id: { type: mongoose.Schema.Types.ObjectId, ref: 'Team', required: true, index: true },
+  leader_id: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true, index: true },
+  period_start: { type: Date },
+  period_end: { type: Date },
+  content: { type: String, default: '' },
+  attachments: [{ type: String }],
+  status: { type: String, enum: ['pending', 'approved', 'rejected'], default: 'pending', index: true },
   submitted_at: { type: Date, default: Date.now },
-  approved_at: Date,
-  feedback: String,
+  approved_at: { type: Date },
   approved_by: { type: mongoose.Schema.Types.ObjectId, ref: 'User' }
 }, {
   timestamps: true
 });
 
-teamReportSchema.index({ team_id: 1, status: 1 });
-teamReportSchema.index({ submitted_by: 1 });
+teamReportSchema.index({ team_id: 1, leader_id: 1, submitted_at: -1 });
 
-const TeamReport = mongoose.model('TeamReport', teamReportSchema);
-module.exports = TeamReport;
-
+module.exports = mongoose.model('TeamReport', teamReportSchema);
 

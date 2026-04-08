@@ -24,6 +24,32 @@ for (const envVar of optionalEnvVars) {
   }
 }
 
+// Provide safe defaults for development
+let port = parseInt(process.env.PORT, 10) || 8000;
+const JWT_SECRET = process.env.JWT_SECRET || 'dev-jwt-secret-change-me';
+
+// Helper to check whether a TCP port is free
+const net = require('net');
+async function isPortFree(p) {
+  return new Promise((resolve) => {
+    const tester = net.createServer()
+      .once('error', () => { resolve(false); })
+      .once('listening', () => { tester.close(() => resolve(true)); })
+      .listen(p);
+  });
+}
+
+async function findFreePort(start, attempts = 50) {
+  for (let i = 0; i < attempts; i++) {
+    const p = start + i;
+    // prefer same port if free
+    // check IPv4 binding only
+    // eslint-disable-next-line no-await-in-loop
+    if (await isPortFree(p)) return p;
+  }
+  return null;
+}
+
 // ============================================
 // DEPENDENCY IMPORTS - SINGLE SOURCE OF TRUTH
 // ============================================
@@ -68,6 +94,11 @@ require('dotenv').config();
 // Cache
 const userCache = new NodeCache({ stdTTL: 300 });
 
+// Socket connection maps (global)
+const connectedUsers = {};
+const userSockets = new Map();
+const socketUsers = new Map();
+
 // ============================================
 // IMPORT MONGODB MODELS
 // ============================================
@@ -76,6 +107,8 @@ const {
   Task, 
   Team,
   TeamReport,
+  Schedule,
+  TeamMetrics,
   QRCode, 
   QRScan, 
   Performance, 
@@ -93,6 +126,13 @@ const {
   MONGODB_URI,
   connectionOptions
 } = require('./db');
+
+// New model imports for extended APIs
+const WeeklySummary = require('./models/WeeklySummary');
+const { Logger } = require('./models/Logger');
+const ReportTemplate = require('./models/ReportTemplate');
+const { AnalyticsService } = require('./models/Analytics');
+
 
 // ============================================
 // VERIFY IMPORTS
@@ -116,6 +156,17 @@ emailService.initializeEmailService().catch(err => {
 const app = express();
 const server = http.createServer(app);
 
+// Ensure uploads directory exists and configure multer
+const uploadsDir = path.join(__dirname, 'uploads');
+try { fs.mkdirSync(uploadsDir, { recursive: true }); } catch (e) { /* ignore */ }
+const storage = multer.diskStorage({
+  destination: function (req, file, cb) { cb(null, uploadsDir); },
+  filename: function (req, file, cb) { cb(null, Date.now() + '-' + file.originalname); }
+});
+const upload = multer({ storage: storage, limits: { fileSize: 10 * 1024 * 1024 } });
+// Static root for serving frontend files
+const root = path.join(__dirname);
+
 const corsOptions = {
   origin: process.env.NODE_ENV === 'production'
     ? [process.env.FRONTEND_URL, 'https://your-domain.com']
@@ -136,79 +187,32 @@ const io = socketIo(server, {
       if (!origin || allowedOrigins.includes(origin) || allowedOrigins.includes('*') || (corsOptions.origin && corsOptions.origin.includes(origin))) {
         return callback(null, true);
       }
-      callback(new Error('CORS origin not allowed'));
+      return callback(new Error('Not allowed by CORS'));
     },
-    methods: ['GET', 'POST'],
     credentials: true
-  },
-  transports: ['websocket', 'polling'],
-  pingTimeout: 60000,
-  pingInterval: 25000
-});
-
-const port = process.env.PORT || 8001;
-
-// Validate JWT_SECRET (don't abort in development to aid local dev)
-if (!process.env.JWT_SECRET) {
-  logger.warn('⚠️ JWT_SECRET not set. Using a development fallback.');
-  if (process.env.NODE_ENV === 'production') {
-    logger.error('❌ JWT_SECRET environment variable is required in production');
-    process.exit(1);
-  }
-}
-const JWT_SECRET = process.env.JWT_SECRET || 'dev-secret-change-me';
-
-const root = process.cwd();
-const DATA_DIR = path.join(root, 'data');
-const TOKENS_FILE = path.join(DATA_DIR, 'tokens.json');
-
-// Track connected users for notifications
-const connectedUsers = {};
-const userSockets = new Map(); // Map userId -> socketId
-const socketUsers = new Map(); // Map socketId -> userId
-
-// Ensure data dir exists (for legacy token storage)
-try { if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true }); } catch(e){}
-try { if (!fs.existsSync(TOKENS_FILE)) fs.writeFileSync(TOKENS_FILE, JSON.stringify({}), 'utf8'); } catch(e){}
-
-const UPLOAD_DIR = path.join(root, 'uploads');
-try { if (!fs.existsSync(UPLOAD_DIR)) fs.mkdirSync(UPLOAD_DIR, { recursive: true }); } catch(e) {}
-
-const upload = multer({
-  storage: multer.diskStorage({
-    destination: (req, file, cb) => cb(null, UPLOAD_DIR),
-    filename: (req, file, cb) => cb(null, `${Date.now()}-${file.originalname}`)
-  }),
-  limits: { fileSize: 20 * 1024 * 1024 } // 20MB
-});
-
-// ===============================================
-// Rate Limiting
-// ===============================================
-
-const limiter = rateLimit({
-  windowMs: 15 * 60 * 1000,
-  max: 100,
-  handler: (req, res) => {
-    return res.status(429).json({ ok: false, error: 'Too many requests, please try again later.' });
   }
 });
 
-const authLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000,
-  max: 10,
-  skipSuccessfulRequests: true,
-  keyGenerator: (req) => {
-    if (req.path === '/api/login' || req.path === '/api/signup') {
-      return req.body?.email?.toLowerCase?.() || req.ip;
+// Rate limiter config - FIXED SYNTAX (complete)
+  const limiter = rateLimit({
+    windowMs: 15 * 60 * 1000,
+    max: 10,
+    skipSuccessfulRequests: true,
+    // Skip counting requests when DB is disconnected in development
+    skip: (req, res) => (process.env.NODE_ENV !== 'production' && !isConnected()),
+    keyGenerator: (req) => {
+      if (req.path === '/api/login' || req.path === '/api/signup') {
+        return req.body?.email?.toLowerCase?.() || req.ip;
+      }
+      return req.ip;
+    },
+    handler: (req, res) => {
+      logger.warn(`Rate limit exceeded for: ${req.body?.email || req.ip}`);
+      return res.status(429).json({ ok: false, error: 'Too many login attempts, please try again later.' });
     }
-    return req.ip;
-  },
-  handler: (req, res) => {
-    logger.warn(`Rate limit exceeded for: ${req.body?.email || req.ip}`);
-    return res.status(429).json({ ok: false, error: 'Too many login attempts, please try again later.' });
-  }
-});
+  });
+
+
 
 // Database connection is handled in `db.js` (centralized).
 // `db.js` exports connection helpers and models. Avoid duplicate
@@ -239,6 +243,19 @@ app.options('*', cors(corsOptions));
 
 // Apply rate limiters AFTER JSON middleware
 app.use('/api/', limiter);
+// Require DB available for auth routes (return 503 quickly when disconnected)
+const requireDb = (req, res, next) => {
+  if (isConnected()) return next();
+  return res.status(503).json({ ok: false, error: 'Database connection error. Please try again in a moment.' });
+};
+const authLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 5, // 5 attempts
+  message: { ok: false, error: 'Too many login attempts, please try again later.' },
+  keyGenerator: (req) => req.body.email?.toLowerCase() || req.ip
+});
+app.use('/api/login', requireDb);
+app.use('/api/signup', requireDb);
 app.use('/api/login', authLimiter);
 app.use('/api/signup', authLimiter);
 
@@ -803,41 +820,76 @@ async function sendQRCodeEmail(email, name, qrData) {
 // ===============================================
 
 async function initializeDatabase() {
-  if (!isConnected() && MONGODB_URI) {
+  // Ensure MONGODB_URI present
+  if (!MONGODB_URI) {
+    logger.error('❌ MONGODB_URI environment variable is not set. Please set it in .env or your environment.');
+    if (process.env.NODE_ENV === 'production') {
+      logger.error('Exiting: MONGODB_URI is required in production.');
+      process.exit(1);
+    }
+    return;
+  }
+
+  // Attempt to connect with retries and exponential backoff
+  const maxAttempts = 6;
+  let attempts = 0;
+  const baseDelay = 1000; // ms
+
+  while (!isConnected() && attempts < maxAttempts) {
+    attempts += 1;
     try {
-      logger.info('🔗 Connecting to MongoDB...');
-      await mongoose.connect(MONGODB_URI, connectionOptions);
+      logger.info(`🔗 Connecting to MongoDB (attempt ${attempts}/${maxAttempts})...`);
+      await mongoose.connect(MONGODB_URI, Object.assign({}, connectionOptions));
       logger.info('✅ MongoDB connection established');
+      break;
     } catch (err) {
-      logger.error('✗ Failed to connect to MongoDB:', err.message);
+      logger.error(`✗ MongoDB connect attempt ${attempts} failed: ${err && err.message ? err.message : err}`);
+      if (attempts >= maxAttempts) {
+        logger.error('✗ Reached maximum MongoDB connection attempts.');
+        if (process.env.NODE_ENV === 'production') {
+          logger.error('Exiting due to DB connection failure in production.');
+          process.exit(1);
+        }
+        break;
+      }
+      const wait = Math.min(baseDelay * Math.pow(2, attempts - 1), 30000);
+      logger.info(`⏳ Retrying in ${wait}ms...`);
+      await new Promise(resolve => setTimeout(resolve, wait));
     }
   }
 
-  // Wait for connection to be ready
-  const maxAttempts = 10;
-  let attempts = 0;
-  
-  while (!isConnected() && attempts < maxAttempts) {
-    logger.info(`⏳ Waiting for database connection... (${attempts + 1}/${maxAttempts})`);
-    await new Promise(resolve => setTimeout(resolve, 1000));
-    attempts++;
-  }
-  
   if (!isConnected()) {
-    logger.warn('⚠️ MongoDB not connected after waiting. Please check your MONGODB_URI environment variable.');
-    logger.warn('Current connection status:', connectionStatus());
-    return;
+    logger.warn('⚠️ MongoDB not connected after retries. Please check your MONGODB_URI and MongoDB server status.');
+    logger.warn('Current connection status: %s', connectionStatus());
+
+    // Development fallback: try an in-memory MongoDB if available
+    if (process.env.NODE_ENV !== 'production') {
+      try {
+        const { MongoMemoryServer } = require('mongodb-memory-server');
+        logger.info('🧪 Attempting to start in-memory MongoDB (development fallback)...');
+        const mongod = await MongoMemoryServer.create();
+        const memUri = mongod.getUri();
+        logger.info('🧪 In-memory MongoDB started at %s', memUri);
+        await mongoose.connect(memUri, Object.assign({}, connectionOptions));
+        logger.info('✅ Connected to in-memory MongoDB');
+      } catch (memErr) {
+        logger.warn('In-memory MongoDB fallback unavailable or failed:', memErr && memErr.message ? memErr.message : memErr);
+        return;
+      }
+    } else {
+      return;
+    }
   }
 
   try {
     logger.info('📦 Checking database for initial data...');
-    
+
     // Check if any users exist
     const userCount = await User.countDocuments();
-    
+
     if (userCount === 0) {
       logger.info('👤 No users found. Creating default admin user...');
-      
+
       // Create admin user
       const adminPassword = await bcrypt.hash('admin123', 10);
       const admin = new User({
@@ -847,9 +899,9 @@ async function initializeDatabase() {
         role: 'admin'
       });
       await admin.save();
-      
+
       logger.info('✅ Default admin created - Email: admin@wfms.com / Password: admin123');
-      
+
       // Create sample worker
       const workerPassword = await bcrypt.hash('worker123', 10);
       const worker = new User({
@@ -859,9 +911,9 @@ async function initializeDatabase() {
         role: 'worker'
       });
       await worker.save();
-      
+
       logger.info('✅ Sample worker created - Email: john@wfms.com / Password: worker123');
-      
+
       // Create sample task
       const sampleTask = new Task({
         title: 'Welcome Task',
@@ -871,20 +923,20 @@ async function initializeDatabase() {
         created_at: new Date()
       });
       await sampleTask.save();
-      
+
       logger.info('✅ Sample task created and assigned to John Worker');
-      
+
     } else {
       logger.info(`✅ Database already has ${userCount} users`);
-      
+
       // List all users for debugging
       const users = await User.find({}, 'name email role');
       logger.info('📊 Current users:');
       users.forEach(u => logger.info(`   - ${u.name} (${u.email}) - ${u.role}`));
     }
-    
+
   } catch (err) {
-    logger.error('✗ Database initialization error:', err.message);
+    logger.warn('DB initialization check failed:', err && err.message ? err.message : err);
   }
 }
 
@@ -911,7 +963,10 @@ async function getDatabaseStats() {
 // Authentication Middleware
 // ===============================================
 
-const authenticateToken = (req, res, next) => {
+const ImpersonationSession = require('./models/ImpersonationSession');
+
+// Enhanced authentication with impersonation support
+const authenticateToken = async (req, res, next) => {
   const authHeader = req.headers['authorization'];
   const token = authHeader && authHeader.split(' ')[1];
   
@@ -919,22 +974,54 @@ const authenticateToken = (req, res, next) => {
     return res.status(401).json({ ok: false, error: 'Access token required' });
   }
 
-  jwt.verify(token, JWT_SECRET, (err, user) => {
-    if (err) {
-      return res.status(403).json({ ok: false, error: 'Invalid or expired token' });
+  try {
+    const decoded = jwt.verify(token, JWT_SECRET);
+    let user = await User.findById(decoded.id);
+    if (!user) return res.status(404).json({ ok: false, error: 'User not found' });
+    
+    // Check for active impersonation session
+    const activeSession = await ImpersonationSession.findOne({ 
+      session_token: req.headers['x-impersonation-token'], 
+      is_active: true 
+    });
+    
+    if (activeSession && user._id.toString() === activeSession.target_user_id.toString()) {
+      // Impersonation active - set effective user but track original admin
+      req.impersonation = {
+        original_admin: activeSession.admin_id,
+        session_id: activeSession._id,
+        reason: activeSession.reason
+      };
+      req.effective_user = user;
+      req.original_user = await User.findById(activeSession.admin_id);
+    } else {
+      req.effective_user = user;
     }
-    req.user = user;
+    
+    req.user = req.effective_user;
     next();
-  });
+  } catch (err) {
+    return res.status(403).json({ ok: false, error: 'Invalid or expired token' });
+  }
 };
 
-const requireAdmin = (req, res, next) => {
-  if (req.user && req.user.role === 'admin') {
+const requireAdmin = async (req, res, next) => {
+  if (req.effective_user?.role === 'admin' || req.original_user?.role === 'admin') {
     next();
   } else {
     res.status(403).json({ ok: false, error: 'Admin access required' });
   }
 };
+
+const requireSuperAdmin = async (req, res, next) => {
+  const isSuper = req.effective_user?.role === 'superadmin' || req.original_user?.role === 'superadmin';
+  if (isSuper) {
+    next();
+  } else {
+    res.status(403).json({ ok: false, error: 'Superadmin access required' });
+  }
+};
+
 
 // Generic role-based middleware
 const requireRole = (role) => {
@@ -1360,13 +1447,14 @@ app.get('/api/users', authenticateToken, async (req, res) => {
       return res.json({ ok: true, users: cachedUsers, cached: true });
     }
 
-    const users = await User.find({}, 'name role email').lean();
+    const users = await User.find({}, 'name role email can_impersonate').lean();
     const formattedUsers = users.map(user => ({
       id: user._id,
       _id: user._id,
       name: user.name,
       email: user.email,
-      role: user.role
+      role: user.role,
+      can_impersonate: user.can_impersonate || false
     }));
 
     userCache.set('all_users', formattedUsers);
@@ -1376,6 +1464,195 @@ app.get('/api/users', authenticateToken, async (req, res) => {
     res.status(500).json({ ok: false, error: err.message });
   }
 });
+
+// Impersonation endpoints (Admin only)
+app.post('/api/admin/impersonate', authenticateToken, requireAdmin, async (req, res) => {
+  try {
+    const { target_user_id, reason } = req.body;
+    
+    if (!target_user_id || !reason) {
+      return res.status(400).json({ ok: false, error: 'target_user_id and reason required' });
+    }
+    
+    const admin = req.effective_user;
+    const targetUser = await User.findById(target_user_id);
+    
+    if (!targetUser) {
+      return res.status(404).json({ ok: false, error: 'Target user not found' });
+    }
+    
+    if (targetUser.role === 'admin') {
+      return res.status(403).json({ ok: false, error: 'Cannot impersonate admin users' });
+    }
+    
+    // Check if target has active session (optional concurrent block)
+    const activeTargetSession = await Session.findOne({ 
+      user_id: target_user_id, 
+      is_active: true 
+    });
+    
+    // Create impersonation session
+    const session = await ImpersonationSession.startSession(
+      admin._id, 
+      targetUser._id, 
+      req.ip, 
+      reason 
+    );
+    
+    // Generate impersonation token
+    const impersonationToken = jwt.sign({
+      session_id: session._id,
+      target_user_id: targetUser._id,
+      original_admin_id: admin._id,
+      is_impersonating: true
+    }, JWT_SECRET, { expiresIn: '30m' });
+    
+    // Log audit
+    await AuditLog.create({
+      user_id: admin._id,
+      action: 'impersonation_start',
+      resource: 'impersonation_session',
+      resource_id: session._id.toString(),
+      details: { target_user_id: targetUser._id, reason },
+      ip_address: req.ip,
+      user_agent: req.headers['user-agent']
+    });
+    
+    res.json({
+      ok: true,
+      session_id: session._id,
+      impersonation_token: impersonationToken,
+      target_user: {
+        id: targetUser._id,
+        name: targetUser.name,
+        email: targetUser.email,
+        role: targetUser.role
+      },
+      original_admin: { id: admin._id, name: admin.name },
+      reason,
+      expires_in: 1800 // 30 minutes
+    });
+  } catch (err) {
+    logger.error('Impersonation start error:', err);
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
+app.post('/api/admin/impersonate/end', authenticateToken, requireAdmin, async (req, res) => {
+  try {
+    const sessionToken = req.headers['x-impersonation-token'];
+    
+    if (!sessionToken) {
+      return res.status(400).json({ ok: false, error: 'Impersonation token required' });
+    }
+    
+    const session = await ImpersonationSession.endSession(sessionToken, req.effective_user._id);
+    
+    await AuditLog.create({
+      user_id: req.effective_user._id,
+      action: 'impersonation_end',
+      resource: 'impersonation_session',
+      resource_id: session._id.toString(),
+      details: { duration: session.duration_seconds },
+      ip_address: req.ip
+    });
+    
+    res.json({ ok: true, message: 'Impersonation session ended', session });
+  } catch (err) {
+    logger.error('Impersonation end error:', err);
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
+// Get active impersonation sessions (Super Admin)
+app.get('/api/admin/impersonation/sessions', authenticateToken, requireAdmin, async (req, res) => {
+  try {
+    const sessions = await ImpersonationSession.find({ is_active: true })
+      .populate('admin_id', 'name email')
+      .populate('target_user_id', 'name email role')
+      .sort({ timestamp: -1 });
+    
+    res.json({ ok: true, active_sessions: sessions });
+  } catch (err) {
+    logger.error('Active sessions error:', err);
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
+// Get impersonation history (Admin)
+app.get('/api/admin/impersonation/history', authenticateToken, requireAdmin, async (req, res) => {
+  try {
+    const { page = 1, limit = 50, admin_id, target_user_id } = req.query;
+    const skip = (page - 1) * limit;
+    
+    const query = {};
+    if (admin_id) query.admin_id = admin_id;
+    if (target_user_id) query.target_user_id = target_user_id;
+    
+    const [sessions, total] = await Promise.all([
+      ImpersonationSession.find(query)
+        .populate('admin_id', 'name email')
+        .populate('target_user_id', 'name email role')
+        .populate('ended_by', 'name email')
+        .sort({ timestamp: -1 })
+        .skip(skip)
+        .limit(parseInt(limit)),
+      ImpersonationSession.countDocuments(query)
+    ]);
+    
+    res.json({
+      ok: true,
+      sessions,
+      pagination: { page: parseInt(page), limit: parseInt(limit), total, pages: Math.ceil(total / limit) }
+    });
+  } catch (err) {
+    logger.error('Impersonation history error:', err);
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
+// Force terminate session (Super Admin)
+app.post('/api/superadmin/impersonation/terminate/:sessionId', authenticateToken, requireSuperAdmin, async (req, res) => {
+  try {
+    const { sessionId } = req.params;
+    const session = await ImpersonationSession.findById(sessionId);
+    
+    if (!session || !session.is_active) {
+      return res.status(404).json({ ok: false, error: 'Active session not found' });
+    }
+    
+    session.is_active = false;
+    session.action = 'FORCE_TERMINATE';
+    session.ended_by = req.effective_user._id;
+    session.force_terminated = true;
+    
+    await session.save();
+    
+    // Notify original admin via socket (if connected)
+    if (connectedUsers[session.admin_id.toString()]) {
+      io.to(connectedUsers[session.admin_id.toString()]).emit('impersonation_terminated', {
+        session_id: session._id,
+        reason: 'Force terminated by superadmin',
+        timestamp: new Date()
+      });
+    }
+    
+    await AuditLog.create({
+      user_id: req.effective_user._id,
+      action: 'force_terminate_impersonation',
+      resource: 'impersonation_session',
+      resource_id: sessionId,
+      details: { original_admin: session.admin_id, target_user: session.target_user_id },
+      ip_address: req.ip
+    });
+    
+    res.json({ ok: true, message: 'Session force-terminated' });
+  } catch (err) {
+    logger.error('Force terminate error:', err);
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
 
 // Get user by ID
 app.get('/api/users/:userId', async (req, res) => {
@@ -3055,6 +3332,44 @@ app.get('/api/tasks', authenticateToken, async (req, res) => {
     res.status(500).json({ ok: false, error: err.message });
   }
 });
+
+// My tasks - specifically for employee view (GET /api/tasks/my-tasks)
+app.get('/api/tasks/my-tasks', authenticateToken, async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const { status, priority, page = 1, limit = 50 } = req.query;
+    
+    const skip = (parseInt(page) - 1) * parseInt(limit);
+    
+    const query = { assigned_to: userId };
+    if (status) query.status = status;
+    if (priority) query.priority = priority;
+
+    const [tasks, total] = await Promise.all([
+      Task.find(query)
+        .select('title description status priority due_date approval_status hours_spent daily_report created_at updated_at submitted_at')
+        .sort({ created_at: -1 })
+        .skip(skip)
+        .limit(parseInt(limit))
+        .lean(),
+      Task.countDocuments(query)
+    ]);
+
+    res.json({
+      ok: true,
+      tasks,
+      pagination: {
+        page: parseInt(page),
+        limit: parseInt(limit),
+        total,
+        pages: Math.ceil(total / parseInt(limit))
+      }
+    });
+  } catch (err) {
+    logger.error('Error fetching my tasks:', err);
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
 // Add task with notification
 app.post('/api/tasks', authenticateToken, requireAdmin, validateTask, async (req, res) => {
   try {
@@ -3731,15 +4046,40 @@ app.post('/api/teams', authenticateToken, requireAdmin, async (req, res) => {
       return res.status(409).json({ ok: false, error: 'Team name already exists' });
     }
     
+    // Enhanced WFM team with full attributes (Step 1)
     const team = new Team({
       name,
       description,
+      department: req.body.department || 'General',
       team_lead: team_lead || null,
+      manager: req.body.manager || null,
       members: members || [],
-      created_by: req.user.id,
-      created_at: new Date()
+      
+      // Step 1: Core WFM Attributes
+      defaultSkillSet: req.body.defaultSkillSet || [],
+      operatingHours: req.body.operatingHours || { start: '09:00', end: '17:00', timezone: 'local' },
+      shrinkageTarget: req.body.shrinkageTarget || 20,
+      serviceLevelGoal: req.body.serviceLevelGoal || { target: 80, threshold: 20 },
+      
+      // Step 3: Scheduling Rules
+      minStaffPerInterval: req.body.minStaffPerInterval || 4,
+      schedulingRules: req.body.schedulingRules || {
+        breakRules: [{ duration: 15, frequency: 'every 2 hours', stagger: true }],
+        mealRules: [{ duration: 30, stagger: true }],
+        overtimeLimit: 2,
+        timeOffApproval: true
+      },
+      
+      created_by: req.user.id
     });
     
+    await team.save();
+    
+    // Add team report reference (empty for now)
+    team.team_reports.push({
+      report_id: null,
+      status: 'pending'
+    });
     await team.save();
     
     // Notify all team members
@@ -3748,7 +4088,7 @@ app.post('/api/teams', authenticateToken, requireAdmin, async (req, res) => {
         if (connectedUsers[memberId]) {
           io.to(connectedUsers[memberId]).emit('notification', {
             type: 'team_added',
-            message: `You have been added to team: ${name}`,
+            message: `You have been added to WFM team: ${name} (SL Goal: ${team.serviceLevelGoal.target}%)`,
             teamId: team._id,
             teamName: name,
             timestamp: new Date().toISOString()
@@ -3757,11 +4097,21 @@ app.post('/api/teams', authenticateToken, requireAdmin, async (req, res) => {
       });
     }
     
-    // Notify team lead
+    // Notify team lead/manager
     if (team_lead && connectedUsers[team_lead]) {
       io.to(connectedUsers[team_lead]).emit('notification', {
         type: 'team_lead',
-        message: `You are now the team lead for: ${name}`,
+        message: `You are team lead for ${name} (Shrinkage: ${team.shrinkageTarget}%)`,
+        teamId: team._id,
+        teamName: name,
+        timestamp: new Date().toISOString()
+      });
+    }
+    
+    if (team.manager && connectedUsers[team.manager]) {
+      io.to(connectedUsers[team.manager]).emit('notification', {
+        type: 'team_manager',
+        message: `You are manager for ${name} (Min Staff: ${team.minStaffPerInterval})`,
         teamId: team._id,
         teamName: name,
         timestamp: new Date().toISOString()
@@ -4157,6 +4507,441 @@ app.get('/api/admin/performance-metrics', async (req, res) => {
 });
 
 // Get individual employee performance metrics
+
+// =====================================================
+// ATTENDANCE SUMMARY APIs (NEW CRUD FEATURES)
+// =====================================================
+
+/**
+ * GET /api/attendance/summary/weekly - Generate or get current week summary
+ * POST same URL to force regenerate
+ */
+app.route('/api/attendance/summary/weekly')
+  .all(authenticateToken)
+  .get(async (req, res) => {
+    try {
+      const { team_id, department, week_start } = req.query;
+      const week = week_start ? new Date(week_start) : WeeklySummary.getCurrentWeekStart();
+      
+      const summary = await WeeklySummary.generateWeek(week, { 
+        team_id, 
+        department,
+        forceRegenerate: false 
+      }).populate('employee_stats.user_id', 'name email department');
+      
+      Logger.audit('attendance_summary_viewed', req.user.id, null, { 
+        week_start: week.toISOString().split('T')[0],
+        team_id 
+      });
+      
+      res.json({ ok: true, summary });
+    } catch (err) {
+      logger.error('Weekly summary error:', err);
+      res.status(500).json({ ok: false, error: err.message });
+    }
+  })
+  .post(requireAdmin, async (req, res) => {
+    try {
+      const { week_start, team_id, department } = req.body;
+      const week = week_start ? new Date(week_start) : WeeklySummary.getCurrentWeekStart();
+      
+      const summary = await WeeklySummary.generateWeek(week, { 
+        team_id, 
+        department,
+        forceRegenerate: true 
+      }).populate('employee_stats.user_id', 'name email department');
+      
+      // Real-time notification to admins/managers
+      broadcastToAdmins({
+        type: 'weekly_summary_generated',
+        message: `New weekly attendance summary for ${week.toDateString()} (${summary.total_employees} employees)`,
+        week_start: week.toISOString().split('T')[0],
+        summary_id: summary._id
+      });
+      
+      Logger.audit('weekly_summary_regenerated', req.user.id, null, { 
+        week_start: week.toISOString().split('T')[0],
+        employees: summary.employee_stats.length 
+      });
+      
+      res.json({ ok: true, summary, regenerated: true });
+    } catch (err) {
+      logger.error('Weekly summary regenerate error:', err);
+      res.status(500).json({ ok: false, error: err.message });
+    }
+  });
+
+/**
+ * GET /api/attendance/summary/weekly/:week - Filter specific week
+ */
+app.get('/api/attendance/summary/weekly/:week', authenticateToken, async (req, res) => {
+  try {
+    const { week } = req.params; // YYYY-MM-DD (Monday)
+    const { team_id, employee_id } = req.query;
+    
+    const weekStart = new Date(week + 'T00:00:00Z');
+    const summary = await WeeklySummary.filterSummary(weekStart, team_id, employee_id);
+    
+    res.json({ ok: true, summary });
+  } catch (err) {
+    logger.error('Weekly summary filter error:', err);
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
+/**
+ * GET /api/attendance/summary/weekly/:id/export - CSV export
+ */
+app.get('/api/attendance/summary/weekly/:id/export', authenticateToken, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const csv = await WeeklySummary.exportCSV(id);
+    
+    res.setHeader('Content-Type', 'text/csv');
+    res.setHeader('Content-Disposition', `attachment; filename="attendance-summary-${new Date().toISOString().split('T')[0]}.csv"`);
+    res.send(csv);
+  } catch (err) {
+    logger.error('Export CSV error:', err);
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
+// DELETE /api/attendance/summary/weekly/:id - Soft delete (reset)
+app.delete('/api/attendance/summary/weekly/:id', requireAdmin, async (req, res) => {
+  try {
+    const { id } = req.params;
+    await WeeklySummary.findByIdAndDelete(id);
+    
+    Logger.audit('weekly_summary_deleted', req.user.id, { summary_id: id });
+    
+    // Trigger regeneration notification
+    broadcastToAdmins({
+      type: 'weekly_summary_deleted',
+      message: 'Weekly summary reset - will regenerate automatically',
+      summary_id: id
+    });
+    
+    res.json({ ok: true, message: 'Summary deleted (reset)' });
+  } catch (err) {
+    logger.error('Delete summary error:', err);
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
+// =====================================================
+// SYSTEM LOGS APIs (Full CRUD)
+// =====================================================
+
+/**
+ * GET /api/logs - Search/filter/paginate system logs
+ */
+app.get('/api/logs', authenticateToken, async (req, res) => {
+  try {
+    const { limit = 100, date, level, userId, action, ip, page = 1 } = req.query;
+    
+    const filters = {};
+    if (date) filters.date = { $regex: date, $options: 'i' };
+    if (level) filters.level = level;
+    if (userId) filters.user_id = userId;
+    if (action) filters.action = { $regex: action, $options: 'i' };
+    if (ip) filters.ip_address = ip;
+    
+    const result = await Logger.getRecentLogs(parseInt(limit), filters, { page: parseInt(page) });
+    
+    res.json(result);
+  } catch (err) {
+    logger.error('Logs API error:', err);
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
+/**
+ * PATCH /api/logs/:id/annotate - Add admin annotation
+ */
+app.patch('/api/logs/:id/annotate', requireAdmin, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { annotation } = req.body;
+    
+    if (!annotation || annotation.trim().length === 0) {
+      return res.status(400).json({ ok: false, error: 'Annotation required' });
+    }
+    
+    const log = await Logger.annotateLog(id, annotation, req.user.id);
+    res.json({ ok: true, log });
+    
+    // Notify other admins
+    broadcastToAdmins({
+      type: 'log_annotated',
+      message: `Log ${id} annotated by ${req.user.email}`,
+      log_id: id
+    });
+  } catch (err) {
+    logger.error('Annotate log error:', err);
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
+/**
+ * DELETE /api/logs/:id - Soft delete single log
+ */
+app.delete('/api/logs/:id', requireAdmin, async (req, res) => {
+  try {
+    const { id } = req.params;
+    await Logger.deleteLog(id, req.user.id);
+    
+    res.json({ ok: true, message: 'Log deleted' });
+    
+    broadcastToAdmins({
+      type: 'log_deleted',
+      message: `Log ${id} deleted by ${req.user.email}`,
+      log_id: id
+    });
+  } catch (err) {
+    logger.error('Delete log error:', err);
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
+/**
+ * DELETE /api/logs/purge - Purge old logs (retention policy)
+ */
+app.delete('/api/logs/purge', requireAdmin, async (req, res) => {
+  try {
+    const { days = 90 } = req.query;
+    const result = await Logger.purgeOld(parseInt(days));
+    
+    res.json({ 
+      ok: true, 
+      message: `Purged ${result.deletedCount} logs older than ${days} days`,
+      deletedCount: result.deletedCount 
+    });
+    
+    broadcastToAdmins({
+      type: 'logs_purged',
+      message: `Purged ${result.deletedCount} logs (retention: ${days} days)`,
+      days
+    });
+  } catch (err) {
+    logger.error('Purge logs error:', err);
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
+/**
+ * GET /api/logs/export - Export filtered logs
+ */
+app.get('/api/logs/export', authenticateToken, async (req, res) => {
+  try {
+    const filters = req.query;
+    const logs = await Logger.exportLogs(filters);
+    
+    const csv = logs.map(log => 
+      `"${log.timestamp}","${log.level}","${log.message}","${log.user_id || ''}","${log.action || ''}","${log.ip_address || ''}"`
+    ).join('\n');
+    
+    res.setHeader('Content-Type', 'text/csv');
+    res.setHeader('Content-Disposition', 'attachment; filename="system-logs.csv"');
+    res.send(`Timestamp,Level,Message,User,Action,IP\n${csv}`);
+  } catch (err) {
+    logger.error('Logs export error:', err);
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
+// =====================================================
+// PERFORMANCE ANALYTICS APIs
+// =====================================================
+
+/**
+ * GET /api/analytics/dashboard - Team performance dashboard
+ */
+app.get('/api/analytics/dashboard', authenticateToken, async (req, res) => {
+  try {
+    const { team_id, period = 'week', compare = 'true' } = req.query;
+    
+    const dashboard = await AnalyticsService.getDashboard(team_id, period);
+    
+    // Real-time notification if new data
+    if (req.user.role === 'manager' || req.user.role === 'admin') {
+      io.to(req.user.id).emit('analytics_updated', { 
+        team_id, 
+        period,
+        metrics: dashboard 
+      });
+    }
+    
+    res.json({ ok: true, dashboard });
+  } catch (err) {
+    logger.error('Analytics dashboard error:', err);
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
+/**
+ * GET /api/analytics/templates - List available templates
+ */
+app.get('/api/analytics/templates', authenticateToken, async (req, res) => {
+  try {
+    const { type = 'report', module } = req.query;
+    const templates = await ReportTemplate.getTemplatesByType(type, module);
+    res.json({ ok: true, templates });
+  } catch (err) {
+    logger.error('Templates list error:', err);
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
+/**
+ * POST /api/analytics/use-template/:id - Apply template
+ */
+app.post('/api/analytics/use-template/:id', authenticateToken, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const overrides = req.body;
+    
+    const result = await ReportTemplate.useTemplate(id, overrides);
+    
+    // Socket notification
+    broadcastToAdmins({
+      type: 'template_used',
+      message: `Template "${result.name || id}" used by ${req.user.email}`,
+      template_id: id,
+      result_type: result.type || 'analytics'
+    });
+    
+    res.json({ ok: true, result });
+  } catch (err) {
+    logger.error('Use template error:', err);
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
+/**
+ * POST /api/analytics/report - Generate custom report
+ */
+app.post('/api/analytics/report', authenticateToken, async (req, res) => {
+  try {
+    const config = req.body;
+    const report = await AnalyticsService.generateReport(config);
+    
+    res.json({ ok: true, report });
+  } catch (err) {
+    logger.error('Custom report error:', err);
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
+// =====================================================
+// TEAM MANAGEMENT APIs (Enhanced CRUD)
+// =====================================================
+
+/**
+ * PATCH /api/teams/:id/members - Add/remove team members
+ */
+app.patch('/api/teams/:id/members', authenticateToken, requireAdmin, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { add = [], remove = [] } = req.body;
+    
+    const team = await Team.findById(id);
+    if (!team) return res.status(404).json({ ok: false, error: 'Team not found' });
+    
+    // Add new members
+    add.forEach(memberId => {
+      if (!team.members.includes(memberId)) {
+        team.members.push(memberId);
+      }
+    });
+    
+    // Remove members
+    team.members = team.members.filter(m => !remove.includes(m));
+    
+    await team.save();
+    
+    // Notifications
+    add.forEach(memberId => {
+      io.to(memberId).emit('notification', {
+        type: 'team_added',
+        message: `Added to team: ${team.name}`,
+        teamId: team._id
+      });
+    });
+    
+    remove.forEach(memberId => {
+      io.to(memberId).emit('notification', {
+        type: 'team_removed',
+        message: `Removed from team: ${team.name}`,
+        teamId: team._id
+      });
+    });
+    
+    res.json({ ok: true, team });
+  } catch (err) {
+    logger.error('Team members update error:', err);
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
+/**
+ * DELETE /api/teams/:id - Delete team (reassign members first)
+ */
+app.delete('/api/teams/:id', requireAdmin, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const team = await Team.findById(id);
+    if (!team) return res.status(404).json({ ok: false, error: 'Team not found' });
+    
+    // Reassign members to "Unassigned" or delete memberships
+    await User.updateMany(
+      { _id: { $in: team.members } },
+      { $pull: { teams: team._id } }
+    );
+    
+    await team.remove();
+    
+    broadcastToAdmins({
+      type: 'team_deleted',
+      message: `Team "${team.name}" deleted (${team.members.length} members reassigned)`,
+      team_id: id
+    });
+    
+    res.json({ ok: true, message: 'Team deleted' });
+  } catch (err) {
+    logger.error('Delete team error:', err);
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
+// =====================================================
+// REAL-TIME SOCKET EVENTS (New)
+// =====================================================
+
+// Broadcast attendance summary update
+function broadcastAttendanceUpdate(summary) {
+  broadcastToAdmins({
+    type: 'attendance_summary_updated',
+    message: `Weekly summary updated (${summary.total_employees} employees)`,
+    week_start: summary.week_start,
+    summary_id: summary._id
+  });
+}
+
+// =====================================================
+// Static helper: Get current Monday
+// =====================================================
+WeeklySummary.getCurrentWeekStart = function() {
+  const now = new Date();
+  const day = now.getDay();
+  const diffToMonday = day === 0 ? -6 : 1 - day;
+  const monday = new Date(now);
+  monday.setDate(now.getDate() + diffToMonday);
+  monday.setHours(0, 0, 0, 0);
+  return monday;
+};
+
+// Get individual employee performance metrics
+
 app.get('/api/employee/performance/:userId', async (req, res) => {
   try {
     const { userId } = req.params;
@@ -4732,15 +5517,8 @@ app.post('/api/generate-qr', async (req, res) => {
     }
 
     const token = uuidv4();
-    let tokens = {};
-    try {
-      tokens = JSON.parse(fs.readFileSync(TOKENS_FILE, 'utf8') || '{}');
-    } catch (e) {
-      tokens = {};
-    }
-
-    tokens[token] = { username, role, createdAt: new Date().toISOString() };
-    fs.writeFileSync(TOKENS_FILE, JSON.stringify(tokens, null, 2), 'utf8');
+// Legacy tokens.json removed - use QRCode model instead
+    logger.warn('Legacy tokens.json usage detected - use /api/qr/generate instead');
 
     // Provide a clickable URL in the QR so phone cameras surface a tappable link
     const baseUrl = req.protocol + '://' + req.get('host');
@@ -4759,17 +5537,8 @@ app.post('/api/validate-token', (req, res) => {
     const { token } = req.body;
     if (!token) return res.status(400).json({ ok: false, error: 'token required' });
     
-    let tokens = {};
-    try {
-      tokens = JSON.parse(fs.readFileSync(TOKENS_FILE, 'utf8') || '{}');
-    } catch (e) {
-      tokens = {};
-    }
-    
-    const info = tokens[token];
-    if (!info) return res.status(404).json({ ok: false });
-    
-    res.json({ ok: true, user: info });
+// Legacy token validation removed - use /api/qr/validate/:token instead
+    return res.status(410).json({ ok: false, error: 'Legacy token validation deprecated. Use QR endpoints.' });
   } catch (err) {
     logger.error(err);
     res.status(500).json({ ok: false, error: 'Token validation failed' });
@@ -5602,8 +6371,18 @@ async function startServer() {
   try {
     logger.info('\n--- WFMS Server Starting ---');
     logger.info('Environment:', process.env.NODE_ENV || 'development');
+    // Ensure configured port is available (auto-select next free port in development)
+    if (process.env.NODE_ENV !== 'production') {
+      const free = await findFreePort(port, 20);
+      if (free && free !== port) {
+        logger.warn(`Port ${port} in use — switching to available port ${free}`);
+        port = free;
+      }
+    }
     logger.info('Port:', port);
     logger.info('Database:', 'MongoDB');
+    const maskedUri = MONGODB_URI ? MONGODB_URI.replace(/\/\/(.*@)/, '//****@') : 'not set';
+    logger.info('MONGODB_URI:', maskedUri);
     logger.info('Initial connection status:', connectionStatus());
 
     await initializeDatabase();

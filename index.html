@@ -3,10 +3,39 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>BNS · Black Nova Shift · Workforce Management System</title>
+<title>BNS · Black Nova Shift · Workforce Management System</title>
+  
+  <!-- INLINE CRITICAL FUNCTIONS - Fix onclick before app.client.js loads -->
+  <script>
+   
+    window.showRegister = function() { 
+      document.getElementById('login-container').classList.add('hidden');
+      document.getElementById('register-container').classList.remove('hidden');
+    };
+    window.backToLogin = function() {
+      document.getElementById('register-container').classList.add('hidden');
+      document.getElementById('login-container').classList.remove('hidden');
+    };
+    window.toggleRegPassword = function() {
+      const pwd = document.getElementById('regPassword');
+      const icon = document.getElementById('regPasswordIcon');
+      pwd.type = pwd.type === 'password' ? 'text' : 'password';
+      icon.textContent = pwd.type === 'password' ? '👁️' : '🙈';
+    };
+    window.closeQRScanner = function() {
+      const container = document.getElementById('qrScannerContainer');
+      if (container) container.classList.add('hidden');
+    };
+    window.toggleTheme = function() {
+      document.body.classList.toggle('light-theme');
+      const themeText = document.getElementById('themeText');
+      if (themeText) themeText.textContent = document.body.classList.contains('light-theme') ? 'Light' : 'Dark';
+    };
+    console.log('✅ Inline functions loaded for immediate onclick use');
+  </script>
 
   <!-- PWA Manifest & Icons -->
-  <link rel="manifest" href="manifest.json" />
+<link rel="manifest" href="./manifest.json" />
   <meta name="theme-color" content="#0B0B0B" />
   <meta name="mobile-web-app-capable" content="yes" />
 
@@ -974,14 +1003,15 @@
           </svg>
           Scan QR Code
         </button>
-        <button class="btn btn-outline w-100" style="margin-top: 5px;" onclick="manualQREntry()">
-            <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <path d="M4 7V5a1 1 0 0 1 1-1h2M20 7V5a1 1 0 0 0-1-1h-2M4 17v2a1 1 0 0 0 1 1h2M20 17v2a1 1 0 0 1-1 1h-2" />
-                <rect x="8" y="8" width="8" height="8" rx="1" />
-                <line x1="12" y1="8" x2="12" y2="16" />
-                <line x1="8" y1="12" x2="16" y2="12" />
-            </svg>
-            Manual QR Entry
+
+        <button class="btn btn-outline w-100" style="margin-top: 10px;" onclick="window.manualQREntry()">
+          <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M4 7V5a1 1 0 0 1 1-1h2M20 7V5a1 1 0 0 0-1-1h-2M4 17v2a1 1 0 0 0 1 1h2M20 17v2a1 1 0 0 1-1 1h-2" />
+            <rect x="8" y="8" width="8" height="8" rx="1" />
+            <line x1="12" y1="8" x2="12" y2="16" />
+            <line x1="8" y1="12" x2="16" y2="12" />
+          </svg>
+          Manual QR Entry
         </button>
 
         <div id="form-error" class="form-message error-message" style="display: none;"></div>
@@ -1037,7 +1067,7 @@
           </select>
         </div>
 
-        <button class="btn btn-primary w-100 btn-lg" onclick="register()">
+        <button class="btn btn-primary w-100 btn-lg" onclick="window.register()">
           <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <polyline points="20 6 9 17 4 12" />
           </svg>
@@ -1466,6 +1496,7 @@
   <!-- ===== SCRIPTS WITH QR LIBRARY FALLBACKS ===== -->
   <script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
 
+  <!-- QR FIXED - Removed dynamic loader causing SyntaxError -->
   <!-- QR Code Library with Faster CDNs and Preloading -->
   <link rel="preload" href="https://cdn.jsdelivr.net/npm/html5-qrcode@2.3.8/html5-qrcode.min.js" as="script">
   <script>
@@ -1552,11 +1583,15 @@
   <!-- Chart.js for performance charts -->
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 
-  <!-- Html5Qrcode library for QR scanning -->
-  <script src="https://cdn.jsdelivr.net/npm/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
-
-  <!-- Your main app.js - load after QR library attempts -->
-  <script src="app.js"></script>
+  <!-- app.client.js FIRST for global functions -->
+  <script src="app.client.js"></script>
+  <script>
+    // app.client.js will override inline functions with full implementations
+    console.log('app.client.js loaded - full functions now available');
+  </script>
+  
+  <!-- QR library AFTER client.js -->
+  <!-- REMOVED DUPLICATE QR LIBRARY SCRIPT -->
 
   <script>
     // Theme management
@@ -1590,7 +1625,7 @@
     <div class="qr-scanner-box">
       <div class="qr-scanner-header">
         <h5 style="color: var(--text-primary); margin: 0;">Scan QR Code</h5>
-        <button class="btn-close" onclick="window.stopQRScanner ? window.stopQRScanner() : closeQRScanner()" style="font-size: 28px; cursor: pointer; background: none; border: none;">×</button>
+        <button class="btn-close" onclick="window.closeQRScanner()" style="font-size: 28px; cursor: pointer; background: none; border: none;">×</button>
       </div>
       <div id="qr-reader" style="width: 100%; min-height: 300px;"></div>
       <div id="qr-scanner-status" style="text-align: center; margin-top: 10px; color: var(--text-secondary);"></div>

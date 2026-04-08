@@ -1,5 +1,3 @@
-{
-  "version": 2,
   "builds": [
     {
       "src": "server.js",
@@ -20,16 +18,26 @@
     {
       "src": "*.json",
       "use": "@vercel/static"
+    },
+    {
+      "src": "icons/*",
+      "use": "@vercel/static"
     }
   ],
   "routes": [
     {
-      "src": "/(app\\.js|index\\.html|styles\\.css|manifest\\.json|favicon\\.ico)",
-      "dest": "/$1"
+      "src": "\/(.*\\.(?:js|css|html|json|png|jpg|jpeg|svg|ico))",
+      "dest": "\/$1"
     },
     {
-      "src": "/(.*)",
+      "src": "\/api\/(.*)",
       "dest": "server.js"
+    },
+    {
+      "src": "\/(.*)",
+      "dest": "\/index.html"
+    }
+  ]
     }
   ]
 }

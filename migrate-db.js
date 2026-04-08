@@ -1,107 +1,79 @@
-// migrate-db.js - Run this once to update your database schema
-const sqlite3 = require('sqlite3').verbose();
-const path = require('path');
+// migrate-mysql.js - MySQL migrations for Attendance + Logs tables
+const mysql = require('mysql2/promise');
+require('dotenv').config();
 
-const dbPath = path.join(__dirname, 'wfms.db');
-const db = new sqlite3.Database(dbPath);
+async function migrate() {
+  let pool = null;
+  try {
+    pool = mysql.createPool({
+      host: process.env.DB_HOST || 'localhost',
+      user: process.env.DB_USER || 'root',
+      password: process.env.DB_PASS || '',
+      database: process.env.DB_NAME || 'wfms',
+      waitForConnections: true,
+      connectionLimit: 10
+    });
 
-console.log('🔧 Starting database migration...');
+    const db = await pool.getConnection();
+    console.log('🔧 MySQL Migration started...');
 
-// Run migrations sequentially
-db.serialize(() => {
-  // Check if columns exist and add them if they don't
-  db.get("PRAGMA table_info(tasks)", (err, rows) => {
-    if (err) {
-      console.error('Error checking tasks table:', err);
-      return;
-    }
-    
-    console.log('📊 Checking tasks table structure...');
-    
-    // Add approval_status column if missing
-    db.run("ALTER TABLE tasks ADD COLUMN approval_status TEXT DEFAULT 'pending'", (err) => {
-      if (err && !err.message.includes('duplicate column name')) {
-        console.error('Error adding approval_status:', err);
-      } else if (!err) {
-        console.log('✅ Added approval_status column');
-      } else {
-        console.log('ℹ️ approval_status column already exists');
-      }
-    });
-    
-    // Add submitted_at column if missing
-    db.run("ALTER TABLE tasks ADD COLUMN submitted_at DATETIME", (err) => {
-      if (err && !err.message.includes('duplicate column name')) {
-        console.error('Error adding submitted_at:', err);
-      } else if (!err) {
-        console.log('✅ Added submitted_at column');
-      } else {
-        console.log('ℹ️ submitted_at column already exists');
-      }
-    });
-    
-    // Add submitted_by column if missing
-    db.run("ALTER TABLE tasks ADD COLUMN submitted_by INTEGER", (err) => {
-      if (err && !err.message.includes('duplicate column name')) {
-        console.error('Error adding submitted_by:', err);
-      } else if (!err) {
-        console.log('✅ Added submitted_by column');
-      } else {
-        console.log('ℹ️ submitted_by column already exists');
-      }
-    });
-    
-    // Add admin_feedback column if missing
-    db.run("ALTER TABLE tasks ADD COLUMN admin_feedback TEXT", (err) => {
-      if (err && !err.message.includes('duplicate column name')) {
-        console.error('Error adding admin_feedback:', err);
-      } else if (!err) {
-        console.log('✅ Added admin_feedback column');
-      } else {
-        console.log('ℹ️ admin_feedback column already exists');
-      }
-    });
-    
-    // Add approved_at column if missing
-    db.run("ALTER TABLE tasks ADD COLUMN approved_at DATETIME", (err) => {
-      if (err && !err.message.includes('duplicate column name')) {
-        console.error('Error adding approved_at:', err);
-      } else if (!err) {
-        console.log('✅ Added approved_at column');
-      } else {
-        console.log('ℹ️ approved_at column already exists');
-      }
-    });
-    
-    // Add hours_spent column if missing (might already exist)
-    db.run("ALTER TABLE tasks ADD COLUMN hours_spent REAL DEFAULT 0", (err) => {
-      if (err && !err.message.includes('duplicate column name')) {
-        console.error('Error adding hours_spent:', err);
-      } else if (!err) {
-        console.log('✅ Added hours_spent column');
-      } else {
-        console.log('ℹ️ hours_spent column already exists');
-      }
-    });
-  });
-  
-  // Update any existing tasks to have default approval_status
-  db.run("UPDATE tasks SET approval_status = 'pending' WHERE approval_status IS NULL", (err) => {
-    if (err) {
-      console.error('Error updating approval_status:', err);
-    } else {
-      console.log('✅ Updated existing tasks with default approval_status');
-    }
-  });
-});
+    // 1. Create attendance_logs table if not exists
+    await db.execute(`
+      CREATE TABLE IF NOT EXISTS attendance_logs (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        user_id INT NOT NULL,
+        action VARCHAR(50) NOT NULL,
+        timestamp DATETIME NOT NULL,
+        ip VARCHAR(45),
+        INDEX idx_user_action (user_id, action),
+        INDEX idx_timestamp (timestamp)
+      )
+    `);
+    console.log('✅ attendance_logs table ready');
 
-// Close the database after all operations
-setTimeout(() => {
-  db.close((err) => {
-    if (err) {
-      console.error('Error closing database:', err);
-    } else {
-      console.log('🔧 Database migration complete!');
-    }
-  });
-}, 1000);
+    // 2. Create system_logs table if not exists
+    await db.execute(`
+      CREATE TABLE IF NOT EXISTS system_logs (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        timestamp DATETIME NOT NULL,
+        level VARCHAR(20) NOT NULL,
+        message TEXT NOT NULL,
+        user_id INT,
+        module VARCHAR(50),
+        ip VARCHAR(45),
+        INDEX idx_timestamp (timestamp),
+        INDEX idx_level (level),
+        INDEX idx_user (user_id)
+      )
+    `);
+    console.log('✅ system_logs table ready');
+
+    // Insert sample data for testing
+    await db.execute(`
+      INSERT INTO attendance_logs (user_id, action, timestamp, ip) VALUES 
+      (1, 'clock_in', NOW(), '127.0.0.1'),
+      (1, 'clock_out', DATE_SUB(NOW(), INTERVAL 8 HOUR), '127.0.0.1'),
+      (2, 'clock_in', NOW(), '192.168.1.100')
+      ON DUPLICATE KEY UPDATE timestamp = timestamp
+    `);
+    console.log('✅ Sample attendance data inserted');
+
+    await db.execute(`
+      INSERT INTO system_logs (timestamp, level, message, user_id, module, ip) VALUES 
+      (NOW(), 'INFO', 'System started', NULL, 'server', '127.0.0.1'),
+      (NOW(), 'INFO', 'User logged in', 1, 'auth', '192.168.1.100')
+      ON DUPLICATE KEY UPDATE timestamp = timestamp
+    `);
+    console.log('✅ Sample log data inserted');
+
+    db.release();
+    console.log('🎉 MySQL Migration COMPLETE! Run `npm start` to test.');
+  } catch (err) {
+    console.error('❌ Migration failed:', err.message);
+  } finally {
+    if (pool) pool.end();
+  }
+}
+
+migrate();
+
