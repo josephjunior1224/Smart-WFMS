@@ -1,0 +1,214 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <title>QR Login - BNS WFMS</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+    
+    body {
+      background: linear-gradient(135deg, #0B0B0B 0%, #1a1a1a 100%);
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+    }
+    
+    .login-container {
+      background: #1a1a1a;
+      border: 1px solid #2d2d2d;
+      border-radius: 24px;
+      padding: 40px;
+      max-width: 400px;
+      width: 100%;
+      text-align: center;
+      box-shadow: 0 20px 40px rgba(0, 0, 0, 0.5);
+    }
+    
+    .logo {
+      margin-bottom: 30px;
+    }
+    
+    .logo .bns-letters {
+      display: flex;
+      justify-content: center;
+      gap: 5px;
+      font-size: 48px;
+      font-weight: 900;
+    }
+    
+    .logo .bns-letters span {
+      background: linear-gradient(135deg, #00F0FF, #4EC9B0);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+    
+    .spinner {
+      width: 50px;
+      height: 50px;
+      border: 3px solid #2d2d2d;
+      border-top-color: #00F0FF;
+      border-radius: 50%;
+      animation: spin 1s linear infinite;
+      margin: 20px auto;
+    }
+    
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+    
+    .success-icon {
+      width: 60px;
+      height: 60px;
+      background: #10b981;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      margin: 0 auto 20px;
+      font-size: 30px;
+    }
+    
+    .error-icon {
+      width: 60px;
+      height: 60px;
+      background: #ef4444;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      margin: 0 auto 20px;
+      font-size: 30px;
+    }
+    
+    h2 {
+      color: white;
+      margin-bottom: 10px;
+    }
+    
+    p {
+      color: #9ca3af;
+      margin-bottom: 20px;
+    }
+    
+    .btn {
+      padding: 12px 24px;
+      border-radius: 8px;
+      border: none;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.3s ease;
+      background: linear-gradient(135deg, #00F0FF, #4EC9B0);
+      color: #0B0B0B;
+      margin-top: 20px;
+    }
+    
+    .btn:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 5px 20px rgba(0, 240, 255, 0.3);
+    }
+  </style>
+</head>
+<body>
+  <div class="login-container" id="loginContainer">
+    <div class="logo">
+      <div class="bns-letters">
+        <span>B</span><span>N</span><span>S</span>
+      </div>
+      <div style="color: #00F0FF; font-size: 12px; margin-top: 5px;">.com</div>
+    </div>
+    
+    <div id="status">
+      <div class="spinner"></div>
+      <h2>Authenticating...</h2>
+      <p>Please wait while we verify your QR code</p>
+    </div>
+  </div>
+
+  <script>
+    const API_BASE = '/api';
+    
+    async function processQRLogin() {
+      const urlParams = new URLSearchParams(window.location.search);
+      const token = urlParams.get('token');
+      
+      if (!token) {
+        showError('No QR token found', 'Invalid QR code. Please scan a valid code.');
+        return;
+      }
+      
+      try {
+        const response = await fetch(`${API_BASE}/qr-login`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ token })
+        });
+        
+        const data = await response.json();
+        
+        if (data.ok) {
+          // Save token to localStorage
+          localStorage.setItem('token', data.token);
+          if (data.refreshToken) {
+            localStorage.setItem('refreshToken', data.refreshToken);
+          }
+          
+          // Show success
+          showSuccess(data.user.name, data.scanCount);
+          
+          // Redirect after 2 seconds
+          setTimeout(() => {
+            window.location.href = '/';
+          }, 2000);
+        } else {
+          showError('Login Failed', data.error || 'Unable to authenticate with this QR code');
+        }
+      } catch (err) {
+        showError('Connection Error', err.message);
+      }
+    }
+    
+    function showSuccess(userName, scanCount) {
+      const container = document.getElementById('loginContainer');
+      document.getElementById('status').innerHTML = `
+        <div class="success-icon">✓</div>
+        <h2>Welcome back, ${escapeHtml(userName)}!</h2>
+        <p>You have been successfully logged in.</p>
+        <p style="font-size: 12px;">This QR code has been used ${scanCount || 1} time(s)</p>
+        <p style="font-size: 12px;">Redirecting to dashboard...</p>
+        <div class="spinner" style="width: 30px; height: 30px;"></div>
+      `;
+    }
+    
+    function showError(title, message) {
+      const container = document.getElementById('loginContainer');
+      document.getElementById('status').innerHTML = `
+        <div class="error-icon">✗</div>
+        <h2 style="color: #ef4444;">${escapeHtml(title)}</h2>
+        <p>${escapeHtml(message)}</p>
+        <button class="btn" onclick="window.location.href='/'">Back to Login</button>
+      `;
+    }
+    
+    function escapeHtml(str) {
+      if (!str) return '';
+      return str.replace(/[&<>]/g, function(m) {
+        if (m === '&') return '&amp;';
+        if (m === '<') return '&lt;';
+        if (m === '>') return '&gt;';
+        return m;
+      });
+    }
+    
+    // Start the login process
+    processQRLogin();
+  </script>
+</body>
+</html>

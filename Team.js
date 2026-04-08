@@ -1,78 +1,94 @@
-// models/Team.js - Enhanced WFM Schema (Phase 1)
+// models/Team.js - Complete Team Management Model
 const mongoose = require('mongoose');
 
 const teamSchema = new mongoose.Schema({
-  // Core Attributes
+  // Basic Info
   name: { type: String, required: true, unique: true },
-  description: String,
-  department: { type: String, default: 'General' },
+  description: { type: String, default: '' },
+  department: { type: String, default: '' },
+  costCenter: { type: String, default: '' },
   
-  // Hierarchy & Management
-  team_lead: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
-  manager: { type: mongoose.Schema.Types.ObjectId, ref: 'User' }, // Section manager
-  members: [{ type: mongoose.Schema.Types.ObjectId, ref: 'User' }],
+  // Leadership
+  manager: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+  teamLead: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+  assistantLead: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
   
-  // WFM Attributes (Step 1)
-  defaultSkillSet: [String], // e.g., ["English", "Billing", "CRM"]
-  operatingHours: {
-    start: String, // "07:00"
-    end: String,   // "15:00"
-    timezone: { type: String, default: 'local' }
-  },
-  shrinkageTarget: { type: Number, default: 20 }, // 20%
-  serviceLevelGoal: {
-    target: { type: Number, default: 80 },    // 80%
-    threshold: { type: Number, default: 20 }  // 20 seconds
-  },
-  
-  // Scheduling Rules (Step 3)
-  minStaffPerInterval: { type: Number, default: 4 },
-  schedulingRules: {
-    breakRules: [{
-      duration: Number,     // 15 mins
-      frequency: String,    // "every 2 hours"
-      stagger: Boolean      // No two agents same time
-    }],
-    mealRules: [{
-      duration: Number,     // 30 mins
-      stagger: Boolean
-    }],
-    overtimeLimit: { type: Number, default: 2 }, // hours/week
-    timeOffApproval: { type: Boolean, default: true }
-  },
-  
-  // Team Reports & Metrics (Step 6)
-  team_reports: [{
-    report_id: { type: mongoose.Schema.Types.ObjectId, ref: 'TeamReport' },
-    status: { type: String, enum: ['pending', 'approved', 'rejected'], default: 'pending' },
-    submitted_at: Date,
-    approved_at: Date,
-    leader_feedback: String
+  // Members
+  members: [{
+    user_id: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+    role: { type: String, enum: ['member', 'lead', 'assistant', 'trainer'], default: 'member' },
+    joined_at: { type: Date, default: Date.now },
+    status: { type: String, enum: ['active', 'inactive', 'transferred'], default: 'active' }
   }],
   
-  // Audit Trail
-  created_at: { type: Date, default: Date.now },
+  // Shift & Schedule Rules
+  defaultShiftPattern: {
+    startTime: { type: String, default: '09:00' },
+    endTime: { type: String, default: '17:00' },
+    breakDuration: { type: Number, default: 30 }, // minutes
+    workDays: [{ type: Number, enum: [0,1,2,3,4,5,6] }] // 0=Sunday, 6=Saturday
+  },
+  
+  schedulingRules: {
+    minStaffPerShift: { type: Number, default: 1 },
+    maxOvertimeHours: { type: Number, default: 10 },
+    shiftSwapApprovalRequired: { type: Boolean, default: true },
+    timeOffRequestLeadDays: { type: Number, default: 14 }
+  },
+  
+  // Metadata
+  status: { type: String, enum: ['active', 'inactive', 'archived'], default: 'active' },
+  location: { type: String, default: '' },
+  timezone: { type: String, default: 'UTC' },
+  
+  // Statistics (denormalized for quick access)
+  stats: {
+    memberCount: { type: Number, default: 0 },
+    activeMemberCount: { type: Number, default: 0 },
+    averageAttendance: { type: Number, default: 0 },
+    averagePerformance: { type: Number, default: 0 }
+  },
+  
+  // Audit
   created_by: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
-  updated_at: Date,
-  status: { type: String, enum: ['active', 'inactive'], default: 'active' }
+  created_at: { type: Date, default: Date.now },
+  updated_by: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+  updated_at: { type: Date, default: Date.now }
 });
 
-// Indexes for performance
-teamSchema.index({ team_lead: 1 });
-teamSchema.index({ 'members': 1 });
+// Indexes
+teamSchema.index({ name: 1 });
 teamSchema.index({ department: 1 });
-teamSchema.index({ 'team_reports.status': 1 });
+teamSchema.index({ manager: 1 });
 teamSchema.index({ status: 1 });
-teamSchema.index({ 'operatingHours.start': 1, 'operatingHours.end': 1 });
 
-// Pre-save hook for updated_at
-teamSchema.pre('save', function(next) {
-  this.updated_at = new Date();
-  next();
-});
+// Methods
+teamSchema.methods.addMember = async function(userId, role = 'member') {
+  if (!this.members.some(m => m.user_id.toString() === userId.toString())) {
+    this.members.push({ user_id: userId, role, joined_at: new Date() });
+    this.stats.memberCount = this.members.length;
+    this.stats.activeMemberCount = this.members.filter(m => m.status === 'active').length;
+    await this.save();
+  }
+  return this;
+};
+
+teamSchema.methods.removeMember = async function(userId) {
+  this.members = this.members.filter(m => m.user_id.toString() !== userId.toString());
+  this.stats.memberCount = this.members.length;
+  this.stats.activeMemberCount = this.members.filter(m => m.status === 'active').length;
+  await this.save();
+  return this;
+};
+
+teamSchema.methods.updateMemberRole = async function(userId, newRole) {
+  const member = this.members.find(m => m.user_id.toString() === userId.toString());
+  if (member) {
+    member.role = newRole;
+    await this.save();
+  }
+  return this;
+};
 
 const Team = mongoose.model('Team', teamSchema);
 module.exports = Team;
-
-console.log('✅ Enhanced Team schema loaded (WFM attributes + rules)');
-
